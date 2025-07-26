@@ -1,0 +1,104 @@
+name: Sync Assets to Cloudflare R2
+
+on:
+  release:
+    types: [published, edited]
+
+jobs:
+  sync-release-to-r2:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    # 明确设置仓库上下文变量
+    env:
+      R2_BUCKET_NAME: "swiflow"
+      R2_ENDPOINT_URL: "https://2d002fceba7555e1c72fd486005708ea.r2.cloudflarestorage.com"
+
+    steps:
+      # ----------- 第一步：验证上下文 -----------
+      - name: Debug context
+        run: |
+          echo "Release ID: ${{ github.event.release.id }}"
+          echo "Tag 名称: ${{ github.event.release.tag_name }}"
+
+      # ----------- 第二步：下载资源 -----------
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.MY_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          echo "🔄 从 OptLTD/swiflow-app 获取 Release 资源..."
+          api_url="https://api.github.com/repos/OptLTD/swiflow-app/releases/${{ github.event.release.id }}"
+          
+          # 带错误处理的请求
+          release_info=$(curl -fLsS \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "$api_url") || {
+            echo "❌ 无法获取 Release 信息"
+            curl -v "$api_url" > debug.log  # 保存调试信息
+            exit 1
+          }
+
+          # 安全解析资源URL
+          asset_urls=$(echo "$release_info" | jq -r '.assets[]?.browser_download_url // empty')
+          [ -z "$asset_urls" ] && echo "ℹ️ 无附件资源" && exit 0
+
+          echo "📦 需要下载的资源："
+          for url in $asset_urls; do
+            filename="${url##*/}"  # 更安全的文件名提取
+            echo "⬇️ 下载: $filename"
+            curl -fL \
+              -H "Authorization: token $GH_TOKEN" \
+              -o "release-assets/${filename}" \
+              "$url" || echo "⚠️ 下载失败: $url"
+          done
+
+          echo "✅ 下载完成！"
+          ls -lh release-assets/
+
+      # ----------- 第三步：配置R2连接 -----------
+      - name: Setup R2 credentials
+        run: |
+          pip install --quiet awscli
+          mkdir -p ~/.aws
+
+          # 安全写入凭证（避免命令注入）
+          cat <<EOF > ~/.aws/credentials
+          [default]
+          aws_access_key_id = $(printf '%s' "${{ secrets.R2_ACCESS_KEY_ID }}" | sed 's/[\/&]/\\&/g')
+          aws_secret_access_key = $(printf '%s' "${{ secrets.R2_SECRET_ACCESS_KEY }}" | sed 's/[\/&]/\\&/g')
+          EOF
+
+          cat <<EOF > ~/.aws/config
+          [default]
+          region = auto
+          s3 =
+            endpoint_url = $R2_ENDPOINT_URL
+          EOF
+
+      # ----------- 第四步：上传到R2 -----------
+      - name: Upload to R2
+        run: |
+          set -e
+          echo "🚀 上传到: s3://$R2_BUCKET_NAME/"
+          
+          # 检查文件是否存在
+          [ ! -d "release-assets" ] && echo "❌ release-assets 目录不存在" && exit 1
+          [ -z "$(ls -A release-assets)" ] && echo "ℹ️ 无文件可上传" && exit 0
+
+          # 使用awscli并行上传
+          find release-assets -type f -print0 | xargs -0 -P 4 -I file \
+            aws s3 cp file "s3://$R2_BUCKET_NAME/$(basename \${file})" \
+            --endpoint-url "$R2_ENDPOINT_URL" \
+            --no-progress
+
+          echo "✅ 上传完成"
+
+      # ----------- 第五步：清理 -----------
+      - name: Cleanup
+        if: always()
+        run: rm -rf release-assets
