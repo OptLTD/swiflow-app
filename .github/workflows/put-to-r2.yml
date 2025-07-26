@@ -92,7 +92,7 @@ jobs:
 
           # 使用awscli并行上传
           find release-assets -type f -print0 | xargs -0 -P 4 -I file \
-            aws s3 cp file "s3://$R2_BUCKET_NAME/$(basename \${file})" \
+            aws s3 cp file "s3://$R2_BUCKET_NAME/$(basename file)" \
             --endpoint-url "$R2_ENDPOINT_URL" \
             --no-progress
 
