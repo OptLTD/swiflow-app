@@ -1,0 +1,5 @@
+<search-files>
+  <path>src/</path>
+  <regex>function\s+\w+\(</regex>
+  <file-pattern>*.ts</file-pattern>
+</search-files>

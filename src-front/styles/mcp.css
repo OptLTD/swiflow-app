@@ -1,0 +1,154 @@
+/* MCP 卡片和Market相关样式整合 */
+
+.mcp-card {
+  /* background: #fff; */
+  /* border-radius: 14px; */
+  /* box-shadow: 0 2px 8px #0001; */
+  gap: 0.7em;
+  display: flex;
+  padding: 0 0 0 0;
+  flex-direction: column;
+  height: fit-content;
+}
+.mcp-card.border {
+  width: auto;
+  background: var(--bg-main);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px 0 #0001;
+  padding: 1rem 1rem 0.7rem 1rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 160px;
+  position: relative;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  border: 1px solid var(--color-divider);
+}
+.mcp-card.border:hover {
+  box-shadow: 0 2px 8px 0 #0002;
+  border-color: var(--color-tertiary);
+}
+
+.mcp-card-title {
+  font-size: 1.08em;
+  font-weight: 700;
+  margin-bottom: 0.3em;
+  color: var(--color-primary);
+  letter-spacing: 0.01em;
+}
+.mcp-card-desc {
+  flex: 1;
+  color: var(--color-secondary);
+  font-size: 0.97em;
+  margin-bottom: 0.7em;
+  line-height: 1.4;
+}
+.mcp-card-cmd-label {
+  font-size: 0.97em;
+  color: var(--color-secondary);
+  margin-top: 0.2em;
+}
+.mcp-card-cmd {
+  background: var(--bg-menu);
+  border-radius: 7px;
+  padding: 0.3em 0.7em;
+  font-size: 0.98em;
+  color: var(--color-primary);
+  /* margin-bottom: 0.2em;
+  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; */
+}
+.mcp-card-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  margin-bottom: 0.2em;
+}
+.mcp-card-link {
+  /* max-width: 180px; */
+  display: inline-block;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mcp-card-link {
+  color: var(--color-tertiary);
+  font-size: 0.92em;
+  text-decoration: none;
+  margin-left: 0em;
+  flex: 1;
+}
+.mcp-card-tags {
+  display: flex;
+  gap: 0.5em;
+  flex-wrap: wrap;
+  margin-bottom: 0.2em;
+}
+.mcp-card-tag {
+  background: var(--bg-menu);
+  color: var(--color-primary);
+  border-radius: 8px;
+  padding: 0.1em 0.7em;
+  font-size: 0.95em;
+  font-weight: 600;
+}
+.mcp-badge {
+  display: inline-block;
+  padding: 0.13em 0.8em;
+  border-radius: 8px;
+  font-size: 0.98em;
+  font-weight: 600;
+  background: var(--bg-main);
+  color: var(--color-primary);
+  border: 1px solid var(--color-tertiary);
+}
+.badge-python { background: var(--bg-menu); color: var(--color-primary); border-color: var(--color-tertiary); }
+.badge-node { background: var(--bg-main); color: var(--color-secondary); border-color: var(--color-tertiary); }
+.badge-shell { background: var(--bg-headbar); color: var(--color-tertiary); border-color: var(--color-tertiary); }
+.badge-other { background: var(--bg-menu); color: var(--color-secondary); border-color: var(--color-divider); }
+
+/* Market 标签栏和按钮样式（由McpMarket.vue迁移并适配主题） */
+
+.tags-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: 1.2rem 0 1.5rem 0;
+  padding-left: 0.2rem;
+}
+.tag-btn {
+  background: var(--bg-menu);
+  color: var(--color-secondary);
+  border-radius: 12px;
+  padding: 0.25em 1.1em;
+  font-size: 1em;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: background 0.18s, color 0.18s;
+  user-select: none;
+}
+.tag-btn.active {
+  background: var(--bg-headbar);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.install-btn {
+  margin-top: 0.2em;
+  padding: 0.3em 1.2em;
+  border-radius: 7px;
+  font-size: 1em;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-primary);
+  background: var(--bg-headbar);
+  border-color: var(--color-secondary);
+  transition: background 0.2s, color 0.2s;
+  box-shadow: 0 1px 3px #0001;
+}
+.install-btn:hover {
+  background: var(--bg-menu);
+  color: var(--color-tertiary);
+} 

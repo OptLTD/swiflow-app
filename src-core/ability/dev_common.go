@@ -1,0 +1,327 @@
+//go:build !windows
+// +build !windows
+
+package ability
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"swiflow/config"
+	"swiflow/support"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/shirou/gopsutil/v4/process"
+)
+
+var (
+	sandboxExecPath string
+	sandboxExecOnce sync.Once
+	firejailPath    string
+	firejailOnce    sync.Once
+)
+
+// 检查sandbox-exec是否存在，只查一次
+func hasSandboxExec() bool {
+	sandboxExecOnce.Do(func() {
+		if path, err := exec.LookPath("sandbox-exec"); err == nil {
+			sandboxExecPath = path
+		}
+	})
+	return sandboxExecPath != ""
+}
+
+// 检查firejail是否存在，只查一次
+func hasFirejail() bool {
+	firejailOnce.Do(func() {
+		if path, err := exec.LookPath("firejail"); err == nil {
+			firejailPath = path
+		}
+	})
+	return firejailPath != ""
+}
+
+type DevCommonAbility struct {
+	home string
+
+	pid int32
+
+	logs []string
+}
+
+// 动态生成sandbox profile，只允许读写home目录
+//
+// profile参数为用户自定义的profile内容（可为空或包含如(version 1)、(allow default)、网络/进程等限制）
+// home为允许读写的根目录。
+//
+// 生成的profile文件内容为：
+//
+//	<profile内容>
+//	(deny file-read* file-write* file-ioctl*)
+//	(allow file-read* file-write* file-ioctl* (subpath "<home>"))
+//
+// 示例：
+//
+//	用户配置的SANDBOX_PROFILE内容：
+//	  (version 1)
+//	  (allow default)
+//	  (deny network*)
+//	home为 /Users/xxx/Works/swiflow-app/tmp
+//	则最终profile内容为：
+//	  (version 1)
+//	  (allow default)
+//	  (deny network*)
+//	  (deny file-read* file-write* file-ioctl*)
+//	  (allow file-read* file-write* file-ioctl* (subpath "/Users/xxx/Works/swiflow-app/tmp"))
+//
+// 这样子进程只能读写home目录，且无法联网。
+func (m *DevCommonAbility) genMacSandboxProfile(profile string, home string) (string, error) {
+	content := fmt.Sprintf(`%s
+(deny file-read* file-write* file-ioctl*)
+(allow file-read* file-write* file-ioctl* (subpath "%s"))
+`, profile, home)
+	tmpfile := filepath.Join(os.TempDir(), fmt.Sprintf("sandbox-%d.sb", time.Now().UnixNano()))
+	err := os.WriteFile(tmpfile, []byte(content), 0644)
+	if err != nil {
+		return "", err
+	}
+	return tmpfile, nil
+}
+
+// 生成firejail参数，限制只能访问home目录且无网络
+func (m *DevCommonAbility) genFirejailArgs(home string) []string {
+	return []string{"--private=" + home, "--net=none", "--quiet"}
+}
+
+// 公共方法：根据配置决定是否用sandbox-exec包装
+func (m *DevCommonAbility) cmdWithSandbox(ctx context.Context, cmd string, args ...string) *exec.Cmd {
+	profile := config.GetStr("SANDBOX_PROFILE", "")
+	switch runtime.GOOS {
+	case "darwin":
+		if profile != "" && hasSandboxExec() {
+			if path, err := m.genMacSandboxProfile(profile, m.home); err == nil {
+				allArgs := []string{"-f", path, "sh", "-c", cmd + " " + strings.Join(args, " ")}
+				return exec.CommandContext(ctx, "sandbox-exec", allArgs...)
+			}
+		}
+	case "linux":
+		if profile != "" && hasFirejail() {
+			fjArgs := m.genFirejailArgs(m.home)
+			fjArgs = append(fjArgs, cmd)
+			fjArgs = append(fjArgs, args...)
+			return exec.CommandContext(ctx, "firejail", fjArgs...)
+		}
+	}
+	return exec.CommandContext(ctx, cmd, args...)
+}
+
+func (m *DevCommonAbility) cmd(cmd string, args ...string) *exec.Cmd {
+	return m.cmdWithSandbox(context.Background(), cmd, args...)
+}
+
+func (m *DevCommonAbility) run(cmd string, timeout time.Duration, args ...string) ([]byte, error) {
+	return m.exec(cmd+" "+strings.Join(args, " "), timeout)
+}
+
+func (m *DevCommonAbility) exec(command string, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := m.cmdWithSandbox(ctx, "sh", "-c", command)
+	cmd.Dir = m.home
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// 获取输出管道
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	// 启动命令
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	// 在 goroutine 中监控超时并强制杀进程组
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
+				syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+		case <-done:
+		}
+	}()
+
+	// 读取输出
+	outBytes, _ := io.ReadAll(stdout)
+	errBytes, _ := io.ReadAll(stderr)
+
+	err = cmd.Wait()
+	close(done)
+
+	output := append(outBytes, errBytes...)
+
+	m.logs = append(m.logs, "$ "+command)
+	m.logs = append(m.logs, support.Quote(string(output)))
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return nil, ctx.Err()
+	}
+
+	return output, err
+}
+
+func (m *DevCommonAbility) start(command string) error {
+	ctx := context.Background()
+	cmd := m.cmdWithSandbox(ctx, "sh", "-c", command)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	// 设置工作目录
+	cmd.Dir = m.home
+	if err := cmd.Start(); err != nil {
+		if strings.TrimSpace(stdout.String()) != "" {
+			m.logs = append(m.logs, stdout.String())
+		}
+		if strings.TrimSpace(stderr.String()) != "" {
+			m.logs = append(m.logs, stderr.String())
+		}
+		return err
+	}
+	m.pid = int32(cmd.Process.Pid)
+
+	// 创建一个 channel 用于接收 cmd.Wait() 的结果
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		// 等待 300ms，如果命令在 300ms 内完成且失败，则返回错误
+		if err != nil {
+			if strings.TrimSpace(stdout.String()) != "" {
+				m.logs = append(m.logs, stdout.String())
+			}
+			if strings.TrimSpace(stderr.String()) != "" {
+				m.logs = append(m.logs, stderr.String())
+			}
+			return err
+		}
+	case <-time.After(300 * time.Millisecond):
+		// 300ms 后命令仍在运行，不返回错误
+	}
+
+	// 继续在后台等待命令完成（不影响主流程）
+	// go func() {
+	// 	err := <-done
+	// 	log.Printf("stdout: %v, %s", err, stdout.String())
+	// }()
+
+	return nil
+}
+
+// 获取进程状态
+func (m *DevCommonAbility) Status() string {
+	proc, err := process.NewProcess(m.pid)
+	if err != nil {
+		return ""
+	}
+
+	status, err := proc.Status()
+	if err != nil || len(status) == 0 {
+		return ""
+	}
+	if status[0] == "zombie" {
+		m.Terminate()
+		return ""
+	}
+	return strings.Join(status, ",")
+}
+
+// 停止进程
+func (m *DevCommonAbility) Terminate() error {
+	if m.pid == 0 {
+		return nil
+	}
+
+	proc, err := process.NewProcess(m.pid)
+	if err != nil {
+		// 进程可能已经不存在
+		if m.IsNotFoundError(err) {
+			m.pid = 0
+			return nil
+		}
+		return err
+	}
+
+	// 先尝试终止子进程
+	m.KillChildren(proc)
+
+	// 尝试优雅终止主进程
+	if err := proc.Terminate(); err != nil {
+		if m.IsNotFoundError(err) {
+			m.pid = 0
+			return nil
+		}
+
+		// 如果优雅终止失败，尝试强制终止
+		if err := proc.Kill(); err != nil {
+			if m.IsNotFoundError(err) {
+				m.pid = 0
+				return nil
+			}
+			return err
+		}
+	}
+
+	m.pid = 0
+	return nil
+}
+
+// 终止进程的所有子进程
+func (m *DevCommonAbility) KillChildren(proc *process.Process) {
+	children, err := proc.Children()
+	if err != nil {
+		return // 忽略错误，可能没有子进程
+	}
+
+	// 先尝试正常终止所有子进程
+	for _, child := range children {
+		_ = child.Terminate()
+	}
+
+	// 给子进程一点时间来完成终止
+	time.Sleep(100 * time.Millisecond)
+
+	// 如果子进程仍然存在，强制终止
+	for _, child := range children {
+		if exists, _ := process.PidExists(child.Pid); exists {
+			_ = child.Kill()
+		}
+	}
+}
+
+// 判断是否为"进程不存在"错误
+func (m *DevCommonAbility) IsNotFoundError(err error) bool {
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "process not found") ||
+		strings.Contains(errMsg, "no such process") ||
+		strings.Contains(errMsg, "no process found")
+}

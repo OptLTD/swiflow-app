@@ -1,0 +1,198 @@
+<script setup lang="ts">
+import * as emoji from 'node-emoji';
+import { onMounted, computed } from 'vue'
+import { request, toast } from '@/support'
+import { useAppStore } from '@/stores/app'
+import { useTaskStore } from '@/stores/task'
+
+import SwitchSet from './widgets/SwitchSet.vue';
+import ProfileSet from './widgets/ProfileSet.vue';
+
+const app = useAppStore()
+const task = useTaskStore()
+
+const onSwitchBot = (bot: BotEntity) => {
+  setActiveBot(bot)
+}
+
+
+const setActiveBot = async (bot: BotEntity) => {
+  try {
+    const url = `/bot?act=use-bot&uuid=${bot.uuid}`
+    const resp = await request.post<any>(url)
+    if (resp?.errmsg) {
+      toast.error(resp.errmsg)
+      return
+    }
+    var active = getRunning.value(resp)
+    task.setActive(active?.uuid || '')
+    app.setActive(resp as BotEntity)
+    console.info('use bot:', resp)
+  } catch (err) {
+    console.error('use bot:', err)
+  }
+}
+
+const clazz = (item: BotEntity) => {
+  const { uuid } = app.getActive || {}
+  return item.uuid == uuid ? 'active' : ''
+}
+
+const getRunning = computed(() => {
+  return (bot: BotEntity) => task.getRunning(bot.uuid)
+})
+
+// 加载任务数据
+const loadTasks = async () => {
+  try {
+    const url = '/task?act=load-task'
+    const resp = await request.get(url)
+    if (Array.isArray(resp)) {
+      task.setHistory(resp as TaskEntity[])
+    }
+  } catch (err) {
+    console.error('load tasks:', err)
+  }
+}
+
+// 组件挂载时加载任务数据
+onMounted(() => {
+  loadTasks()
+})
+</script>
+
+<template>
+  <div id="nav-header">
+    <img src="/assets/icon.svg">
+  </div>
+  <div id="nav-container">
+    <dl class="nav-list">
+      <template v-if="app.getBotList.length == 0">
+        <div class="empty-result">
+          {{ $t('common.empty') }}
+        </div>
+      </template>
+      <template v-for="item in app.getBotList" :key="item.uuid">
+        <dd :class="clazz(item)" @click="onSwitchBot(item)">
+          <div class="bot-container">
+            <tippy :theme="app.getTheme" placement="left-start" :content="item.name">
+              {{ emoji.get(item.emoji || 'man_technologist') }}
+            </tippy>
+            <div v-if="getRunning(item)" class="running-task">
+              <tippy :theme="app.getTheme" placement="left-start" 
+                :content="`正在运行: ${getRunning(item)?.name}`">
+                <div class="task-indicator">●</div>
+              </tippy>
+            </div>
+          </div>
+        </dd>
+      </template>
+      <dt class="nav-footer">
+        <ProfileSet />
+        <SwitchSet />
+      </dt>
+    </dl>
+  </div>
+</template>
+
+<style scoped>
+#nav-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  justify-content: center;
+  height: var(--nav-height);
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+#nav-header>img {
+  width: 30px;
+  margin-left: 2px;
+}
+
+#nav-container {
+  flex-grow: 1;
+  margin: 0px auto;
+  position: relative;
+}
+
+.nav-list {
+  margin: -2px 0px 0 0px;
+  padding-inline-start: 0px;
+}
+
+.nav-list>dd {
+  cursor: pointer;
+  margin: 12px 0px;
+  font-size: 25px;
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  border-radius: 5px;
+  text-align: center;
+}
+
+.nav-list>dd.active {
+  /* background-color: var(--color-divider); */
+  box-shadow: 2px 3px 6px var(--color-tertiary);
+}
+
+.nav-footer {
+  display: flex;
+  gap: 10px;
+  left: 0px;
+  bottom: 10px;
+  padding: 0 10px;
+  position: absolute;
+  align-items: center;
+  flex-direction: column;
+  width: -webkit-fill-available;
+}
+
+.bot-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.running-task {
+  display: flex;
+  bottom: -2px;
+  right: -2px;
+  position: absolute;
+}
+
+.task-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  font-size: 8px;
+  line-height: 8px;
+  color: #10b981;
+  background-color: #10b981;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.75;
+    filter: blur(1px);
+    transform: scale(1.2);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+</style>

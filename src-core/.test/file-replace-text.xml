@@ -1,0 +1,10 @@
+<file-replace-text>
+  <path>src/components/App.tsx</path>
+  <diff>
+    <<<<<<< SEARCH
+    import React from 'react';
+    =======
+    import React, { useState } from 'react';
+    >>>>>>> REPLACE
+  </diff>
+</file-replace-text>

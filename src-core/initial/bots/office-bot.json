@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "pdf-reader": {
+      "command": "uvx",
+      "args": [
+        "mcp-pdf-reader"
+      ],
+      "env": {
+        "PDF_DIR": "$SWIFLOW_HOME"
+      }
+    },
+    "excel-server": {
+      "command": "uvx",
+      "args": [
+        "excel-mcp-server",
+        "stdio"
+      ],
+      "env": {
+        "EXCEL_FILES_PATH": "$SWIFLOW_HOME"
+      }
+    },
+    "mysql-server": {
+      "args": [
+        "--from",
+        "mysql-mcp-server",
+        "mysql_mcp_server"
+      ],
+      "command": "uvx",
+      "env": {
+        "MYSQL_DATABASE": "demo",
+        "MYSQL_HOST": "localhost",
+        "MYSQL_PASSWORD": "123456",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "root"
+      }
+    }
+  }
+}

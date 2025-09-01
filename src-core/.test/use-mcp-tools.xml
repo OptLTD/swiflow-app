@@ -1,0 +1,10 @@
+<use-mcp-tool>
+  <server-name>weather-server</server-name>
+  <tool-name>get-forecast</tool-name>
+  <arguments>
+    {
+      "city": "San Francisco",
+      "days": 5
+    }
+  </arguments>
+</use-mcp-tool>

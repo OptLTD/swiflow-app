@@ -1,0 +1,12 @@
+<execute-command>
+  <command>yarn docs:dev</command>
+</execute-command>
+
+<start-async-cmd>
+  <session>start-vitepress</session>
+  <command>yarn docs:dev</command>
+</start-async-cmd>
+
+<query-async-cmd>
+  <session>start-vitepress</session>
+</query-async-cmd>

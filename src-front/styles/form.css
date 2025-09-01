@@ -1,0 +1,76 @@
+.form-group {
+  display: flex;
+  column-gap: 10px;
+  margin: 8px auto;
+  align-items: center;
+}
+
+.form-group select,
+.form-group input:not([type]),
+.form-group input[type=text],
+.form-group input[type=password] {
+  width: 10rem;
+  height: 2em;
+  box-sizing: border-box;
+}
+
+.form-item>input,
+.form-item>select {
+  flex: 1;
+  font-size: 1rem;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: white;
+
+  /* 移除默认外观 */
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.form-item>select {
+  /* 添加自定义下拉箭头 */
+  padding-right: 15px;
+  background-repeat: no-repeat;
+  background-position: right 5px center;
+  background-image: url('data:image/svg+xml;utf8,<svg fill="black" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+}
+
+/* help 放在右边 */
+.formkit-outer {
+  position: relative;
+}
+.formkit-outer :deep(.formkit-help) {
+  position: absolute;
+  top: -3px;
+  right: 0rem;
+
+  margin-left: 5rem;
+  text-align: right;
+  line-break: anywhere;
+  color: var(--text-main);
+}
+/* 让FormKit radio横排 */
+.formkit-outer :deep(.formkit-options) {
+  display: flex;
+  gap: 1.5em;
+  flex-wrap: nowrap;
+  flex-direction: row;
+  align-items: stretch;
+}
+.formkit-outer :deep(.formkit-option) {
+  margin-bottom: 5px;
+  color: var(--text-main);
+}
+/* 调整FormKit textarea高度 */
+.formkit-outer :deep(textarea) {
+  resize: vertical;
+  padding: 2px;
+  height: 4.5rem;
+  min-height: 4.5rem;
+  color: var(--text-main);
+}
+.formkit-outer :deep(input),
+.formkit-outer :deep(select){
+  color: var(--text-main);
+}

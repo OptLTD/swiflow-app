@@ -1,0 +1,288 @@
+/* 通用文件查看器样式 */
+
+/* 基础容器样式 */
+.text-viewer,
+.pdf-viewer,
+.xls-viewer {
+  height: 100%;
+  overflow: auto;
+}
+
+/* 加载状态样式 */
+.loading-content,
+.loading,
+.error,
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #999;
+}
+
+/* 加载动画 */
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 错误状态样式 */
+.error-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.error h4 {
+  margin: 0 0 8px 0;
+  color: #dc3545;
+}
+
+.error p {
+  margin: 0 0 16px 0;
+  text-align: center;
+  max-width: 400px;
+}
+
+/* 重试按钮 */
+.btn-retry {
+  padding: 6px 12px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.btn-retry:hover {
+  background: #0056b3;
+}
+
+/* 空状态样式 */
+.empty-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.empty h4,
+.empty p {
+  margin: 0 0 6px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.empty h4 {
+  color: #333;
+  font-size: 16px;
+}
+
+/* 文本文件内容样式 */
+.file-content {
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: none;
+  overflow: auto;
+  margin: 0;
+}
+
+/* 代码编辑器样式 */
+.code-editor {
+  height: 100%;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+/* 内容容器 */
+.content-container {
+  height: 100%;
+}
+
+/* PDF查看器样式 */
+.pdf-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.pdf-component {
+  width: 100%;
+  max-width: 800px;
+  background: white;
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Excel查看器样式 */
+.xls-viewer {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  position: relative;
+}
+
+.sheet-selector {
+  top: 8px;
+  right: 8px;
+  z-index: 100;
+  position: absolute;
+  backdrop-filter: blur(10px);
+}
+
+.xls-content {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-container {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  border: none;
+  border-radius: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
+  display: flex;
+  flex-direction: column;
+}
+
+.xls-table {
+  width: max-content;
+  border-collapse: collapse;
+  background: white;
+  table-layout: auto;
+  flex-shrink: 0;
+  margin: 0 0;
+}
+
+.xls-table th,
+.xls-table td {
+  padding: 6px 8px;
+  font-size: 13px;
+  text-align: left;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-width: 60px;
+  max-width: 30rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.xls-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #333;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 6px 6px;
+}
+
+.xls-table th:last-child,
+.xls-table td:last-child {
+  border-right: none;
+}
+
+.xls-table tr:hover {
+  background: #f8f9fa;
+}
+
+.xls-table td {
+  color: #333;
+  word-break: break-all;
+}
+
+/* 滚动条样式 */
+.table-container::-webkit-scrollbar,
+.xls-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.table-container::-webkit-scrollbar-track,
+.xls-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb,
+.xls-content::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover,
+.xls-content::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.table-container::-webkit-scrollbar-corner,
+.xls-content::-webkit-scrollbar-corner {
+  background: #f1f1f1;
+}
+
+/* FormKit 样式覆盖 */
+:deep(.formkit-select) {
+  min-width: 140px;
+}
+
+:deep(.formkit-input) {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: white;
+}
+
+:deep(.formkit-input:focus) {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .pdf-content {
+    padding: 10px;
+  }
+  
+  .sheet-selector {
+    top: 4px;
+    right: 4px;
+    left: 4px;
+    min-width: auto;
+  }
+  
+  .xls-table th,
+  .xls-table td {
+    padding: 3px 4px;
+    font-size: 13px;
+  }
+  
+  .xls-table th {
+    padding: 4px 4px;
+  }
+} 

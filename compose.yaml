@@ -1,0 +1,36 @@
+version: '3.8'
+services:
+  swiflow:
+    image: swiflow:latest
+    depends_on:
+      - mysql
+    ports:
+      - "11235:11235"
+    networks:
+      - nw-swiflow
+    environment:
+      - STORAGE_TYPE=mysql
+      - MYSQL_HOST=mysql
+      - MYSQL_NAME=demo
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASS=123456
+
+  mysql:
+    image: mysql:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: demo
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - nw-swiflow
+    ports:
+      - "3306:3306"
+
+networks:
+  nw-swiflow:
+    driver: bridge
+
+volumes:
+  mysql-data:

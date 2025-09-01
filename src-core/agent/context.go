@@ -1,0 +1,235 @@
+package agent
+
+import (
+	"fmt"
+	"log"
+	"strings"
+	"swiflow/ability"
+	"swiflow/action"
+	"swiflow/config"
+	"swiflow/entity"
+	"swiflow/model"
+	"swiflow/storage"
+	"swiflow/support"
+
+	"github.com/duke-git/lancet/v2/fileutil"
+)
+
+type Context struct {
+	usePrompt string
+	useMemory string
+
+	bot  *storage.BotEntity
+	task *storage.TaskEntity
+
+	store storage.MyStore
+}
+
+func (r *Context) Get() []*model.Message {
+	return r.GetContext()
+}
+
+func (r *Context) GetRole(op string) string {
+	switch op {
+	case "user-input":
+		return "user"
+	case "bot-reply":
+		return "assistant"
+	case "tool-result":
+		return "user"
+	default:
+		return "system"
+	}
+}
+func (r *Context) TaskContext() string {
+	return r.task.Context
+}
+
+func (r *Context) ParseMsgs(msgs []*MyMsg) []*action.SuperAction {
+	result := []*action.SuperAction{}
+	resMap := map[string]*action.SuperAction{}
+	layout := "2006-01-02 15:04:05"
+	for _, item := range msgs {
+		if item.Request != "" {
+			resp := action.Parse(item.Request)
+			if send := item.SendAt; send != nil {
+				resp.Datetime = send.Format(layout)
+			}
+
+			if item.OpType == "user-input" {
+				resp.TheMsgId = item.MsgId
+				result = append(result, resp)
+			}
+			if last, ok := resMap[item.PreMsg]; ok {
+				last.Merge(resp)
+			}
+		}
+
+		if item.Respond != "" {
+			resp := action.Parse(item.Respond)
+			if recv := item.RecvAt; recv != nil {
+				resp.Datetime = recv.Format(layout)
+			}
+			resp.TheMsgId = item.MsgId
+			if len(resp.Errors) == 0 {
+				resMap[resp.TheMsgId] = resp
+				result = append(result, resp)
+			}
+		}
+	}
+	return result
+}
+
+func (r *Context) GetMsgs(count int) []*model.Message {
+	messages := make([]*model.Message, 0)
+	msgs, _ := r.store.LoadMsg(r.task)
+	for i := 0; i < len(msgs); i++ {
+		if count > 0 && i+count <= len(msgs) {
+			continue
+		}
+
+		req := model.Message{Content: msgs[i].Request}
+		req.Role = r.GetRole(msgs[i].OpType)
+		messages = append(messages, &req)
+		if strings.TrimSpace(msgs[i].Respond) != "" {
+			messages = append(messages, &model.Message{
+				Role: "assistant", Content: msgs[i].Respond,
+			})
+		}
+	}
+	return messages
+}
+
+func (r *Context) GetContext() []*model.Message {
+	messages := make([]*model.Message, 0)
+	if support.Bool(r.usePrompt) {
+		messages = append(messages, &model.Message{
+			Role: "system", Content: r.usePrompt,
+		})
+	}
+	if support.Bool(r.useMemory) {
+		messages = append(messages, &model.Message{
+			Role: "user", Content: r.useMemory,
+		})
+	}
+	size := config.GetInt("CTX_MSG_SIZE", 100)
+	if msgs := r.GetMsgs(size); len(msgs) > 0 {
+		messages = append(messages, msgs...)
+	}
+	return messages
+}
+
+func (r *Context) GetSubject() string {
+	return r.task.Name
+}
+
+func (r *Context) DebugCall(op string, msgs []*model.Message) {
+	log.Println("[EXEC]", r.bot.Name, r.task.UUID, op)
+	if config.GetStr("DEBUG_MODE", "no") != "yes" {
+		return
+	}
+
+	var p strings.Builder
+	var s strings.Builder
+	for i, msg := range msgs {
+		if i == 0 {
+			p.WriteString(msg.Content)
+			continue
+		}
+		s.WriteString("<--- " + msg.Role + " --->")
+		s.WriteString("\n" + msg.Content + "\n\n")
+	}
+
+	history := config.GetWorkPath(r.bot.UUID + ".xml")
+	fileutil.WriteStringToFile(history, s.String(), false)
+
+	prompt := config.GetWorkPath(r.bot.UUID + ".md")
+	fileutil.WriteStringToFile(prompt, p.String(), false)
+}
+
+func (r *Context) Memorize(act *action.Memorize) error {
+	mem := &entity.MemEntity{
+		Bot: r.bot.UUID, Type: "chat",
+		Subject: act.Subject,
+		Content: act.Content,
+	}
+	return r.store.SaveMem(mem)
+}
+
+func (r *Context) Annotate(act *action.Annotate) error {
+	if act.Subject != "" {
+		r.task.Name = act.Subject
+	}
+	r.task.Context = act.Context
+	return nil
+}
+
+func (r *Context) WaitTodo(act *action.WaitTodo) (err error) {
+	todo := &entity.TodoEntity{UUID: act.UUID, Task: r.task.UUID}
+	if act.UUID == "" && (act.Time == "" || act.Todo == "") {
+		return fmt.Errorf("error: wrong wait-todo format")
+	}
+	if act.UUID == "" && act.Time != "" && act.Todo != "" {
+		todo.UUID, _ = support.UniqueID(12)
+		todo.Time, todo.Todo = act.Time, act.Todo
+		if err = r.store.SaveTodo(todo); err == nil {
+			support.Emit("wait-todo", "create", todo)
+			return
+		}
+		return fmt.Errorf("error: %w", err)
+	}
+
+	// find todo
+	if err = r.store.FindTodo(todo); err != nil {
+		return fmt.Errorf("error: %w", err)
+	}
+	if act.Time != "" && act.Todo != "" {
+		todo.Time, todo.Todo = act.Time, act.Todo
+	} else {
+		todo.Done = 1
+	}
+	if err = r.store.SaveTodo(todo); err == nil {
+		event := support.If(todo.Done, "remove", "update")
+		support.Emit("wait-todo", event, todo)
+	}
+	return
+}
+
+func (r *Context) Publish(act *action.PublishAsApp) any {
+	if act.Command == "" {
+		return fmt.Errorf("app start command is empty")
+	}
+	cmd := ability.DevCommandAbility{
+		Home: r.task.UUID,
+	}
+	pid, err := cmd.Start(act.Command)
+	if err != nil {
+		return cmd.Logs()
+	}
+	r.task.Process, r.task.Command = pid, act.Command
+	if err := r.store.SaveTask(r.task); err != nil {
+		return fmt.Errorf("error: %v", err)
+	}
+	return "success"
+}
+
+func (r *Context) SetState(state string) error {
+	r.task.State = state
+	support.Emit("control", r.task.UUID, state)
+	if err := r.store.SaveTask(r.task); err != nil {
+		return fmt.Errorf("save state error: %v", err)
+	}
+	return nil
+}
+
+func (r *Context) WriteMsg(msg *MyMsg) error {
+	if r.store == nil {
+		log.Println("[EXEC]", msg.TaskId, "log msg fail: store nil")
+		return fmt.Errorf("write msg error: store nil")
+	}
+	if err := r.store.SaveMsg(msg); err != nil {
+		log.Println("[EXEC]", msg.TaskId, "log msg fail:", err)
+		return fmt.Errorf("write msg error: %v", err)
+	}
+	return nil
+}

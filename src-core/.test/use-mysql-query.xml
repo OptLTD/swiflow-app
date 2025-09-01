@@ -1,0 +1,35 @@
+<thinking> nice to meet you</thinking>
+
+<use-mysql-query>
+  <dbname>crm_test</dbname>
+  <query>SELECT ci.id, ci.brief_name, ci.full_name, ci.city, ci.industry, ci.establish_time, ci.operating_status, ci.staff, ci.website
+FROM crm_company_info ci
+WHERE ci.city IN ('北京', '上海', '广州', '深圳', '深圳市', '广州市', '上海市')
+LIMIT 20;</query>
+  <result>
+id,brief_name,full_name,city,industry,establish_time,operating_status,staff,website
+2,中汇投服,前海中汇投资服务（深圳）有限公司,深圳市,f9182464a6118dc2427b4e8841be4e22,2015-11-01 00:00:00,1,,http://www.cfxis.com
+12,智金汇,深圳前海智金互联网金融服务有限公司,深圳市,f9182464a6118dc2427b4e8841be4e22,2015-02-11 00:00:00,1,21-50,http://www.zhijin.vc/
+13,星络科技,星络科技有限公司,深圳市,84c9f013a1c155ad001e598ae551a517,2018-06-01 00:00:00,1,,http://www.wangqian.cn
+14,博海基金,深圳市博海基金管理有限公司,深圳市,f9182464a6118dc2427b4e8841be4e22,2014-07-08 00:00:00,1,,https://www.szbhjj.com/
+17,骏荣,广州骏荣知识产权服务有限公司,广州市,203c1ae2338c6f81c5526e27aa2a62ad,2012-03-01 00:00:00,1,21-50,http://www.jr-ipr.com
+20,捷玛股份,广东捷玛节能科技股份有限公司,广州市,edcf502d5f6580d5386d4c7bf063b2d2,2005-09-06 00:00:00,1,101-300,http://www.gzjiema.com/
+22,广州蕴辰网络科技有限公司,广州蕴辰网络科技有限公司,广州市,NULL,2010-11-23 00:00:00,1,21-50,http://www.gzyunchen.com
+24,金申翊投资,深圳市金申翊金融投资有限公司,深圳市,f9182464a6118dc2427b4e8841be4e22,2015-05-04 00:00:00,1,21-50,NULL
+38,第2居所网,深圳第二居所在线信息技术有限公司,深圳市,6a96b9cd661d866aba8869da599cbced,2013-11-06 00:00:00,1,21-50,http://www.d2jusuo.com
+42,云上课程开发组,NULL,深圳市,435fb0d2643ef68f2a604723648593c7,NULL,1,NULL,
+59,青藤网,广东青藤教育科技有限公司,广州市,435fb0d2643ef68f2a604723648593c7,2015-12-03 00:00:00,1,21-50,http://www.qingtengonline.com/
+72,五羊母婴,广州五羊化妆品有限公司,广州市,84c9f013a1c155ad001e598ae551a517,2008-08-08 00:00:00,1,,https://www.fiveram.net.cn/
+84,创维投资,深圳创维投资管理企业（有限合伙）,深圳市,f9182464a6118dc2427b4e8841be4e22,2014-12-30 00:00:00,1,,http://investor.skyworth.com/sc/ir_contact.php
+85,问购网,广州一网信息科技有限公司,广州市,8269376044ecbb14445875d957a50f33,2012-05-29 00:00:00,1,,http://www.askbuy.cn
+100,经纬智能,深圳市经纬智能科技股份有限公司,深圳市,83060dc624e51eee66ac8fe68180e833,2012-05-14 00:00:00,1,51-100,http://www.u-iot.com/
+114,助东网,深圳市怀融文化科技有限公司,深圳市,84c9f013a1c155ad001e598ae551a517,2016-07-18 00:00:00,1,,
+124,中亚图科技,中亚图（广州）科技有限公司,广州市,203c1ae2338c6f81c5526e27aa2a62ad,2018-10-01 00:00:00,1,21-50,NULL
+148,链云区块链,深圳市链云区块链技术有限公司,深圳市,203c1ae2338c6f81c5526e27aa2a62ad,2018-03-13 00:00:00,1,,
+149,瑞思博投资,深圳市瑞思博投资管理有限公司,深圳市,f9182464a6118dc2427b4e8841be4e22,2014-12-26 00:00:00,1,,NULL
+154,政鑫智能,深圳市政鑫智能系统有限公司,深圳市,83060dc624e51eee66ac8fe68180e833,2004-04-21 00:00:00,1,,http://www.zxis.com.cn
+
+  </result>
+</use-mysql-query>
+
+<datetime>2025-03-17T17:18:36.592Z</datetime>

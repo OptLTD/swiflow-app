@@ -1,0 +1,13 @@
+<file-put-content>
+  <path>src/frontend-config.json</path>
+  <data>
+  {
+    "apiEndpoint": "https://api.example.com",
+    "theme": {
+      "primaryColor": "#007bff",
+      "secondaryColor": "#6c757d",
+      "fontFamily": "Arial, sans-serif"
+    }
+  }
+  </data>
+</file-put-content>
