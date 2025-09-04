@@ -345,6 +345,18 @@ const handleFileChange = (detail: any) => {
   }
 }
 
+// Handle file click from UploadFiles component
+const handleViewUpload = (filePath: string) => {
+  if (filePath) {
+    // Decode the file path to prevent double encoding in Browser.vue
+    const decodedPath = decodeURIComponent(filePath)
+    const detail = { path: decodedPath }
+    app.setContent(true)
+    app.setAction('browser')
+    view.setChange(detail)
+  }
+}
+
 watch(() => task.getActive, (uuid) => {
   handleSwitch(uuid)
 })
@@ -393,6 +405,7 @@ onMounted(() => {
           <UploadFiles 
             :files="app.getGlobalUploads" 
             @remove="handleRemoveUpload" 
+            @detail="handleViewUpload"
           />
         </template>
         <template #tools>

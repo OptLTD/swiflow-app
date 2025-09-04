@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { md } from '@/support';
 import { computed, PropType } from 'vue'
+import { useAppStore } from '@/stores/app'
+import { useViewStore } from '@/stores/view'
 import { getActDesc } from '@/logics/chat'
 import { showDisplayAct } from '@/logics/chat'
 
 const emit = defineEmits(["check", 'display'])
+const app = useAppStore()
+const view = useViewStore()
 const props = defineProps({
   loading: {
     type: Boolean as PropType<boolean>,
@@ -15,7 +19,7 @@ const props = defineProps({
     default: () => false
   },
   detail: {
-    type: Object as PropType<ActionMsg|null>,
+    type: Object as PropType<ActionMsg | null>,
     default: null
   },
 })
@@ -26,7 +30,7 @@ const thinking = computed(() => {
 })
 
 const actions = computed(() => {
-  const {actions} = props.detail || {}
+  const { actions } = props.detail || {}
   if (!actions || !actions.length) {
     return []
   }
@@ -34,7 +38,7 @@ const actions = computed(() => {
 })
 
 const isInput = computed(() => {
-  const {actions} = props.detail || {}
+  const { actions } = props.detail || {}
   if (!actions || !actions.length) {
     return ''
   }
@@ -55,12 +59,25 @@ const getUpload = (item: MsgAct) => {
   if (!act.uploads) {
     return ''
   }
-  return md.render(act.uploads.join(','))
+  let text = act.uploads.join(',').trim()
+  if (text.startsWith('[[') && text.endsWith(')]')) {
+    text = text.replace('[[', '[').replace(')]', ')')
+  }
+  return md.render(text)
 }
 
 const handleFileClick = (e: MouseEvent) => {
   const ele = e.target as HTMLLinkElement
-  console.log('click', ele.getAttribute('href'))
+  const href = ele.getAttribute('href')
+  if (href) {
+    // Extract file path from markdown link format [filename](path)
+    // Decode the file path to prevent double encoding in Browser.vue
+    const filePath = decodeURIComponent(href)
+    const detail = { path: filePath }
+    app.setContent(true)
+    app.setAction('browser')
+    view.setChange(detail)
+  }
 }
 
 const handleOptionCheck = (act: MakeAsk, m: number) => {
@@ -110,17 +127,17 @@ const hasMoreArgs = [
 
 <template>
   <div class="msg-wrap" :class="{
-      'pull-right': isInput, loading
-    }">
+    'pull-right': isInput, loading
+  }">
     <slot name="header" v-if="!isInput" />
     <div class="msg-act" v-if="loading && thinking">
       <div class="rich-text" v-html="md.render(thinking)" />
     </div>
     <template v-for="(act, j) in actions" :key="j">
-      <div class="msg-act" v-if="act.type=='make-ask'">
+      <div class="msg-act" v-if="act.type == 'make-ask'">
         <dl class="request">
           <dt>{{ (act as MakeAsk).question }}</dt>
-          <dd v-for="(option,m) in (act as MakeAsk).options">
+          <dd v-for="(option, m) in (act as MakeAsk).options">
             <label>
               <input type="checkbox" :value="option" @click="handleOptionCheck(act as MakeAsk, m)"
                 :disabled="isLast == false" :checked="m == act.checked" />
@@ -173,40 +190,76 @@ const hasMoreArgs = [
   margin: 12px 12px;
   word-break: break-word;
 }
+
 .thinking,
 .user-input,
 .present,
 .request {
   font-size: 1rem;
 }
-.user-input{
+
+.user-input {
   display: block;
   padding: 8px 12px;
   border-radius: 5px;
   background: #f1f1f1;
 }
+
 .user-files {
-  margin-top: -10px;
+  margin-top: -5px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 5px 0;
 }
+
+.user-files :deep(p) {
+  margin: 2px 0;
+  line-height: 1.3;
+}
+
+.user-files :deep(a) {
+  display: inline-block;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 1px 1px;
+  border-radius: 3px;
+  max-width: 8rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  transition: background-color 0.2s ease;
+}
+
+.user-files :deep(a:hover) {
+  text-decoration: underline;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
 .user-input:deep(:last-child),
 .user-input:deep(:first-child) {
   margin-block-end: 0em;
   margin-block-start: 0em;
 }
-.request{
+
+.request {
   padding-left: 0;
 }
-.request>dt{
+
+.request>dt {
   font-weight: 500;
   margin-top: -1em;
   margin-bottom: 0.5em;
 }
-.request>dd{
+
+.request>dd {
   margin-left: 1rem;
 }
-.loading .act-card{
+
+.loading .act-card {
   cursor: wait;
 }
+
 .loading-image {
   height: 20px;
   margin-top: 8px;
@@ -214,11 +267,13 @@ const hasMoreArgs = [
   align-self: baseline;
   /* margin-top: 1rem; */
 }
+
 .act-card .loading-image {
   top: 0px;
   right: 10px;
   position: absolute;
 }
+
 .btn-more {
   top: 2px;
   right: 2px;
@@ -234,9 +289,11 @@ const hasMoreArgs = [
   transition: all 0.2s ease;
   background-color: var(--bg-headbar);
 }
+
 .btn-more:hover {
   background-color: var(--bg-menu);
 }
+
 .btn-more>.icon {
   width: 16px;
   height: 16px;

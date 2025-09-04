@@ -115,30 +115,19 @@
   bottom: 1rem;
   position: absolute;
 }
-.upload-files {
+.header-action{
   position: absolute;
-  top: -1.1rem;
+  top: 0;
   left: 0;
-  z-index: 2;
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  padding: 2px 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  right: 0;
+  z-index: 3;
+  /* Allow content to expand upward automatically */
+  width: 100%;
+  padding: 0px 15px;
+  align-items: center;
+  transform: translateY(-100%);
 }
-.upload-files span{
-  margin-left: 10px;
-}
-.upload-files span>a{
-  display: none;
-}
-.upload-files span:hover>a{
-  display: inline;
-  cursor: pointer;
-  margin: 0 5px;
-}
+
 textarea {
   resize: none;
   outline: none;
