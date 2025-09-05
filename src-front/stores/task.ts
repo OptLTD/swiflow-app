@@ -30,7 +30,7 @@ export const useTaskStore = defineStore('task', {
     },
     getRunning: (state) => {
       return (bot: string) => {
-        const runningStates = ['running', 'process', 'failed']
+        const runningStates = ['running', 'waiting', 'failed']
         return state.history.find((task: TaskEntity) => {
           const taskBot = task.bots?.[0] || task.bots
           return taskBot === bot && runningStates.includes(task.state)

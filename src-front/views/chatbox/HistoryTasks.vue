@@ -45,7 +45,7 @@ const getTaskBot = (item: TaskEntity) => {
 const getStatusText = (state: string) => {
   const statusMap: Record<string, string> = {
     'running': t('status.running'),
-    'process': t('status.process'), 
+    'waiting': t('status.waiting'),
     'failed': t('status.failed'),
     'canceled': t('status.canceled'),
     'completed': t('status.completed'),
@@ -57,12 +57,12 @@ const getStatusText = (state: string) => {
 const getStatusClass = (state: string) => {
   const classMap: Record<string, string> = {
     'running': 'running',
-    'process': 'running',
+    'waiting': 'running',
     'failed': 'failed',
     'canceled': 'failed',
     'completed': 'success',
   }
-  return classMap[state] || 'process'
+  return classMap[state] || 'waiting'
 }
 
 // 切换任务

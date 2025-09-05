@@ -36,9 +36,9 @@ type Executor struct {
 
 const (
 	STATE_RUNNING = "running" // 程序正在运行
-	STATE_PROCESS = "process" // 任务没完成
+	STATE_WAITING = "waiting" // 等待人工干预
 
-	STATE_FAILED    = "failed"    // 执行是吧
+	STATE_FAILED    = "failed"    // 执行失败
 	STATE_CANCELED  = "canceled"  // 取消执行
 	STATE_COMPLETED = "completed" // 任务完成
 )
@@ -89,7 +89,7 @@ func (r *Executor) Handle() *action.SuperAction {
 
 		maxTurns := config.GetInt("MAX_CALL_TURNS", 25)
 		if maxTurns > 0 && r.currentTurns > maxTurns {
-			r.currentState = STATE_PROCESS
+			r.currentState = STATE_WAITING
 			log.Println("[EXEC]", r.UUID, errors.ErrExceededMaximumTurns)
 			support.Emit("errors", r.UUID, errors.ErrExceededMaximumTurns)
 			break
@@ -180,12 +180,12 @@ func (r *Executor) Handle() *action.SuperAction {
 			case *action.Complete:
 				r.currentState = STATE_COMPLETED
 			default:
-				r.currentState = STATE_PROCESS
+				r.currentState = STATE_WAITING
 			}
 		}
 
 		if strings.TrimSpace(toolResult) != "" {
-			r.currentState = STATE_PROCESS
+			r.currentState = STATE_WAITING
 			r.queueLock.Lock() // tool call has result
 			input := []action.Input{&action.ToolResult{
 				Content: action.TOOL_RESULT_TAG + "\n" + toolResult,

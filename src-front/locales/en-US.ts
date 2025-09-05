@@ -89,7 +89,7 @@ export default {
     useCopy: 'Copy Method',
   },
   status: {
-    process: 'Process',
+    waiting: 'Waiting',
     running: 'Running',
     canceled: 'Canceled',
     completed: 'Completed',

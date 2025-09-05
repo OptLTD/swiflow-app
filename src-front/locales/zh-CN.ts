@@ -100,7 +100,7 @@ export default {
     useCopy: '复制内容方式',
   },
   status: {
-    process: '处理中',
+    waiting: '待继续',
     running: '运行中',
     canceled: '已取消',
     completed: '已完成',
