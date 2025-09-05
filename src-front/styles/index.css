@@ -343,6 +343,7 @@ button:focus-visible {
 }
 
 .act-card {
+  position: relative;
   font-size: 1rem;
   cursor: pointer;
   padding: 8px 12px;
