@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   swiflow:
-    image: swiflow:latest
+    image: optltd/swiflow:latest
     depends_on:
       - mysql
     ports:
