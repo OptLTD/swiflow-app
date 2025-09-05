@@ -42,8 +42,7 @@ const getRunning = computed(() => {
   return (bot: BotEntity) => task.getRunning(bot.uuid)
 })
 
-// 加载任务数据
-const loadTasks = async () => {
+const loadTaskList = async () => {
   try {
     const url = '/task?act=load-task'
     const resp = await request.get(url)
@@ -55,9 +54,21 @@ const loadTasks = async () => {
   }
 }
 
-// 组件挂载时加载任务数据
-onMounted(() => {
-  loadTasks()
+const setActiveTask = async () => {
+  const bot = app.getActive || {}
+  if (bot?.uuid && !task.getActive) {
+    var active = getRunning.value(bot)
+    task.setActive(active?.uuid || '')
+    // console.log('active', bot, active)
+  } else {
+    // wait global data load done
+    setTimeout(setActiveTask, 150);
+  }
+}
+
+onMounted(async () => {
+  await loadTaskList()
+  await setActiveTask()
 })
 </script>
 

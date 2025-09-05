@@ -120,7 +120,7 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 3;
+  z-index: 1;
   /* Allow content to expand upward automatically */
   width: 100%;
   padding: 0px 15px;

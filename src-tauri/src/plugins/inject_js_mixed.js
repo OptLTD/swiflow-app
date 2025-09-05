@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
         /* tauri 部分处理 end */
     `;
 
-    console.log('inject js & style')
+    // console.log('inject js & style')
     window.swiflow = 'swiflow is best'
     document.body.appendChild(style);
     document.body.classList.add('in-tauri');
