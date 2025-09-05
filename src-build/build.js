@@ -185,9 +185,9 @@ function execCommand(command, options = {}) {
     }
     
     const result = execSync(command, { 
-      cwd, 
-      encoding: 'utf8',
-      stdio: silent ? 'pipe' : 'inherit'
+      cwd, encoding: 'utf8',
+      stdio: silent ? 'pipe' : 'inherit',
+      env: process.env  // Pass environment variables including Apple API keys
     });
     return result;
   } catch (error) {
@@ -216,7 +216,13 @@ function loadAppleApiKeys() {
     lines.forEach(line => {
       const trimmedLine = line.trim();
       if (trimmedLine && !trimmedLine.startsWith('#') && trimmedLine.includes('=')) {
-        const [key, ...valueParts] = trimmedLine.split('=');
+        // Handle both 'export KEY=value' and 'KEY=value' formats
+        let processedLine = trimmedLine;
+        if (processedLine.startsWith('export ')) {
+          processedLine = processedLine.substring(7); // Remove 'export ' prefix
+        }
+        
+        const [key, ...valueParts] = processedLine.split('=');
         const value = valueParts.join('=').replace(/^["']|["']$/g, ''); // Remove quotes
         process.env[key.trim()] = value.trim();
       }
@@ -536,7 +542,8 @@ async function buildMacOSTargets(version, targetArch) {
   const epigraphInfo = BUILD_CONFIG.app.version.epigraphInfo;
   const isDebugMode = BUILD_CONFIG.build.debugMode;
   
-  // Load Apple API keys if not in debug mode or if epigraph info is provided
+  // Load Apple API keys unless in debug mode without epigraph info
+  // This matches the shell script logic: load keys when epigraph exists OR when not in debug mode
   if (!isDebugMode || epigraphInfo) {
     if (!loadAppleApiKeys()) {
       log('❌ Failed to load Apple API keys. This may affect code signing and notarization.', 'error');
@@ -548,7 +555,9 @@ async function buildMacOSTargets(version, targetArch) {
   
   try {
     // Build all macOS architectures in parallel
-    const buildPromises = architectures.map(arch => buildMacOSPlatform(arch, version));
+    const buildPromises = architectures.map(arch => {
+      return buildMacOSPlatform(arch, version);
+    });
     await Promise.all(buildPromises);
     
     const archText = targetArch === 'all' ? 'all architectures' : targetArch;

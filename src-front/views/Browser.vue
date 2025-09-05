@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue3-toastify'
 import { request } from '@/support/index'
+import { BASE_ADDR } from '@/support/consts'
 import { useAppStore } from '@/stores/app'
 import { useTaskStore } from '@/stores/task'
 import { useViewStore } from '@/stores/view'
@@ -154,10 +155,10 @@ const getFileIcon = (item: any) => {
   }
 }
 
-// 获取文件 URL
+// 获取文件 URL - Use full HTTP URL for Tauri compatibility
 const getFileUrl = (path: string, name: string) => {
   const encodePath = encodeURIComponent(`${path}/${name}`)
-  return `/api/browser?uuid=${app.getActive.uuid}&path=${encodePath}`
+  return `${BASE_ADDR}/browser?uuid=${app.getActive.uuid}&path=${encodePath}`
 }
 
 // 获取查看器组件
