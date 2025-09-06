@@ -49,7 +49,7 @@ const stdout = ref({
 const doInstallPython = async () => {
   pyRuning.value = true
   netEnv.value = await checkNetEnv()
-  await doInstall(netEnv.value, 'py-uvx', ok => {
+  await doInstall(netEnv.value, 'uvx-py', ok => {
     pyRuning.value = false
     if (ok) alert('Python环境安装成功')
   })

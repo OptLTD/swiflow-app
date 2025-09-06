@@ -218,7 +218,7 @@ func (h *HttpServie) ReadMap(r io.Reader) any {
 }
 
 func (h *HttpServie) InitMcpEnv(name string, env string) any {
-	if name != "js-npx" && name != "py-uvx" {
+	if name != "js-npx" && name != "uvx-py" {
 		return fmt.Errorf("wrong name")
 	}
 	file := ability.FileSystemAbility{
