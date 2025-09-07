@@ -238,11 +238,11 @@ func (h *HttpServie) InitMcpEnv(name string, env string) any {
 			"Bypass", "-File", file.Path, "--mode", env,
 		}
 	case "darwin":
-		cmd, args = "sh", []string{file.Path, env}
 		file.Path = fmt.Sprintf("mac-%s.sh", name)
-	default:
 		cmd, args = "sh", []string{file.Path, env}
+	default:
 		file.Path = fmt.Sprintf("linux-%s.sh", name)
+		cmd, args = "sh", []string{file.Path, env}
 	}
 	bin, err := initial.GetScript(file.Path)
 	if err == nil && len(bin) > 0 {
@@ -250,10 +250,10 @@ func (h *HttpServie) InitMcpEnv(name string, env string) any {
 	} else if err != nil {
 		return err
 	}
-	if _, err := dev.Run(cmd, 10*time.Second, args...); err == nil {
-		log.Println("start install, ok", string(bin))
+	if out, err := dev.Run(cmd, 10*time.Minute, args...); err == nil {
+		log.Println("start install, ok", err, out)
 	} else {
-		log.Println("start install, no", string(bin))
+		log.Println("start install, no", err, out)
 	}
 	return nil
 }
