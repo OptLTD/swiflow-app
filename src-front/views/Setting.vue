@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { debounce } from 'lodash-es';
 import { toast } from 'vue3-toastify';
 import { watch, onMounted, ref } from 'vue';
 import { useAppStore } from '@/stores/app';
@@ -33,11 +34,11 @@ onMounted(async () => {
   await loadSetting()
 })
 
-watch(() => formModel.value, (data: any) => {
+watch(() => formModel.value, debounce((data: any) => {
   app.setSetup(data)
   locale.value = data.language
   return saveSetting(data)
-}, {deep: true})
+}, 300), {deep: true})
 
 const loadSetting = async () => {
   try {

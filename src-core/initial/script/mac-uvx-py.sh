@@ -14,10 +14,10 @@ fi
 echo "Starting installation of UV and Python..."
 
 # Function to print colored output - use tput for better compatibility
-# Check if tput is available,and M is set, and not a dumb terminal
-TERMINAL_SUPPORTS_COLOR=$(ull 2>&1 && [ -n "$TERM" ] && [ "$TERM" != "dumb" ]; then
-    # Use tpu" ] && echo "true" || echo "false")
-if [ "$TERMINAL_SUPPORTS_COLOR" = "true2)$1$(tput sgr0)"; }
+# Check if tput is available, TERM is set, and not a dumb terminal
+if command -v tput >/dev/null 2>&1 && [ -n "$TERM" ] && [ "$TERM" != "dumb" ]; then
+    # Use tput for color output
+    print_green() { echo "$(tput setaf 2)$1$(tput sgr0)"; }
     print_blue() { echo "$(tput setaf 5)$1$(tput sgr0)"; }  # Changed to magenta for better visibility
     print_yellow() { echo "$(tput setaf 3)$1$(tput sgr0)"; }
     print_red() { echo "$(tput setaf 1)$1$(tput sgr0)"; }

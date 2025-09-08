@@ -19,7 +19,7 @@ import Content from '@/views/Content.vue'
 import Browser from '@/views/Browser.vue'
 import DropZone from '@/widgets/DropZone.vue'
 import Fireworks from '@/widgets/Fireworks.vue'
-import { showUseModelPopup } from './logics';
+import { showWelcomeModal } from './logics/index';
 
 const app = useAppStore()
 const socket = useWebSocket()
@@ -75,9 +75,7 @@ const loadGlobal = async () => {
     if (info.setup) {
       app.setSetup(info.setup)
     }
-    if (!info.useModel) {
-      showUseModelPopup(info.authGate)
-    } else {
+    if (info.useModel) {
       app.useModel(info.useModel)
     }
     if (info.bots?.length > 0) {
@@ -93,6 +91,28 @@ const loadGlobal = async () => {
         app.setShowEpigraph(true)
         localStorage.setItem('last-shown', today)
       }
+    }
+
+    const welcome = localStorage.getItem('welcome')
+    if (welcome === 'login-success') {
+      showWelcomeModal(info.authGate, {
+        currentStep: 2, 
+        login: app.getLogin,
+        selectedMode: 'trial',
+      })
+      setTimeout(() => {
+        localStorage.removeItem('welcome')
+      }, 1000)
+    } else if (welcome === 'python-install') {
+      showWelcomeModal(info.authGate, {
+        currentStep: 3, 
+        pyInstalling: true,
+      })
+      setTimeout(() => {
+        localStorage.removeItem('welcome')
+      }, 1000)
+    } else if (!app.getUseModel) {
+      showWelcomeModal(info.authGate, {})
     }
   } catch (err) {
     console.log('failed to load global:', err)
@@ -196,6 +216,12 @@ const handleAuth = async (data: Record<string, any>) => {
     if (resp && resp.errmsg) {
       toast.error(resp.errmsg)
       return
+    }
+    // first login, continue welcome
+    if (!app.getUseModel) {
+      localStorage.setItem(
+        'welcome', 'login-success'
+      )
     }
     toast.success('Login Success!')
     return loadGlobal()

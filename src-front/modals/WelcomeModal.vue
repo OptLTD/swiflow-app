@@ -1,21 +1,67 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { request, alert } from '@/support'
 import { VueFinalModal } from 'vue-final-modal'
 import FormModel from '@/widgets/FormModel.vue'
-import { checkMcpEnv, doInstall, checkNetEnv } from '@/logics/mcp'
+import { doInstall } from '@/logics/mcp'
+import { checkMcpEnv } from '@/logics/mcp'
+import { checkNetEnv } from '@/logics/mcp'
+
+// Types for better type safety
+type WizardStep = 1 | 2 | 3 | 4
+type WizardMode = 'trial' | 'apikey' | ''
+
+interface WizardState {
+  currentStep: WizardStep
+  selectedMode: WizardMode
+  waitingForAuth: boolean
+  apiConfigured: boolean
+  envConfigured: boolean
+  pyInstalling: boolean
+  selectedTask: string
+  loading: boolean
+  error: string
+  login: any 
+}
+
+const props = defineProps({
+  gateway: {
+    type: String,
+    default: 'https://auth.swiflow.com'
+  },
+  initialState: {
+    type: Object,
+    default: () => ({})
+  }
+})
 
 const emit = defineEmits(['submit', 'cancel'])
 
-// Current step state (1-4)
+// Centralized state management
 const totalSteps = 4
-const currentStep = ref(1)
+const defaultState: WizardState = {
+  currentStep: 1 as WizardStep,
+  selectedMode: 'apikey',
+  waitingForAuth: false,
+  apiConfigured: false,
+  envConfigured: false,
+  pyInstalling: false,
+  selectedTask: '',
+  loading: false,
+  error: '',
+  login: null
+}
+
+// Merge default state with initial state from props
+const state = reactive<WizardState>({
+  ...defaultState,
+  ...props.initialState
+})
 
 // API Key configuration state
 const modelForm = ref<typeof FormModel>()
 const modelConfig = ref<ModelMeta>()
 const models = ref<ModelResp>({})
-const apiConfigured = ref(false)
 
 // Python environment state
 const mcpEnv = ref({
@@ -23,79 +69,89 @@ const mcpEnv = ref({
   nodejs: '', npx: '',
   windows: false,
 })
-const pyInstalling = ref(false)
-const envConfigured = ref(false)
 
-// Sample tasks
+// Sample tasks configuration
 const sampleTasks = [
   {
     id: 'web-scraping',
     title: '网页数据抓取',
-    description: '抓取指定网站的数据并进行分析',
+    brief: '抓取指定网站的数据并进行分析',
     icon: '🕷️'
   },
   {
     id: 'code-review',
     title: '代码审查助手',
-    description: '分析代码质量，提供改进建议',
+    brief: '分析代码质量，提供改进建议',
     icon: '🔍'
   },
   {
     id: 'data-analysis',
     title: '数据分析报告',
-    description: '从CSV文件生成数据分析报告',
+    brief: '从CSV文件生成数据分析报告',
     icon: '📊'
   },
   {
     id: 'api-testing',
     title: 'API接口测试',
-    description: '自动化测试REST API接口',
+    brief: '自动化测试REST API接口',
     icon: '🧪'
   }
 ]
-const selectedTask = ref('')
 
-// Navigation methods
+// Navigation methods with improved logic
 const nextStep = () => {
-  if (currentStep.value < totalSteps) {
-    currentStep.value++
+  if (state.currentStep < totalSteps) {
+    // Clear any previous errors
+    state.error = ''
+    
+    // Always go to next step normally
+    state.currentStep++
   }
 }
 
-const prevStep = () => {
-  if (currentStep.value > 1) {
-    currentStep.value--
+const goToStep = (step: WizardStep) => {
+  if (step <= state.currentStep) {
+    state.error = ''
+    state.currentStep = step
   }
 }
 
-const goToStep = (step: number) => {
-  currentStep.value = step
-}
-
-// Step validation
+// Step validation with better logic
 const canProceed = computed(() => {
-  switch (currentStep.value) {
-    case 1: return true // Introduction step
-    case 2: return apiConfigured.value // API Key configured
-    case 3: return envConfigured.value // Python environment ready
-    case 4: return selectedTask.value !== '' // Task selected
+  switch (state.currentStep) {
+    case 1: return state.selectedMode !== '' // Mode selected
+    case 2: 
+      if (state.selectedMode === 'apikey') {
+        return state.apiConfigured
+      } else if (state.selectedMode === 'trial') {
+        return true // Trial mode can always proceed
+      }
+      return false
+    case 3: return state.envConfigured // Python environment ready
+    case 4: return state.selectedTask !== '' // Task selected
     default: return false
   }
 })
 
-// API Key configuration
+// API Key configuration with better error handling
 const loadModelConfig = async () => {
   try {
+    state.loading = true
+    state.error = ''
+    
     const url = `/setting?act=get-model`
     const resp = await request.get(url) as any
     models.value = resp.models || {}
+    
     if (resp && resp.useModel) {
       modelConfig.value = resp.useModel as ModelMeta
-      apiConfigured.value = !!(resp.useModel.apiKey)
+      state.apiConfigured = !!(resp.useModel.apiKey)
     }
   } catch (err) {
     console.error('Failed to load model config:', err)
+    state.error = 'Failed to load model configuration'
   } finally {
+    state.loading = false
     if (!modelConfig.value || !modelConfig.value.provider) {
       modelConfig.value = {provider: 'doubao'} as ModelMeta
     }
@@ -105,70 +161,177 @@ const loadModelConfig = async () => {
 const saveApiConfig = async () => {
   const data = modelForm.value?.getFormModel()
   if (!data) {
-    alert('Please fill in all required fields')
+    state.error = 'Please fill in all required fields'
     return
   }
   
   try {
+    state.loading = true
+    state.error = ''
+    
     const url = `/setting?act=set-model`
     const resp = await request.post(url, data)
     const errmsg = (resp as any)?.errmsg
+    
     if (errmsg && errmsg !== 'success') {
-      alert(errmsg)
+      state.error = errmsg
       return
     }
-    apiConfigured.value = true
-    alert('API configuration saved successfully!')
+    
+    state.apiConfigured = true
+    // alert('API configuration saved successfully!')
     // Auto proceed to next step after successful save
     nextStep()
   } catch (err) {
-    alert('Failed to save API configuration')
+    state.error = 'Failed to save API configuration'
+    console.error('API config save error:', err)
+  } finally {
+    state.loading = false
   }
 }
 
-// Python environment setup
+// Python environment setup with better state management
 const checkPythonEnv = async () => {
-  checkMcpEnv((info) => {
-    mcpEnv.value = info
-    const wasConfigured = envConfigured.value
-    envConfigured.value = !!(info.python && info.uvx)
-    // Auto proceed to next step if environment becomes ready
-    if (!wasConfigured && envConfigured.value) {
-      nextStep()
+  try {
+    state.loading = true
+    state.error = ''
+    checkMcpEnv((info) => {
+      mcpEnv.value = info
+      state.envConfigured = !!(info.python && info.uvx)
+    })
+  } catch (err) {
+    state.error = 'Failed to check Python environment'
+    console.error('Python env check error:', err)
+  } finally {
+    state.loading = false
+  }
+}
+
+const keepCheckPythonEnv = () => {
+  // Start periodic checking every 3 seconds until installation is complete
+  const checkInterval = setInterval(async () => {
+    try {
+      // Check environment and wait for state update
+      await checkPythonEnv()
+      // Check if environment is configured after the async call
+      if (state.envConfigured) {
+        state.pyInstalling = false
+        clearInterval(checkInterval)
+        localStorage.removeItem('welcome')
+        alert('Python environment installed successfully!')
+      }
+    } catch (err) {
+      console.error('Error checking Python environment:', err)
     }
-  })
+  }, 3000)
+  
+  // Set a maximum timeout of 5 minutes to prevent infinite checking
+  setTimeout(() => {
+    if (state.pyInstalling) {
+      clearInterval(checkInterval)
+      state.pyInstalling = false
+      state.error = 'Installation timeout - please try again'
+    }
+  }, 300000) // 5 minutes
 }
 
 const installPython = async () => {
-  pyInstalling.value = true
+  state.pyInstalling = true
+  state.error = ''
+  
   try {
     const netEnv = await checkNetEnv()
+    // Start installation process
+    localStorage.setItem('welcome', 'python-install')
     await doInstall(netEnv, 'uvx-py', (success) => {
-      pyInstalling.value = false
-      if (success) {
-        alert('Python environment installed successfully!')
-        checkPythonEnv() // Recheck environment
-        // Auto proceed to next step after successful installation
-        nextStep()
-      } else {
-        alert('Failed to install Python environment')
+      if (!success) {
+        state.pyInstalling = false
+        state.error = 'Failed to install Python environment'
       }
     })
+    keepCheckPythonEnv()
   } catch (err) {
-    pyInstalling.value = false
-    alert('Installation failed')
+    state.pyInstalling = false
+    state.error = 'Installation failed'
+    console.error('Python install error:', err)
   }
 }
 
-// Task selection
-const selectTask = (taskId: string) => {
-  selectedTask.value = taskId
+// Mode selection methods with better state management
+const selectMode = (mode: WizardMode) => {
+  state.selectedMode = mode
+  state.error = ''
+  
+  if (mode === 'trial') {
+    // For trial mode, reset auth waiting state
+    state.waitingForAuth = false
+  }
 }
 
-// Complete setup
+const gotoSignUp = async () => {
+  try {
+    state.waitingForAuth = true // Show waiting screen
+    const path = 'authorization?from=swiflow-app'
+    const signup = document.getElementById('signupUrl')
+    signup?.setAttribute('href', `${props.gateway}/${path}`)
+    const result = signup && signup.click && signup.click()
+
+    // Start checking localStorage for login info every 300ms
+    const checkLoginInterval = setInterval(() => {
+      try {
+        const loginInfo = localStorage.getItem('login')
+        if (loginInfo) {
+          console.log('Login info detected:', loginInfo)
+          clearInterval(checkLoginInterval)
+          state.waitingForAuth = false
+          // Store login info in state for display
+          try {
+            state.login = JSON.parse(loginInfo)
+          } catch {
+            state.login = { token: loginInfo } // If not JSON, treat as token
+          }
+        }
+      } catch (error) {
+        console.error('Error checking localStorage:', error)
+      }
+    }, 300)
+    
+    // Clear interval after 5 minutes to prevent infinite checking
+    setTimeout(() => {
+      clearInterval(checkLoginInterval)
+    }, 300000) // 5 minutes timeout
+    
+    return result
+  } catch (err) {
+    state.error = 'Failed to open signup page'
+    console.error('Signup error:', err)
+  }
+}
+
+// Task selection with validation
+const selectTask = (taskId: string) => {
+  state.selectedTask = taskId
+  state.error = ''
+}
+
+// Wrapper functions for click handlers to fix TypeScript type issues
+const handleCheckPythonEnv = () => {
+  checkPythonEnv()
+}
+
+const handleInstallPython = () => {
+  installPython()
+}
+
+// Complete setup with validation
 const completeSetup = () => {
+  if (!state.selectedTask) {
+    state.error = 'Please select a task to continue'
+    return
+  }
+  
   emit('submit', {
-    selectedTask: selectedTask.value
+    selectedTask: state.selectedTask
   })
 }
 
@@ -176,47 +339,57 @@ const onCancel = () => {
   emit('cancel')
 }
 
-// Initialize on mount
+// Initialize on mount with better error handling
 const initializeWelcome = async () => {
-  await loadModelConfig()
-  await checkPythonEnv()
+  try {
+    await Promise.all([
+      loadModelConfig(),
+      checkPythonEnv()
+    ])
+  } catch (err) {
+    state.error = 'Failed to initialize welcome wizard'
+    console.error('Initialization error:', err)
+  }
 }
 </script>
 
 <template>
-  <VueFinalModal
-    class="swiflow-modal-wrapper"
-    content-class="welcome-modal"
-    :click-to-close="false"
-    :esc-to-close="false"
-    @opened="initializeWelcome"
-  >
+  <VueFinalModal @opened="initializeWelcome" :click-to-close="false" :esc-to-close="false" class="swiflow-modal-wrapper"
+    content-class="welcome-modal">
     <div class="welcome-container">
       <!-- Header with progress indicator -->
       <div class="welcome-header">
         <!-- <h2>欢迎使用 Swiflow</h2> -->
         <div class="progress-indicator">
-          <div 
-            v-for="step in totalSteps" 
-            :key="step" class="progress-step"
-            :class="{ 
-              'active': step === currentStep, 
-              'completed': step < currentStep,
-              'clickable': step <= currentStep
-            }"
-            @click="step <= currentStep && goToStep(step)"
-          >
+          <div v-for="step in totalSteps" :key="step" class="progress-step" :class="{ 
+              'active': step === state.currentStep, 
+              'completed': step < state.currentStep,
+              'clickable': step <= state.currentStep
+            }" @click="step <= state.currentStep && goToStep(step as WizardStep)">
             <span class="step-number">{{ step }}</span>
           </div>
         </div>
       </div>
 
+      <!-- Error Display -->
+      <div v-if="state.error" class="error-message">
+        <span class="error-icon">⚠️</span>
+        <span>{{ state.error }}</span>
+      </div>
+
+      <!-- Loading Indicator -->
+      <div v-if="state.loading" class="loading-indicator">
+        <div class="loading-spinner">⏳</div>
+        <span>Loading...</span>
+      </div>
+
       <!-- Step Content -->
       <div class="welcome-content">
         <!-- Step 1: Introduction -->
-        <div v-if="currentStep === 1" class="step-content">
+        <div v-if="state.currentStep === 1" class="step-content">
           <h3>欢迎使用 Swiflow AI 工作流平台</h3>
           <div class="intro-content display-block">
+            <!-- Feature introduction -->
             <div class="feature-grid">
               <div class="feature-item">
                 <span class="feature-icon">🤖</span>
@@ -250,65 +423,105 @@ const initializeWelcome = async () => {
           </div>
         </div>
 
-        <!-- Step 2: API Key Configuration -->
-        <div v-if="currentStep === 2" class="step-content">
-          <h3>配置 AI 模型</h3>
-          <div class="api-config-content">
-            <p class="step-description">请配置您的AI模型提供商和API密钥以开始使用</p>
-            <FormModel 
-              v-if="modelConfig" 
-              class="display-block"
-              :config="modelConfig" 
-              :models="models" 
-              ref="modelForm"
-            />
+        <!-- Step 2: Configuration -->
+        <div v-if="state.currentStep === 2" class="step-content">
+          <!-- Trial mode: Waiting for authentication -->
+          <div v-if="state.selectedMode === 'trial'" class="trial-mode-content">
+            <div v-if="state.waitingForAuth && !state.login" class="waiting-content">
+              <div class="waiting-message">
+                <div class="loading-spinner">⏳</div>
+                <h4>等待认证中...</h4>
+                <p>请在新打开的页面中完成注册和认证流程</p>
+                <p class="waiting-tip">认证完成后，请返回此页面继续配置</p>
+              </div>
+            </div>
+            <div v-else-if="state.login" class="login-success-content">
+              <h3>登录成功</h3>
+              <p class="step-description">欢迎回来！您已成功登录体验模式</p>
+              <div class="login-info-display">
+                <div class="login-info-item">
+                  <span class="info-icon">👤</span>
+                  <div class="info-content">
+                    <span class="info-label">用户信息:</span>
+                    <span class="info-value">{{ state.login.username || state.login.email || '体验用户' }}</span>
+                  </div>
+                </div>
+                <div class="login-info-item" v-if="state.login.email">
+                  <span class="info-icon">📧</span>
+                  <div class="info-content">
+                    <span class="info-label">邮箱:</span>
+                    <span class="info-value">{{ state.login.email }}</span>
+                  </div>
+                </div>
+                <div class="login-info-item">
+                  <span class="info-icon">✅</span>
+                  <div class="info-content">
+                    <span class="info-label">状态:</span>
+                    <span class="info-value">已认证</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="trial-info">
+              <h3>注册体验模式</h3>
+              <p class="step-description">点击下方按钮开始注册体验，无需配置API密钥</p>
+              <div class="trial-features">
+                <div class="feature-item">
+                  <span class="feature-icon">🚀</span>
+                  <span>免费体验完整功能</span>
+                </div>
+                <div class="feature-item">
+                  <span class="feature-icon">⚡</span>
+                  <span>快速上手使用</span>
+                </div>
+                <div class="feature-item">
+                  <span class="feature-icon">🎯</span>
+                  <span>无需准备API密钥</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
+          <!-- API Key mode: Configuration -->
+          <div v-if="state.selectedMode === 'apikey'" class="api-config-content">
+            <h3>配置 AI 模型</h3>
+            <p class="step-description">请配置您的AI模型提供商和API密钥以开始使用</p>
+            <FormModel v-if="modelConfig" :config="modelConfig" :models="models" ref="modelForm" />
           </div>
         </div>
 
         <!-- Step 3: Python Environment -->
-        <div v-if="currentStep === 3" class="step-content">
+        <div v-if="state.currentStep === 3" class="step-content">
           <h3>配置 Python 环境</h3>
-          <div class="config-status" v-if="envConfigured">
-            <span class="status-badge success">✓ 环境就绪</span>
-          </div>
+          <p class="step-description">Python环境用于执行代码分析、数据处理等高级功能</p>
           <div class="env-config-content">
-            <p class="step-description">Python环境用于执行代码分析、数据处理等高级功能</p>
-            
-            <div class="display-block">
-              <div class="env-status ">
-                <div class="env-item">
-                  <span class="env-label">Python:</span>
-                  <span class="env-value" :class="mcpEnv.python ? 'available' : 'unavailable'">
-                    {{ mcpEnv.python || '未安装' }}
-                  </span>
-                </div>
-                <div class="env-item">
-                  <span class="env-label">UVX:</span>
-                  <span class="env-value" :class="mcpEnv.uvx ? 'available' : 'unavailable'">
-                    {{ mcpEnv.uvx || '未安装' }}
-                  </span>
-                </div>
+            <div class="env-status">
+              <div class="env-item">
+                <span class="env-label">Python:</span>
+                <span class="env-value" :class="mcpEnv.python ? 'available' : 'unavailable'">
+                  {{ mcpEnv.python || '未安装' }}
+                </span>
+              </div>
+              <div class="env-item">
+                <span class="env-label">UVX:</span>
+                <span class="env-value" :class="mcpEnv.uvx ? 'available' : 'unavailable'">
+                  {{ mcpEnv.uvx || '未安装' }}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Step 4: Sample Tasks -->
-        <div v-if="currentStep === 4" class="step-content">
+        <div v-if="state.currentStep === 4" class="step-content">
           <h3>选择示例任务</h3>
           <p class="step-description">选择一个示例任务来开始您的 Swiflow 之旅</p>
-          <div class="tasks-grid display-block">
-            <div 
-              v-for="task in sampleTasks" 
-              :key="task.id"
-              class="task-card"
-              :class="{ 'selected': selectedTask === task.id }"
-              @click="selectTask(task.id)"
-            >
+          <div class="tasks-grid">
+            <div v-for="task in sampleTasks" :key="task.id" class="task-card" @click="selectTask(task.id)"
+              :class="{ 'selected': state.selectedTask === task.id }">
               <div class="task-icon">{{ task.icon }}</div>
               <h4 class="task-title">{{ task.title }}</h4>
-              <p class="task-description">{{ task.description }}</p>
+              <p class="task-brief">{{ task.brief }}</p>
             </div>
           </div>
         </div>
@@ -321,55 +534,61 @@ const initializeWelcome = async () => {
           <button class="btn-outline" @click="onCancel">
             跳过引导
           </button>
-          
+
           <!-- Action buttons on the right -->
           <div class="action-buttons">
-            <!-- Step 2: API Configuration buttons -->
-            <button 
-              v-if="currentStep === 2" 
-              class="btn-secondary" 
-              @click="saveApiConfig"
-              :disabled="!modelForm"
-            >
-              保存配置
-            </button>
-            
-            <!-- Step 3: Environment Configuration buttons -->
-            <template v-if="currentStep === 3 && !envConfigured">
-              <button 
-                class="btn-secondary" 
-                @click="installPython"
-                :disabled="pyInstalling"
-              >
-                {{ pyInstalling ? '安装中...' : '安装 Python 环境' }}
-              </button>
-              <button class="btn-outline" @click="checkPythonEnv">
-                重新检测
-              </button>
-            </template>
-            
-            <!-- Navigation buttons -->
-            <!-- Show "Next Step" for steps without specific actions (Step 1 and Step 4) -->
-            <!-- Also show for Step 3 when environment is already configured -->
-            <button 
-              v-if="((currentStep === 1 || currentStep === 4) || (currentStep === 3 && envConfigured)) && currentStep < totalSteps" 
-              class="btn-primary" 
-              @click="nextStep"
-              :disabled="!canProceed"
-            >
+            <!-- Step 1: Mode selection buttons -->
+            <button :disabled="state.loading" v-if="(state.currentStep === 1)" class="btn-primary" @click="nextStep">
               下一步
             </button>
-            
-            <!-- For Step 2: Save Config acts as next step -->
-            <!-- For Step 3: Install/Recheck acts as next step when env not configured -->
-            <!-- These are already handled above in step-specific buttons -->
-            
-            <button 
-              v-if="currentStep === totalSteps" 
-              class="btn-primary" 
-              @click="completeSetup"
-              :disabled="!canProceed"
-            >
+
+            <!-- Step 2: Mode-specific buttons -->
+            <template v-if="state.currentStep === 2">
+              <!-- Mode switch button -->
+              <button class="btn-outline" @click="selectMode(state.selectedMode === 'trial' ? 'apikey' : 'trial')"
+                :disabled="state.loading">
+                {{ state.selectedMode === 'trial' ? '设置API Key' : '我没有API Key' }}
+              </button>
+
+              <!-- Trial mode buttons -->
+              <button v-if="state.selectedMode === 'trial' && !state.waitingForAuth && !state.login" 
+                class="btn-primary" @click="gotoSignUp" :disabled="state.loading" >
+                注册体验
+                <a target="_blank" id="signupUrl" style="display: none;" />
+              </button>
+
+              <!-- Continue button for trial mode when waiting for auth or login completed -->
+              <button v-if="state.selectedMode === 'trial' && (state.waitingForAuth || state.login)" 
+                @click="nextStep" class="btn-primary" :disabled="state.loading">
+                下一步
+              </button>
+
+              <!-- API Key mode buttons -->
+              <button v-if="state.selectedMode === 'apikey'" class="btn-primary" 
+                @click="saveApiConfig" :disabled="!modelForm || state.loading">
+                {{ state.loading ? '保存中...' : '保存配置' }}
+              </button>
+            </template>
+
+            <!-- Step 3: Environment Configuration buttons -->
+            <template v-if="state.currentStep === 3 && !state.envConfigured">
+              <button class="btn-outline" @click="handleCheckPythonEnv" 
+                :disabled="state.loading">
+                {{ state.loading ? '检测中...' : '重新检测' }}
+              </button>
+              <button class="btn-primary" @click="handleInstallPython" 
+                :disabled="state.pyInstalling || state.loading">
+                {{ state.pyInstalling ? '安装中...' : '安装 Python 环境' }}
+              </button>
+            </template>
+            <template v-if="state.currentStep === 3 && state.envConfigured">
+              <button class="btn-primary" @click="nextStep" :disabled="!canProceed || state.loading">
+                下一步
+              </button>
+            </template>
+
+            <button v-if="state.currentStep === totalSteps" :disabled="!canProceed || state.loading" 
+              class="btn-primary" @click="completeSetup">
               开始使用
             </button>
           </div>
@@ -380,7 +599,18 @@ const initializeWelcome = async () => {
 </template>
 
 <style scoped>
+/* CSS Variables for consistent theming */
 :global(.welcome-modal) {
+  --primary-color: #4a6cf7;
+  --success-color: #28a745;
+  --danger-color: #dc3545;
+  --secondary-color: #6c757d;
+  --light-bg: #f8f9fa;
+  --border-color: #e9ecef;
+  --text-muted: #6c757d;
+  --border-radius: 8px;
+  --transition: all 0.3s ease;
+  
   display: flex;
   flex-direction: column;
   padding: 30px;
@@ -390,13 +620,14 @@ const initializeWelcome = async () => {
   max-width: 700px;
   width: 90%;
   max-height: 80vh;
-  min-height: 50vh;
+  height: 540px;
   overflow: hidden;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   position: relative;
   z-index: 1001;
 }
 
+/* Layout Components */
 .welcome-container {
   display: flex;
   flex-direction: column;
@@ -404,16 +635,25 @@ const initializeWelcome = async () => {
   gap: 25px;
 }
 
-/* Header Styles */
 .welcome-header {
   text-align: center;
 }
 
-.welcome-header h2 {
-  font-size: 1.8rem;
-  font-weight: bold;
-  margin: 0 0 20px 0;
-  color: var(--vfm-text, #000);
+.welcome-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 0 5px;
+  min-height: 400px;
+  max-height: 400px;
+}
+
+.welcome-footer {
+  border-top: 1px solid var(--border-color);
+  padding-top: 15px;
+  flex-shrink: 0;
+  margin-top: auto;
 }
 
 /* Progress Indicator */
@@ -431,25 +671,22 @@ const initializeWelcome = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #e9ecef;
-  color: #6c757d;
+  background-color: var(--border-color);
+  color: var(--text-muted);
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: var(--transition);
   position: relative;
-}
-
-.progress-step.clickable {
   cursor: pointer;
 }
 
 .progress-step.active {
-  background-color: #4a6cf7;
+  background-color: var(--primary-color);
   color: white;
   transform: scale(1.1);
 }
 
 .progress-step.completed {
-  background-color: #28a745;
+  background-color: var(--success-color);
   color: white;
 }
 
@@ -460,175 +697,165 @@ const initializeWelcome = async () => {
   left: 100%;
   width: 15px;
   height: 2px;
-  background-color: #e9ecef;
+  background-color: var(--border-color);
   transform: translateY(-50%);
 }
 
 .progress-step.completed:not(:last-child)::after {
-  background-color: #28a745;
+  background-color: var(--success-color);
 }
 
-/* Content Styles */
-.welcome-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 5px;
-}
-
+/* Common Components */
 .step-content {
   text-align: center;
   animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .step-content h3 {
   font-size: 1.4rem;
   font-weight: 600;
-  margin: 0 0 15px 0;
+  margin: 0 0 8px 0;
   color: var(--vfm-text, #000);
 }
 
 .step-description {
   font-size: 1rem;
-  color: #6c757d;
-  margin-bottom: 20px;
+  color: var(--text-muted);
+  margin-bottom: 25px;
   line-height: 1.5;
 }
 
-.display-block {
+/* Status Messages */
+.error-message {
   display: flex;
-  min-height: 285px;
-  align-items: stretch;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  border-radius: var(--border-radius);
+  margin-bottom: 15px;
+  font-size: 0.9rem;
 }
 
-/* Step 1: Introduction */
-.intro-content {
-  text-align: left;
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  color: var(--text-muted);
+}
+
+.loading-spinner {
+  font-size: 1.5rem;
+  animation: pulse 2s infinite;
+}
+
+/* Grid Layouts */
+.feature-grid,
+.tasks-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
 }
 
 .feature-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 30px;
+}
+
+.tasks-grid {
+  margin-top: 15px;
+  max-height: 280px;
+}
+
+/* Card Components */
+.feature-item,
+.task-card {
+  padding: 15px;
+  border-radius: var(--border-radius);
+  background-color: var(--light-bg);
+  transition: var(--transition);
 }
 
 .feature-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 15px;
-  border-radius: 8px;
-  background-color: #f8f9fa;
-  transition: transform 0.2s ease;
 }
 
 .feature-item:hover {
   transform: translateY(-2px);
 }
 
-.feature-icon {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.feature-text h4 {
-  margin: 0 0 5px 0;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.feature-text p {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #6c757d;
-  line-height: 1.4;
-}
-
-.epigraph {
-  font-style: italic;
+.task-card {
+  border: 2px solid var(--border-color);
+  cursor: pointer;
   text-align: center;
-  padding: 15px;
-  background-color: #f5f5f5;
-  border-radius: 8px;
-  margin: 20px 0 0 0;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-/* Step 2: API Configuration */
-.config-status {
-  margin-bottom: 15px;
+.task-card:hover {
+  border-color: var(--primary-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(74, 108, 247, 0.15);
 }
 
-.status-badge {
-  display: inline-block;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 500;
+.task-card.selected {
+  border-color: var(--primary-color);
+  background-color: #f0f4ff;
 }
 
-.status-badge.success {
-  background-color: #d4edda;
-  color: #155724;
+/* Content Sections */
+.intro-content {
+  text-align: left;
+}
+
+.trial-mode-content,
+.api-config-content,
+.login-success-content {
+  text-align: center;
 }
 
 .api-config-content {
   margin: 0 auto;
-  text-align: left;
   max-width: fit-content;
 }
 
-.api-config-content .step-description {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-/* Center the FormModel component */
-.api-config-content :deep(.form-container) {
-  text-align: left;
-  display: inline-block;
-  width: 100%;
-  max-width: 400px;
-}
-
-.config-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 20px;
-}
-
-/* Step 3: Environment Configuration */
 .env-config-content {
   text-align: left;
 }
 
-.env-status {
-  background-color: #f8f9fa;
-  border-radius: 8px;
+/* Status Displays */
+.env-status,
+.login-info-display,
+.trial-features {
+  background-color: var(--light-bg);
+  border-radius: 12px;
   padding: 20px;
-  margin: 20px 0;
+  margin: 20px auto;
+  max-width: 75%;
 }
 
-.env-item {
+.env-item,
+.login-info-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.env-item:last-child {
+.env-item:last-child,
+.login-info-item:last-child {
   border-bottom: none;
-}
-
-.env-label {
-  font-weight: 600;
-  color: var(--vfm-text, #000);
 }
 
 .env-value {
@@ -648,66 +875,7 @@ const initializeWelcome = async () => {
   color: #721c24;
 }
 
-.env-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 20px;
-}
-
-/* Step 4: Task Selection */
-.tasks-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  margin-top: 20px;
-}
-
-.task-card {
-  padding: 20px;
-  border: 2px solid #e9ecef;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-align: center;
-}
-
-.task-card:hover {
-  border-color: #4a6cf7;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(74, 108, 247, 0.15);
-}
-
-.task-card.selected {
-  border-color: #4a6cf7;
-  background-color: #f0f4ff;
-}
-
-.task-icon {
-  font-size: 2rem;
-  margin-bottom: 10px;
-}
-
-.task-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-  color: var(--vfm-text, #000);
-}
-
-.task-description {
-  font-size: 0.9rem;
-  color: #6c757d;
-  margin: 0;
-  line-height: 1.4;
-}
-
-/* Footer Styles */
-.welcome-footer {
-  border-top: 1px solid #e9ecef;
-  padding-top: 20px;
-}
-
+/* Button Styles */
 .footer-actions {
   display: flex;
   justify-content: space-between;
@@ -721,17 +889,21 @@ const initializeWelcome = async () => {
   gap: 10px;
 }
 
-/* Button Styles */
-.btn-primary {
-  background-color: #4a6cf7;
-  color: white;
-  border: none;
+.btn-primary,
+.btn-secondary,
+.btn-outline {
   padding: 10px 20px;
-  border-radius: 6px;
+  border-radius: var(--border-radius);
   cursor: pointer;
   font-weight: 500;
   font-size: 0.95rem;
-  transition: all 0.2s ease;
+  transition: var(--transition);
+  border: none;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -739,63 +911,61 @@ const initializeWelcome = async () => {
   transform: translateY(-1px);
 }
 
-.btn-primary:disabled {
-  background-color: #6c757d;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn-secondary {
-  background-color: #6c757d;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 0.95rem;
-  transition: all 0.2s ease;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: #5a6268;
-  transform: translateY(-1px);
-}
-
-.btn-secondary:disabled {
-  background-color: #adb5bd;
-  cursor: not-allowed;
-  transform: none;
-}
-
 .btn-outline {
   background-color: transparent;
-  color: #6c757d;
-  border: 1px solid #6c757d;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 0.95rem;
-  transition: all 0.2s ease;
+  color: var(--text-muted);
+  border: 1px solid var(--text-muted);
 }
 
 .btn-outline:hover {
-  background-color: #6c757d;
+  background-color: var(--text-muted);
   color: white;
   transform: translateY(-1px);
 }
 
-/* Dark Theme Adaptations */
-:root[data-theme="dark"] .epigraph {
-  background-color: #2a2a2a;
+.btn-outline.selected {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
 }
 
-:root[data-theme="dark"] .feature-item {
-  background-color: #2a2a2a;
+/* Waiting and Loading States */
+.waiting-content {
+  text-align: center;
+  justify-content: center;
+  align-items: center;
 }
 
-:root[data-theme="dark"] .env-status {
+.waiting-message {
+  padding: 40px 20px;
+}
+
+.waiting-message .loading-spinner {
+  font-size: 3rem;
+  margin-bottom: 20px;
+}
+
+.waiting-tip {
+  font-style: italic;
+  color: var(--primary-color) !important;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Dark Theme */
+:root[data-theme="dark"] .feature-item,
+:root[data-theme="dark"] .env-status,
+:root[data-theme="dark"] .login-info-display,
+:root[data-theme="dark"] .trial-features {
   background-color: #2a2a2a;
 }
 
@@ -803,9 +973,19 @@ const initializeWelcome = async () => {
   background-color: #1a2332;
 }
 
+:root[data-theme="dark"] .error-message {
+  background-color: #2d1b1f;
+  color: #f8d7da;
+  border-color: #842029;
+}
+
+:root[data-theme="dark"] .login-info-item {
+  border-bottom-color: #404040;
+}
+
 /* Responsive Design */
 @media (max-width: 600px) {
-  .welcome-modal {
+  :global(.welcome-modal) {
     max-width: 95%;
     padding: 20px;
   }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"swiflow/ability"
 	"swiflow/config"
 	"swiflow/support"
 	"time"
@@ -47,29 +46,22 @@ func (a *McpClient) buildTransport() (mcp.Transport, error) {
 		memTransport, _ := mcp.NewInMemoryTransports()
 		return memTransport, nil
 	case "debug":
-		dev := new(ability.DevCommandAbility)
-		cmd := dev.Cmd(a.server.Cmd, a.server.Args)
-		if env := a.server.AllEnv(); env != nil {
-			cmd.Env = env
+		if cmd, err := a.server.GetCmd(); err != nil {
+			return nil, err
+		} else {
+			pr, pw := io.Pipe()
+			stdio := &mcp.CommandTransport{Command: cmd}
+			support.WatchOutput(a.server.UUID, pr)
+			return &mcp.LoggingTransport{
+				Transport: stdio, Writer: pw,
+			}, nil
 		}
-		if dir := config.CurrentHome(); dir != "" {
-			log.Println("[MCP] current home", dir)
-			cmd.Dir = dir
-		}
-		pr, pw := io.Pipe()
-		stdio := mcp.NewCommandTransport(cmd)
-		support.WatchOutput(a.server.UUID, pr)
-		return mcp.NewLoggingTransport(stdio, pw), nil
 	default:
-		dev := new(ability.DevCommandAbility)
-		cmd := dev.Cmd(a.server.Cmd, a.server.Args)
-		if env := a.server.AllEnv(); env != nil {
-			cmd.Env = env
+		if cmd, err := a.server.GetCmd(); err != nil {
+			return nil, err
+		} else {
+			return &mcp.CommandTransport{Command: cmd}, nil
 		}
-		if dir := config.GetWorkHome(); dir != "" {
-			cmd.Dir = dir
-		}
-		return mcp.NewCommandTransport(cmd), nil
 	}
 }
 

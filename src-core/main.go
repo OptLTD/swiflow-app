@@ -30,6 +30,28 @@ func main() {
 			log.Println("load env fail:", err)
 		}
 		service.StartChat(context.Background())
+	case "test":
+		dev := ability.DevCommandAbility{}
+		cmd := dev.Cmd("which", []string{"uvx"})
+		if data, err := cmd.CombinedOutput(); err != nil {
+			log.Println("load which uvx:", err)
+		} else {
+			log.Println("load which uvx:", string(data))
+		}
+
+		if data, err := dev.Exec("echo $PATH", 10*time.Second); err != nil {
+			log.Println("echo $PATH:", err)
+		} else {
+			log.Println("echo $PATH:", data)
+		}
+
+		cmd = dev.Cmd("uvx", []string{"-V"})
+		if data, err := cmd.CombinedOutput(); err != nil {
+			log.Println("uvx -v:", err)
+		} else {
+			log.Println("uvx -v:", string(data))
+		}
+
 	case "debug":
 		if err := config.LoadEnv(); err != nil {
 			log.Println("load env fail:", err)

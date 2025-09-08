@@ -65,6 +65,9 @@ export const useAppStore = defineStore('app', {
     },
     setLogin(val: LoginMeta) {
       this.login = val
+      if (val && val.username) {
+        localStorage.setItem('login', JSON.stringify(val))
+      }
     },
     setSetup(data: SetupMeta) {
       this.setup = data

@@ -23,7 +23,7 @@ const items = [
 const onSwitchSet = (item: any) => {
   switch (item.uuid) {
     case 'set-model':
-      showUseModelPopup(app.getAuthGate)
+      showUseModelPopup()
       break
     case 'setting': {
       app.setContent(true)

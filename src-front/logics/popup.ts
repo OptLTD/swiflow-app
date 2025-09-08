@@ -5,7 +5,7 @@ import ContextModal from '@/modals/ContextModal.vue';
 import UseToolModal from '@/modals/UseToolModal.vue';
 import BrowserModal from '@/modals/BrowserModal.vue';
 import DatabaseModal from '@/modals/DatabaseModal.vue';
-import ModelProvider from '@/modals/ModelProvider.vue';
+import ProviderModal from '@/modals/ProviderModal.vue';
 import McpConfigModal from '@/modals/McpConfigModal.vue';
 import WelcomeModal from '@/modals/WelcomeModal.vue';
 
@@ -143,48 +143,48 @@ export const showBrowserModal = () => {
   theBrowserModal.open()
 }
 
-export const showUseModelPopup = (gateway: string) => {
-  if (useVfm().get('theModelProvider')) {
+export const showUseModelPopup = () => {
+  if (useVfm().get('theProviderModal')) {
     return
   }
-  const theModelProvider = useModal({
-    component: ModelProvider,
+  const theProviderModal = useModal({
+    component: ProviderModal,
     attrs: {
       onSubmit: () => {
-        theModelProvider.close()
+        theProviderModal.close()
       },
       onCancel: () => {
-        theModelProvider.close()
+        theProviderModal.close()
       },
     },
   })
-  var attrs = theModelProvider.options.attrs || {}
-  Object.assign(attrs, { gateway, from: 'model' })
-  theModelProvider.open()
+  var attrs = theProviderModal.options.attrs || {}
+  Object.assign(attrs, { from: 'model' })
+  theProviderModal.open()
 }
 
 export const showProviderPopup = (provider = '', callback: CallableFunction) => {
-  if (useVfm().get('theModelProvider')) {
+  if (useVfm().get('theProviderModal')) {
     return
   }
-  const theModelProvider = useModal({
-    component: ModelProvider,
+  const theProviderModal = useModal({
+    component: ProviderModal,
     attrs: {
       onSubmit: (data) => {
-        theModelProvider.close()
+        theProviderModal.close()
         callback && callback(data)
       },
       onCancel: () => {
-        theModelProvider.close()
+        theProviderModal.close()
       },
     },
   })
-  var attrs = theModelProvider.options.attrs || {}
+  var attrs = theProviderModal.options.attrs || {}
   Object.assign(attrs, { provider, from: 'provider' })
-  theModelProvider.open()
+  theProviderModal.open()
 }
 
-export const showWelcomeModal = (epigraph: string) => {
+export const showWelcomeModal = (gateway: string, initialState = {}) => {
   if (useVfm().get('theWelcomeModal')) {
     return
   }
@@ -200,6 +200,6 @@ export const showWelcomeModal = (epigraph: string) => {
     },
   })
   var attrs = theWelcomeModal.options.attrs || {}
-  Object.assign(attrs, { epigraph })
+  Object.assign(attrs, { gateway, initialState })
   theWelcomeModal.open()
 }

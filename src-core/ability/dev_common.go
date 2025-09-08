@@ -101,6 +101,49 @@ func (m *DevCommonAbility) genFirejailArgs(home string) []string {
 	return []string{"--private=" + home, "--net=none", "--quiet"}
 }
 
+// ensureLocalBinInPath adds ~/.local/bin to PATH if it exists and is not already present
+func (m *DevCommonAbility) ensureLocalBinInPath(command *exec.Cmd) {
+	// Get user home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	localBinPath := filepath.Join(homeDir, ".local", "bin")
+	// Check if ~/.local/bin directory exists
+	if _, err := os.Stat(localBinPath); err != nil {
+		return
+	}
+
+	exists, idx := false, -1
+	for i, env := range os.Environ() {
+		if !strings.HasPrefix(env, "PATH=") {
+			continue
+		}
+
+		idx = i
+		path := env[5:] // Remove "PATH=" prefix
+		// Check if ~/.local/bin is already in PATH
+		pathEntries := strings.SplitSeq(path, ":")
+		for entry := range pathEntries {
+			if entry == localBinPath {
+				exists = true
+				break
+			}
+		}
+		break
+	}
+
+	// Add ~/.local/bin to PATH if not already present
+	if !exists && idx >= 0 {
+		if command.Env == nil {
+			command.Env = os.Environ()
+		}
+		currentPath := command.Env[idx][5:] // Remove "PATH=" prefix
+		command.Env[idx] = "PATH=" + localBinPath + ":" + currentPath
+	}
+}
+
 // 公共方法：根据配置决定是否用sandbox-exec包装
 func (m *DevCommonAbility) cmdWithSandbox(ctx context.Context, cmd string, args ...string) *exec.Cmd {
 	profile := config.GetStr("SANDBOX_PROFILE", "")
@@ -123,8 +166,10 @@ func (m *DevCommonAbility) cmdWithSandbox(ctx context.Context, cmd string, args 
 	return exec.CommandContext(ctx, cmd, args...)
 }
 
-func (m *DevCommonAbility) cmd(cmd string, args ...string) *exec.Cmd {
-	return m.cmdWithSandbox(context.Background(), cmd, args...)
+func (m *DevCommonAbility) cmd(command string, args ...string) *exec.Cmd {
+	cmd := m.cmdWithSandbox(context.Background(), command, args...)
+	m.ensureLocalBinInPath(cmd)
+	return cmd
 }
 
 func (m *DevCommonAbility) run(cmd string, timeout time.Duration, args ...string) ([]byte, error) {
@@ -138,6 +183,7 @@ func (m *DevCommonAbility) exec(command string, timeout time.Duration) ([]byte, 
 	cmd := m.cmdWithSandbox(ctx, "sh", "-c", command)
 	cmd.Dir = m.home
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	m.ensureLocalBinInPath(cmd)
 
 	// 获取输出管道
 	stdout, err := cmd.StdoutPipe()
@@ -188,6 +234,7 @@ func (m *DevCommonAbility) exec(command string, timeout time.Duration) ([]byte, 
 func (m *DevCommonAbility) start(command string) error {
 	ctx := context.Background()
 	cmd := m.cmdWithSandbox(ctx, "sh", "-c", command)
+	m.ensureLocalBinInPath(cmd)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
