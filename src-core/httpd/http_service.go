@@ -16,9 +16,7 @@ import (
 	"swiflow/initial"
 	"swiflow/storage"
 	"swiflow/support"
-	"time" // 添加这个import
-
-	"github.com/duke-git/lancet/v2/maputil"
+	"time"
 )
 
 type HttpServie struct {
@@ -69,31 +67,31 @@ func (h *HttpServie) Run(task *entity.TaskEntity, cmd string) error {
 
 func (h *HttpServie) GetMcpEnv() any {
 	var result = map[string]any{}
-	var python = "python3 -V"
+	var python = "python3"
 	if runtime.GOOS == "windows" {
-		python = "python -V"
+		python = "python"
 	}
 
 	dev := ability.DevCommandAbility{
 		Home: config.GetWorkPath(""),
 	}
 	// python env check
-	if data, err := dev.Exec(python, 30*time.Second); err == nil {
+	if data, err := dev.Run(python, 30*time.Second, "-V"); err == nil {
 		result["python"] = strings.TrimSpace(string(data))
 	}
 	// uvx env check
-	if data, err := dev.Exec("uvx -V", 30*time.Second); err == nil {
+	if data, err := dev.Run("uvx", 30*time.Second, "-V"); err == nil {
 		env := strings.TrimSpace(string(data))
 		result["uvx"] = strings.Split(env, "(")[0]
 	}
 
 	// node.js env check
-	if data, err := dev.Exec("node -v", 30*time.Second); err == nil {
+	if data, err := dev.Run("node", 30*time.Second, "-v"); err == nil {
 		result["nodejs"] = strings.TrimSpace(string(data))
 	}
 
 	// npx env check
-	if data, err := dev.Exec("npx -v", 30*time.Second); err == nil {
+	if data, err := dev.Run("npx", 30*time.Second, "-v"); err == nil {
 		result["npx"] = strings.TrimSpace(string(data))
 	}
 
@@ -218,24 +216,31 @@ func (h *HttpServie) ReadMap(r io.Reader) any {
 }
 
 func (h *HttpServie) InitMcpEnv(name string, env string) any {
+	log.Printf("InitMcpEnv started: name=%s, env=%s", name, env)
+
+	// Validate environment name
 	if name != "js-npx" && name != "uvx-py" {
+		log.Printf("Invalid environment name: %s", name)
 		return fmt.Errorf("wrong name")
 	}
+
+	// Initialize file system ability
 	file := ability.FileSystemAbility{
 		Base: config.GetWorkPath(""),
-	}
-	dev := ability.DevCommandAbility{
-		Home: config.GetWorkPath(""),
 	}
 
 	var cmd string
 	var args []string
 	env = support.Or(env, "mainland")
+
+	log.Printf("Using path: %s, env mode: %s", file.Base, env)
+	// Determine platform-specific script and command
 	switch runtime.GOOS {
 	case "windows":
+		file.Path = fmt.Sprintf("win-%s.ps1", name)
 		cmd, args = "powershell", []string{
 			"-NoProfile", "-ExecutionPolicy",
-			"Bypass", "-File", file.Path, "--mode", env,
+			"Bypass", "-File", file.Path, "-mode", env,
 		}
 	case "darwin":
 		file.Path = fmt.Sprintf("mac-%s.sh", name)
@@ -244,16 +249,33 @@ func (h *HttpServie) InitMcpEnv(name string, env string) any {
 		file.Path = fmt.Sprintf("linux-%s.sh", name)
 		cmd, args = "sh", []string{file.Path, env}
 	}
-	bin, err := initial.GetScript(file.Path)
-	if err == nil && len(bin) > 0 {
-		err = file.Write(string(bin))
+	// bin, err := initial.GetScript(file.Path)
+	if bin, err := initial.GetScript(file.Path); len(bin) > 0 {
+		log.Printf("Script content retrieved, size: %d bytes", len(bin))
+		if err := file.Write(string(bin)); err != nil {
+			log.Printf("Failed to write script file: %v", err)
+			return err
+		}
+		log.Printf("Script file written successfully: %s", file.Path)
 	} else if err != nil {
+		log.Printf("Failed to retrieve script content: %v", err)
 		return err
 	}
-	if out, err := dev.Run(cmd, 10*time.Minute, args...); err == nil {
-		log.Println("start install, ok", err, out)
-	} else {
-		log.Println("start install, no", err, out)
+
+	// Initialize command execution ability
+	dev := ability.DevCommandAbility{
+		Home: config.GetWorkPath(""),
+	}
+	log.Printf("Command execution home: %s", dev.Home)
+
+	// Build command string for execution
+	cmdStr := cmd + " " + strings.Join(args, " ")
+	logFile := fmt.Sprintf("%s.log", file.Path)
+
+	log.Printf("Executing command: %s > %s", cmdStr, logFile)
+	if _, err := dev.Start(cmdStr, logFile); err != nil {
+		log.Printf("Failed to start install command: %v", err)
+		return fmt.Errorf("failed to start install: %v", err)
 	}
 	return nil
 }
@@ -285,17 +307,8 @@ func (h *HttpServie) LoadGlobal() map[string]any {
 			}
 		}
 	}
+	result["mcpEnv"] = h.GetMcpEnv()
 	result["authGate"] = config.GetAuthGate()
-	// in container or window, return
-	if config.InContainer() || config.IsWindows() {
-		return result
-	}
-	if launch := h.LoadCache("launch"); len(launch) > 0 {
-		result["launch"] = maputil.Keys(launch)
-	} else if launch := h.GetLaunch(); len(launch) > 0 {
-		result["launch"] = maputil.Keys(launch)
-		h.SaveCache("launch", launch)
-	}
 	return result
 }
 

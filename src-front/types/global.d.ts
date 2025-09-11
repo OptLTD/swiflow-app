@@ -213,11 +213,10 @@ declare type ActionState = {
 declare type GlobalResp = {
   useModel: string;
   active: BotEntity
-  launch: string[]
-  tasks: TaskEntity[]
   bots: BotEntity[]
   setup: SetupMeta
   login: LoginMeta
+  mcpEnv: McpEnvMeta
   authGate: string
   epigraph?: string
 }
@@ -245,6 +244,13 @@ declare type SetupMeta = {
   proxyUrl: string
   authGate: string
   sendNotifyOn: string[]
+}
+
+declare type McpEnvMeta = {
+  nodejs: string
+  python: string
+  uvx: string
+  npx: string
 }
 
 declare type MenuMeta = {

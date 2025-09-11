@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import { onMounted, PropType } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { request, alert } from '@/support/index';
+import { showSetupEnvModal } from '@/logics/popup'
 import SwitchInput from '@/widgets/SwitchInput.vue'
 
 const app = useAppStore()
@@ -19,15 +20,21 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['change'])
+const lossCmd = ref<string[]>([])
 const servers = ref<McpServer[]>([])
 const checked = ref(props.tools || [])
 const groupChecked = ref<Record<string, boolean>>({})
-onMounted(() => {
-  loadMcpList()
+onMounted(async () => {
+  // Load MCP list when component mounts
+  await loadMcpList()
+  await checkMcpEnv()
 })
 watch(() => props.tools, (val) => {
   checked.value = val || [] as string[]
   groupChecked.value = getGroupChecked()
+})
+watch(() => app.getMcpEnv, () => {
+  checkMcpEnv()
 })
 const doActiveMcp = async (server: McpServer) => {
   try {
@@ -58,17 +65,28 @@ const loadMcpList = async () => {
     }
     app.setMcpList(resp as McpServer[])
     servers.value = resp as McpServer[]
-    for (var item of servers.value) {
-      if (!item.status?.enable) {
-        continue
-      }
-      const status = await doActiveMcp(item)
-      item.status = status || {} as McpStatus
-    }
-    groupChecked.value = getGroupChecked()
+
   } catch (err) {
     alert(err as string)
   }
+}
+
+const checkMcpEnv = async () => {
+  const loss = [] as string[]
+  for (var item of servers.value) {
+    if (!item.status?.enable) {
+      continue
+    }
+    // @ts-ignore
+    if (!app.getMcpEnv[item.command]) {
+      loss.push(item.command)
+      continue
+    }
+    const status = await doActiveMcp(item)
+    item.status = status || {} as McpStatus
+  }
+  groupChecked.value = getGroupChecked()
+  lossCmd.value = [...new Set(loss)] // Remove duplicates from loss array
 }
 
 const getGroupChecked = () => {
@@ -146,6 +164,28 @@ const isToolChecked = (tool: any, server: McpServer) => {
 
 const getCheckboxId = (val: string) => `select-${val}`
 
+// Get missing command list for environment check
+const getLossCmd = () => {
+  return lossCmd.value
+}
+
+// Shake animation for warning button
+const shakeElement = () => {
+  const warningBtn = document.querySelector('.btn-warning') as HTMLElement
+  if (!warningBtn) {
+    console.warn("Warning button not found! Available buttons:", document.querySelectorAll('button'))
+    return
+  }
+  try {
+    warningBtn.classList.add('shake')
+    setTimeout(() => {
+      warningBtn.classList.remove('shake')
+    }, 600)
+  } catch (error) {
+    console.error("CSS animation failed:", error)
+  }
+}
+
 const onSwitchServer = async (server: McpServer, enable: boolean) => {
   if (enable) {
     await doActiveMcp(server)
@@ -169,53 +209,54 @@ const onSwitchServer = async (server: McpServer, enable: boolean) => {
   }
 }
 
+// Handle environment update callback
+const handleEnvUpdate = async (mcpEnv: McpEnvMeta) => {
+  // Update app store mcpEnv state
+  app.setMcpEnv(mcpEnv)
+  // Re-check MCP environment after update
+  await checkMcpEnv()
+}
+
+// Expose methods to parent component
+defineExpose({
+  getLossCmd,
+  shakeElement
+})
+
 </script>
 
 <template>
-  <tippy interactive :theme="app.getTheme"
-    arrow placement="top-start" trigger="click">
-    <slot name="default" v-if="$slots['default']"/>
-    <button class="btn-icon btn-tools"  v-else/>
+  <tippy interactive :theme="app.getTheme" arrow placement="top-start" trigger="click">
+    <slot name="default" v-if="$slots['default']" />
+    <button class="btn-icon btn-tools" v-else />
     <template #content>
       <div class="tools-panel">
-      <template v-for="(server, i) in servers" :key="i">
-        <div class="dropdown-item"
-          :class="{'disabled': !server.status.enable || !enable}"
-          @click.stop="toggleGroup(server)"
-        >
-          <input type="checkbox"
-            :disabled="!server.status.enable || !enable"
-            :checked="isGroupChecked(server)"
-            @mouseup.prevent @mousedown.prevent
-          />
-          <span class="dropdown-group flex-stretch">{{ server.name }}</span>
-          <SwitchInput
-            v-if="!server.loading"
-            :id="`switch-server-${server.name}`"
-            size="small" :disabled="!enable"
-            :modelValue="!!server.status.enable"
-            @change="(val) => onSwitchServer(server, val)"
-            style="margin-left:8px;"
-          />
-          <button v-else class="btn-icon btn-loading" />
-        </div>
-        <div v-for="tool in server.status.tools"
-            @click.stop="toggleCheck(tool, server)"
-            :key="tool.value" class="dropdown-item"
-            :class="{'disabled': !server.status.enable || !enable}"
-          >
-          <input type="checkbox"
-            :id="getCheckboxId(tool.name)"
-            :disabled="!server.status.enable || !enable"
-            :checked="isToolChecked(tool, server)"
-            @mouseup.prevent @mousedown.prevent
-          />
-          <span class="dropdown-label">{{ tool.name }}</span>
-        </div>
-      </template>
+        <template v-for="(server, i) in servers" :key="i">
+          <div class="dropdown-item" :class="{'disabled': !server.status.enable || !enable}"
+            @click.stop="toggleGroup(server)">
+            <input type="checkbox" :disabled="!server.status.enable || !enable" :checked="isGroupChecked(server)"
+              @mouseup.prevent @mousedown.prevent />
+            <span class="dropdown-group flex-stretch">{{ server.name }}</span>
+            <SwitchInput v-if="!server.loading" :id="`switch-server-${server.name}`" size="small" :disabled="!enable"
+              :modelValue="!!server.status.enable" @change="(val) => onSwitchServer(server, val)"
+              style="margin-left:8px;" />
+            <button v-else class="btn-icon btn-loading" />
+          </div>
+          <div v-for="tool in server.status.tools" @click.stop="toggleCheck(tool, server)" :key="tool.value"
+            class="dropdown-item" :class="{'disabled': !server.status.enable || !enable}">
+            <input type="checkbox" :id="getCheckboxId(tool.name)" :disabled="!server.status.enable || !enable"
+              :checked="isToolChecked(tool, server)" @mouseup.prevent @mousedown.prevent />
+            <span class="dropdown-label">{{ tool.name }}</span>
+          </div>
+        </template>
       </div>
     </template>
   </tippy>
+  <button class="btn-warning"
+   v-if="lossCmd.length" 
+   @click="showSetupEnvModal">
+    ⚠️ 缺少必要组件，请点击修复
+  </button>
 </template>
 
 <style scoped>
@@ -261,4 +302,39 @@ const onSwitchServer = async (server: McpServer, enable: boolean) => {
 .tools-panel .dropdown-item input[type="checkbox"] {
   margin-right: 8px;
 }
+.btn-warning {
+  outline: none;
+  border-width: 0;
+  background-color: #fff3cd;
+  /* border: 1px solid #ffeaa7; */
+  color: #856404;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.btn-warning:hover {
+  background-color: #ffeaa7;
+  border-color: #fdcb6e;
+}
+/* CSS class to trigger shake animation */
+.btn-warning.shake {
+  animation: shake 0.6s ease-in-out;
+}
+@-webkit-keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+  20%, 40%, 60%, 80% { transform: translateX(10px); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+  20%, 40%, 60%, 80% { transform: translateX(10px); }
+}
+
+
 </style>

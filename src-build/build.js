@@ -23,7 +23,7 @@ Platforms:
 
 Architectures:
   For macOS: arm64, x86_64, all (default)
-  For Windows: x86, x64, all (default)
+  For Windows: x86_64, all (default)
 
 Options:
   --debug      - Enable debug mode (affects build configuration)
@@ -40,7 +40,7 @@ Examples:
   npm run build:version:patch     # Update version first
   node build.js                   # Build all platforms and architectures
   node build.js mac arm64         # Build macOS ARM64 only
-  node build.js win x64 --dry-run # Dry-run Windows x64 build
+  node build.js win x86_64 --dry-run # Dry-run Windows x86_64 build
 `);
 }
 
@@ -76,7 +76,7 @@ function parseArgs() {
     // Define valid architectures inline to avoid initialization order issues
     const validArchitectures = {
       mac: ['all', 'arm64', 'x86_64'],
-      win: ['all', 'x86', 'x64']
+      win: ['all', 'x86_64']
     };
     
     const validArchs = validArchitectures[targetPlatform];
@@ -148,8 +148,8 @@ const PLATFORM_CONFIGS = {
   
   win: {
     architectures: {
-      x86: { goarch: '386', target: 'i686-pc-windows-msvc' },
-      x64: { goarch: 'amd64', target: 'x86_64-pc-windows-msvc' }
+      // x86: { goarch: '386', target: 'i686-pc-windows-msvc' },
+      x86_64: { goarch: 'amd64', target: 'x86_64-pc-windows-msvc' }
     },
     buildTags: 'windows',
     ldflags: (version, epigraph) => {
@@ -393,7 +393,7 @@ function handleEpigraphRenaming(version) {
 }
 
 function buildForWindows(arch, version) {
-  const archName = arch === '386' ? 'x86' : 'x64';
+  const archName = arch === 'amd64' ? 'x86_64' : '';
   log(`Building Windows ${archName}...`, 'build');
   
   try {
@@ -478,7 +478,7 @@ function getCurrentPlatformBinary() {
     const target = PLATFORM_CONFIGS.mac.architectures[macArch].target;
     return join(BUILD_CONFIG.paths.bin, `${BUILD_CONFIG.app.name}-${target}`);
   } else if (platform === 'win32') {
-    const winArch = arch === 'x64' ? 'x64' : 'x86';
+    const winArch = arch === 'x86_64' ? 'x86_64' : '';
     const target = PLATFORM_CONFIGS.win.architectures[winArch].target;
     return `${BUILD_CONFIG.paths.bin}/${BUILD_CONFIG.app.name}-${target}.exe`;
   }
@@ -510,7 +510,7 @@ async function main() {
     // Note: Version management is now handled separately via 'npm run build:version' commands
 
     cleanOldBuilds();
-    buildFrontend();
+    // buildFrontend();
     ensureDirectories();
 
     let allSuccess = true;

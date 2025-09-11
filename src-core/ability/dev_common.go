@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -177,6 +178,12 @@ func (m *DevCommonAbility) run(cmd string, timeout time.Duration, args ...string
 }
 
 func (m *DevCommonAbility) exec(command string, timeout time.Duration) ([]byte, error) {
+	if cmdPath, err := config.GetMcpEnv(command); err != nil {
+		return nil, fmt.Errorf("command preparation failed: %v", err)
+	} else if cmdPath != "" {
+		command = cmdPath
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -231,18 +238,49 @@ func (m *DevCommonAbility) exec(command string, timeout time.Duration) ([]byte, 
 	return output, err
 }
 
-func (m *DevCommonAbility) start(command string) error {
+func (m *DevCommonAbility) start(command string, logFile ...string) error {
+	log.Printf("[CMD] Starting command: %s", command)
+	if len(logFile) > 0 && logFile[0] != "" {
+		log.Printf("[CMD] Log file specified: %s", logFile[0])
+	}
+
 	ctx := context.Background()
 	cmd := m.cmdWithSandbox(ctx, "sh", "-c", command)
 	m.ensureLocalBinInPath(cmd)
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	var logFileHandle *os.File
 
-	// 设置工作目录
+	// Check if log file is specified
+	if len(logFile) > 0 && logFile[0] != "" {
+		// Create or open log file in home directory
+		logPath := filepath.Join(m.home, logFile[0])
+		log.Printf("[CMD] Creating log file at: %s", logPath)
+		var err error
+		logFileHandle, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			log.Printf("[CMD] Failed to open log file %s: %v", logPath, err)
+			return fmt.Errorf("failed to open log file %s: %v", logPath, err)
+		}
+		log.Printf("[CMD] Log file opened successfully")
+
+		// Redirect stdout and stderr to both buffer and log file
+		cmd.Stdout = io.MultiWriter(&stdout, logFileHandle)
+		cmd.Stderr = io.MultiWriter(&stderr, logFileHandle)
+	} else {
+		// Use buffer only when no log file specified
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+	}
+
+	// Set working directory
 	cmd.Dir = m.home
+	log.Printf("[CMD] Starting command in path: %s", m.home)
 	if err := cmd.Start(); err != nil {
+		log.Printf("[CMD] Failed to start command: %v", err)
+		if logFileHandle != nil {
+			logFileHandle.Close()
+		}
 		if strings.TrimSpace(stdout.String()) != "" {
 			m.logs = append(m.logs, stdout.String())
 		}
@@ -253,7 +291,6 @@ func (m *DevCommonAbility) start(command string) error {
 	}
 	m.pid = int32(cmd.Process.Pid)
 
-	// 创建一个 channel 用于接收 cmd.Wait() 的结果
 	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Wait()
@@ -261,8 +298,12 @@ func (m *DevCommonAbility) start(command string) error {
 
 	select {
 	case err := <-done:
-		// 等待 300ms，如果命令在 300ms 内完成且失败，则返回错误
+		log.Printf("[CMD] Command completed within 300ms")
+		if logFileHandle != nil {
+			logFileHandle.Close()
+		}
 		if err != nil {
+			log.Printf("[CMD] Command failed with error: %v", err)
 			if strings.TrimSpace(stdout.String()) != "" {
 				m.logs = append(m.logs, stdout.String())
 			}
@@ -272,14 +313,18 @@ func (m *DevCommonAbility) start(command string) error {
 			return err
 		}
 	case <-time.After(300 * time.Millisecond):
-		// 300ms 后命令仍在运行，不返回错误
+		// Command still running after 300ms, do not return error
+		log.Printf("[CMD] Command still running after 300ms")
 	}
 
-	// 继续在后台等待命令完成（不影响主流程）
-	// go func() {
-	// 	err := <-done
-	// 	log.Printf("stdout: %v, %s", err, stdout.String())
-	// }()
+	go func() {
+		err := <-done
+		// Close log file when command actually completes
+		if logFileHandle != nil {
+			logFileHandle.Close()
+		}
+		log.Printf("[CMD]: %v, %s", err, stdout.String())
+	}()
 
 	return nil
 }

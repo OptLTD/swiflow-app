@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"swiflow/ability"
 	"swiflow/config"
 	"swiflow/entity"
@@ -191,39 +190,8 @@ func (s *McpServer) Checked(bot *entity.BotEntity) []*McpTool {
 	return result
 }
 
-func (s *McpServer) getNpxUvx() (string, error) {
-	if s.Cmd != "npx" && s.Cmd != "uvx" {
-		return s.Cmd, nil
-	}
-
-	if _, err := exec.LookPath(s.Cmd); err == nil {
-		checkCmd := exec.Command(s.Cmd, "--version")
-		if checkCmd.Run() == nil {
-			return s.Cmd, nil
-		}
-	}
-
-	var localBinPath string // Try ~/.local/bin
-	if homeDir, err := os.UserHomeDir(); err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %v", err)
-	} else {
-		localBinPath = filepath.Join(homeDir, ".local", "bin", s.Cmd)
-	}
-
-	if _, err := os.Stat(localBinPath); err != nil {
-		return "", fmt.Errorf("%s not found in PATH or ~/.local/bin", s.Cmd)
-	}
-
-	// Check if the local binary works
-	if checkCmd := exec.Command(localBinPath, "--version"); checkCmd.Run() != nil {
-		return "", fmt.Errorf("%s found in ~/.local/bin but version check failed", s.Cmd)
-	}
-
-	return localBinPath, nil
-}
-
 func (s *McpServer) GetCmd() (*exec.Cmd, error) {
-	cmdPath, err := s.getNpxUvx()
+	cmdPath, err := config.GetMcpEnv(s.Cmd)
 	if err != nil {
 		return nil, fmt.Errorf("command preparation failed: %v", err)
 	}

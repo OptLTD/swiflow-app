@@ -1,13 +1,14 @@
 import { useModal, useVfm } from 'vue-final-modal'
+import { useAppStore } from '@/stores/app'
 import MyBotModal from '@/modals/MyBotModal.vue';
-import PythonModal from '@/modals/PythonModal.vue';
+import WelcomeModal from '@/modals/WelcomeModal.vue';
 import ContextModal from '@/modals/ContextModal.vue';
 import UseToolModal from '@/modals/UseToolModal.vue';
 import BrowserModal from '@/modals/BrowserModal.vue';
 import DatabaseModal from '@/modals/DatabaseModal.vue';
 import ProviderModal from '@/modals/ProviderModal.vue';
+import SetupEnvModal from '@/modals/SetupEnvModal.vue';
 import McpConfigModal from '@/modals/McpConfigModal.vue';
-import WelcomeModal from '@/modals/WelcomeModal.vue';
 
 export const showContext = (context: any) => {
   const theContextView = useModal({
@@ -86,23 +87,20 @@ export const showSetMcpModal = (info: McpServer, callback: CallableFunction) => 
   theMcpConfigModal.open()
 }
 
-export const showPythonModal = () => {
-  if (useVfm().get('thePythonModal')) {
-    return useVfm().open('thePythonModal')
+export const showSetupEnvModal = () => {
+  if (useVfm().get('theSetupEnvModal')) {
+    return useVfm().open('theSetupEnvModal')
   }
-  const thePythonModal = useModal({
-    component: PythonModal,
+  const theSetupEnvModal = useModal({
+    component: SetupEnvModal,
     attrs: {
-      onSubmit: () => {
-        thePythonModal.close()
-      },
       onCancel: () => {
-        thePythonModal.close()
+        theSetupEnvModal.close()
       },
     },
   })
 
-  thePythonModal.open()
+  theSetupEnvModal.open()
 }
 
 export const showDatabaseModal = () => {

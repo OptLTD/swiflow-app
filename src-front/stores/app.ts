@@ -4,6 +4,7 @@ import { usePreferredDark } from '@vueuse/core';
 export const useAppStore = defineStore('app', {
   state: () => ({
     theme: 'auto',
+    loaded: false,
     release: null,
     version: '1.0.0',
     action: 'default',
@@ -18,7 +19,7 @@ export const useAppStore = defineStore('app', {
     authGate: '' as string,
     login: {} as LoginMeta,
     setup: {} as SetupMeta,
-    launch: [] as string[],
+    mcpEnv: {} as McpEnvMeta,
     active: {} as BotEntity,
     botList: [] as BotEntity[],
     mcpList: [] as McpServer[],
@@ -27,7 +28,7 @@ export const useAppStore = defineStore('app', {
       epigraphText: '',
       showEpigraph: false
     },
-    globalUploads: [] as string[]
+    uploads: [] as string[],
   }),
   actions: {
     toggleMenuBar() {
@@ -41,6 +42,9 @@ export const useAppStore = defineStore('app', {
     },
     toggleContent() {
       this.content = !this.content
+    },
+    setLoaded(loaded: boolean) {
+      this.loaded = loaded
     },
     setContent(val: boolean) {
       this.content = val
@@ -80,9 +84,6 @@ export const useAppStore = defineStore('app', {
         this.authGate = data.authGate
       }
     },
-    setLaunch(launch: string[]) {
-      this.launch = launch
-    },
     setRelease(data: any) {
       this.release = data
     },
@@ -110,14 +111,17 @@ export const useAppStore = defineStore('app', {
     setShowEpigraph(show: boolean) {
       this.display.showEpigraph = show
     },
-    setGlobalUploads(uploads: string[]) {
-      this.globalUploads = uploads
-    }
+    setUploads(uploads: string[]) {
+      this.uploads = uploads
+    },
+    setMcpEnv(env: McpEnvMeta) {
+      this.mcpEnv = env
+    },
   },
   getters: {
     getLogin: (state) => state.login,
     getSetup: (state) => state.setup,
-    getLaunch: (state) => state.launch,
+    getMcpEnv: (state) => state.mcpEnv,
     getActive: (state) => state.active,
     getAction: (state) => state.action,
     getLayout: (state) => state.layout,
@@ -140,6 +144,7 @@ export const useAppStore = defineStore('app', {
       }
       return usePreferredDark().value ? 'dark' : 'light'
     },
-    getGlobalUploads: (state) => state.globalUploads
+    getLoaded: (state) => state.loaded,
+    getUploads: (state) => state.uploads,
   }
 })

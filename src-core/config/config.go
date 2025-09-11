@@ -1,11 +1,14 @@
 package config
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -166,4 +169,44 @@ func GetShellName() (string, string) {
 		shell := os.Getenv("SHELL")
 		return runtime.GOOS, shell
 	}
+}
+
+// GetMcpEnv checks if npx or uvx command is available and returns the appropriate path
+func GetMcpEnv(cmd string) (string, error) {
+	depends := []string{
+		"python", "python3", "uvx", "uv",
+		"node", "npx", "npm", "yarn", "pnpm",
+	}
+	if !slices.Contains(depends, cmd) {
+		return cmd, nil
+	}
+
+	if _, err := exec.LookPath(cmd); err == nil {
+		checkCmd := exec.Command(cmd, "--version")
+		if checkCmd.Run() == nil {
+			return cmd, nil
+		}
+	}
+
+	var localBinPath string // Try ~/.local/bin
+	if homeDir, err := os.UserHomeDir(); err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %v", err)
+	} else if homeDir != "" {
+		if IsWindows() {
+			cmd += ".exe"
+		}
+		localBinPath = filepath.Join(homeDir, ".local", "bin", cmd)
+	}
+
+	if _, err := os.Stat(localBinPath); err != nil {
+		log.Printf(" %s not found in PATH or ~/.local/bin: %v", localBinPath, err)
+		return "", fmt.Errorf("%s not found in PATH or ~/.local/bin: %w", cmd, err)
+	}
+
+	// Check if the local binary works
+	if checkCmd := exec.Command(localBinPath, "--version"); checkCmd.Run() != nil {
+		return "", fmt.Errorf("%s found in ~/.local/bin but version check failed", cmd)
+	}
+
+	return localBinPath, nil
 }

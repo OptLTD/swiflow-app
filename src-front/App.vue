@@ -40,6 +40,7 @@ onMounted(async () => {
   if (!window.location.hash) {
     await listenEvent()
     await loadGlobal()
+    await showDialog()
   } else {
     await listenEvent()
     onHashChange(new HashChangeEvent('hashchange', {
@@ -81,9 +82,6 @@ const loadGlobal = async () => {
     if (info.bots?.length > 0) {
       app.setBotList(info.bots)
     }
-    if (info.launch?.length) {
-      app.setLaunch(info.launch)
-    }
     if (info.epigraph) {
       app.setEpigraphText(info.epigraph)
       const today = (new Date()).toLocaleDateString()
@@ -92,32 +90,14 @@ const loadGlobal = async () => {
         localStorage.setItem('last-shown', today)
       }
     }
-
-    const welcome = localStorage.getItem('welcome')
-    if (welcome === 'login-success') {
-      showWelcomeModal(info.authGate, {
-        currentStep: 2, 
-        login: app.getLogin,
-        selectedMode: 'trial',
-      })
-      setTimeout(() => {
-        localStorage.removeItem('welcome')
-      }, 1000)
-    } else if (welcome === 'python-install') {
-      showWelcomeModal(info.authGate, {
-        currentStep: 3, 
-        pyInstalling: true,
-      })
-      setTimeout(() => {
-        localStorage.removeItem('welcome')
-      }, 1000)
-    } else if (!app.getUseModel) {
-      showWelcomeModal(info.authGate, {})
+    if (info.mcpEnv) {
+      app.setMcpEnv(info.mcpEnv)
     }
   } catch (err) {
     console.log('failed to load global:', err)
   } finally {
     app.setRefresh(false)
+    app.setLoaded(true)
   }
 }
 
@@ -133,6 +113,30 @@ const loadRelease = async () => {
     }
   } catch (err) {
     console.log(err)
+  }
+}
+
+const showDialog = async () => {
+  const welcome = localStorage.getItem('welcome')
+  if (welcome === 'login-success') {
+    showWelcomeModal(app.getAuthGate, {
+      currentStep: 2,
+      login: app.getLogin,
+      selectedMode: 'trial',
+    })
+    setTimeout(() => {
+      localStorage.removeItem('welcome')
+    }, 1000)
+  } else if (welcome === 'python-install') {
+    showWelcomeModal(app.getAuthGate, {
+      currentStep: 3,
+      pyInstalling: true,
+    })
+    setTimeout(() => {
+      localStorage.removeItem('welcome')
+    }, 1000)
+  } else if (!app.getUseModel) {
+    showWelcomeModal(app.getAuthGate, {})
   }
 }
 
@@ -240,14 +244,14 @@ const handleFilesDropped = (files: File[]) => {
 
 const handleFilesUploaded = (uploads: string[]) => {
   globalUploads.value = uploads
-  app.setGlobalUploads(uploads)
+  app.setUploads(uploads)
 }
 </script>
 
 <template>
   <Default>
     <template #nav>
-      <NavBar />
+      <NavBar v-if="app.getLoaded"/>
     </template>
     <template #left>
       <ChatBox />

@@ -33,12 +33,19 @@ const taskInfo = ref<TaskEntity>()
 const inputMsg = ref({} as InputMsg)
 const nextMsg = ref<ActionMsg|null>()
 const messages = ref<ActionMsg[]>([])
+const refMcpTool = ref<typeof McpToolList>()
 const emit = defineEmits(['new-chat'])
 
 const handleSend = async() => {
   const { content } = inputMsg.value
   if (!content.trim()) {
     return
+  }
+  // 如果有工具选中，缺失必要命令，则抖动工具
+  const tool = refMcpTool.value
+  if (tool?.getLossCmd!()) {
+    tool.shakeElement()
+    return;
   }
   const msg: SocketMsg = {
     method: "message", 
@@ -52,9 +59,9 @@ const handleSend = async() => {
     inputMsg.value.newTask = 'yes'
   }
 
-  if (app.getGlobalUploads.length > 0) {
-    inputMsg.value.uploads = app.getGlobalUploads
-    app.setGlobalUploads([])
+  if (app.getUploads.length > 0) {
+    inputMsg.value.uploads = app.getUploads
+    app.setUploads([])
   }
 
   const conn = socket.getConnect()
@@ -63,9 +70,9 @@ const handleSend = async() => {
 }
 
 const handleRemoveUpload = (index: number) => {
-  const uploads = [...app.getGlobalUploads]
+  const uploads = [...app.getUploads]
   uploads.splice(index, 1)
-  app.setGlobalUploads(uploads)
+  app.setUploads(uploads)
 }
 
 const handleStop = async() => {
@@ -371,6 +378,7 @@ onMounted(() => {
     'message', onMessage
   )
   currBot.value = queryBot('')
+  // Load task data when component mounts
   if (task.getActive) {
     loadTaskMsgs(task.getActive)
     loadTaskInfo(task.getActive)
@@ -403,7 +411,7 @@ onMounted(() => {
       >
         <template #header>
           <UploadFiles 
-            :files="app.getGlobalUploads" 
+            :files="app.getUploads" 
             @remove="handleRemoveUpload" 
             @detail="handleViewUpload"
           />
@@ -413,7 +421,8 @@ onMounted(() => {
             class="btn-icon btn-home"
             v-tippy="$t('tips.browserTips')"
           />
-          <McpToolList @change="handleTools"
+          <McpToolList v-if="app.getLoaded" 
+            ref="refMcpTool" @change="handleTools"
             :tools="currBot?.tools" :enable="!task.getActive">
             <button class="btn-icon btn-tools"/>
           </McpToolList>

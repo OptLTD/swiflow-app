@@ -9,6 +9,7 @@ import { FormKit } from '@formkit/vue';
 import SetHeader from './widgets/SetHeader.vue';
 
 const app =  useAppStore()
+const loading = ref(true)
 const formModel = ref<SetupMeta>({
   theme: 'auto',
   language: 'zh',
@@ -34,11 +35,16 @@ onMounted(async () => {
   await loadSetting()
 })
 
-watch(() => formModel.value, debounce((data: any) => {
+watch(() => formModel.value, debounce(async (data: any) => {
+  if (loading.value) {
+    return
+  }
   app.setSetup(data)
   locale.value = data.language
-  return saveSetting(data)
-}, 300), {deep: true})
+  await saveSetting(data)
+  // Show toast only after the final change when user stops modifying
+  toast.success('Settings saved successfully!')
+}, 1000), {deep: true})
 
 const loadSetting = async () => {
   try {
@@ -51,6 +57,8 @@ const loadSetting = async () => {
     console.log('loadSetting', resp)
   } catch (err) {
     console.error('Failed to loadSetting:', err)
+  } finally {
+    loading.value = false
   }
 }
 

@@ -354,7 +354,9 @@ const initializeWelcome = async () => {
 </script>
 
 <template>
-  <VueFinalModal @opened="initializeWelcome" :click-to-close="false" :esc-to-close="false" class="swiflow-modal-wrapper"
+  <VueFinalModal @opened="initializeWelcome" 
+    :click-to-close="false" :esc-to-close="false" 
+    class="swiflow-modal-wrapper"
     content-class="welcome-modal">
     <div class="welcome-container">
       <!-- Header with progress indicator -->
