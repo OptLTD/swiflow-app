@@ -4,7 +4,7 @@ import { Tippy } from 'vue-tippy';
 import * as emoji from 'node-emoji';
 import { md } from '@/support/index';
 import { computed, PropType } from 'vue';
-import { showMyBotForm } from '@/logics/index'
+import { showBotInfoForm } from '@/logics/index'
 import { usePreferredDark } from '@vueuse/core';
 import { showContext } from '@/logics/popup'
 
@@ -62,7 +62,7 @@ const showModifyBot = () => {
   if (!info?.uuid) {
     return
   }
-  return showMyBotForm(info)
+  return showBotInfoForm(info)
 }
 const showContextModal = () => {
   showContext(props.detail?.context || {})

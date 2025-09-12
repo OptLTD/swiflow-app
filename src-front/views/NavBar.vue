@@ -12,6 +12,16 @@ const app = useAppStore()
 const task = useTaskStore()
 
 const onSwitchBot = (bot: BotEntity) => {
+  if (!['brower', 'default'].includes(app.getAction)) {
+    app.setChatBar(true)
+    app.setContent(false)
+    app.setAction('default')
+    var active = getRunning.value(bot)
+    task.setActive(active?.uuid || '')
+  }
+  if (app.getActive?.uuid == bot.uuid) {
+    return
+  }
   setActiveBot(bot)
 }
 

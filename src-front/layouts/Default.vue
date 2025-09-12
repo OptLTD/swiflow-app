@@ -3,9 +3,9 @@ import { ref, unref, watch } from 'vue'
 import { useDraggable } from '@vueuse/core'
 import { useAppStore } from '@/stores/app'
 
-const store = useAppStore()
+const app = useAppStore()
 
-watch(() => store.getContent, (val) => {
+watch(() => app.getContent, (val) => {
   var clz = 'has-content'
   var list1 = unref(menuPanel)?.classList
   var list2 = unref(chatPanel)?.classList
@@ -73,14 +73,14 @@ useDraggable(handler, {
   <div id="nav-panel" ref="navPanel">
     <slot name="nav" />
   </div>
-  <div v-show="store.getMenuBar" id="menu-panel" ref="menuPanel">
+  <div v-show="app.getMenuBar" id="menu-panel" ref="menuPanel">
     <slot name="menu" />
   </div>
-  <div v-show="store.getChatBar" id="chat-panel" ref="chatPanel">
+  <div v-show="app.getChatBar" id="chat-panel" ref="chatPanel">
     <div id="chat-handler" ref="handler" />
     <slot name="left" />
   </div>
-  <main v-if="store.getContent" id="main-panel">
+  <main v-if="app.getContent" id="main-panel">
     <slot name="main" />
   </main>
 </template>

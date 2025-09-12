@@ -1,11 +1,8 @@
 import { useModal, useVfm } from 'vue-final-modal'
-import { useAppStore } from '@/stores/app'
-import MyBotModal from '@/modals/MyBotModal.vue';
+import BotInfoModal from '@/modals/BotInfoModal.vue';
 import WelcomeModal from '@/modals/WelcomeModal.vue';
 import ContextModal from '@/modals/ContextModal.vue';
 import UseToolModal from '@/modals/UseToolModal.vue';
-import BrowserModal from '@/modals/BrowserModal.vue';
-import DatabaseModal from '@/modals/DatabaseModal.vue';
 import ProviderModal from '@/modals/ProviderModal.vue';
 import SetupEnvModal from '@/modals/SetupEnvModal.vue';
 import McpConfigModal from '@/modals/McpConfigModal.vue';
@@ -28,22 +25,22 @@ export const showContext = (context: any) => {
   theContextView.open()
 }
 
-export const showMyBotForm = (info: any) => {
-  const myBotView = useModal({
-    component: MyBotModal,
+export const showBotInfoForm = (info: any) => {
+  const theBotView = useModal({
+    component: BotInfoModal,
     attrs: {
       onSubmit: () => {
-        myBotView.close()
+        theBotView.close()
       },
       onCancel: () => {
-        myBotView.close()
+        theBotView.close()
       },
     },
   })
 
-  var attrs = myBotView.options.attrs || {}
+  var attrs = theBotView.options.attrs || {}
   Object.assign(attrs, { model: info })
-  myBotView.open()
+  theBotView.open()
 }
 
 export const showUseToolModal = (info: any) => {
@@ -101,44 +98,6 @@ export const showSetupEnvModal = () => {
   })
 
   theSetupEnvModal.open()
-}
-
-export const showDatabaseModal = () => {
-  if (useVfm().get('theDatabaseModal')) {
-    return
-  }
-
-  const theDatabaseModal = useModal({
-    component: DatabaseModal,
-    attrs: {
-      onSubmit: () => {
-        theDatabaseModal.close()
-      },
-      onCancel: () => {
-        theDatabaseModal.close()
-      },
-    },
-  })
-
-  theDatabaseModal.open()
-}
-
-export const showBrowserModal = () => {
-  if (useVfm().get('theBrowserModal')) {
-    return
-  }
-  const theBrowserModal = useModal({
-    component: BrowserModal,
-    attrs: {
-      onSubmit: () => {
-        theBrowserModal.close()
-      },
-      onCancel: () => {
-        theBrowserModal.close()
-      },
-    },
-  })
-  theBrowserModal.open()
 }
 
 export const showUseModelPopup = () => {

@@ -9,7 +9,7 @@ import { FormKit } from '@formkit/vue';
 import SetHeader from './widgets/SetHeader.vue';
 
 const app =  useAppStore()
-const loading = ref(true)
+const counter = ref<number>(0)
 const formModel = ref<SetupMeta>({
   theme: 'auto',
   language: 'zh',
@@ -36,7 +36,8 @@ onMounted(async () => {
 })
 
 watch(() => formModel.value, debounce(async (data: any) => {
-  if (loading.value) {
+  counter.value += 1
+  if (counter.value <= 1) {
     return
   }
   app.setSetup(data)
@@ -58,7 +59,7 @@ const loadSetting = async () => {
   } catch (err) {
     console.error('Failed to loadSetting:', err)
   } finally {
-    loading.value = false
+    console.log('loading', counter.value)
   }
 }
 
