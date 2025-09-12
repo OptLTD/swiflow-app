@@ -510,7 +510,7 @@ async function main() {
     // Note: Version management is now handled separately via 'npm run build:version' commands
 
     cleanOldBuilds();
-    // buildFrontend();
+    buildFrontend();
     ensureDirectories();
 
     let allSuccess = true;
