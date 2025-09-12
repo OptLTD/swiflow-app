@@ -21,12 +21,15 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
         .menu(&menu).show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "quit" => {
+                log::info!("[Tray] Exiting application...");
                 app.exit(0);
             }
             "restart" => {
                 use std::process::Command;
                 let curr = std::env::current_exe().unwrap();
+                log::info!("[Tray] Starting new instance: {:?}", curr);
                 let _ = Command::new(curr).spawn().unwrap();
+                log::info!("[Tray] Exiting current instance for restart...");
                 app.exit(0);
             }
             "show" => {

@@ -60,12 +60,25 @@ impl WebServer {
     }
 
     fn shutdown(&mut self) -> Result<()> {
+        log::info!("[Server] Starting server shutdown process...");
         if let Some(processes) = self.processes.take() {
+            log::info!("[Server] Found active processes, attempting to terminate...");
             match processes {
-                ProcessHandle::Group(mut group) => group.kill()?,
-                ProcessHandle::Single(single) => single.kill()?,
+                ProcessHandle::Group(mut group) => {
+                    log::info!("[Server] Killing process group...");
+                    group.kill()?;
+                    log::info!("[Server] Process group terminated successfully");
+                }
+                ProcessHandle::Single(single) => {
+                    log::info!("[Server] Killing single process...");
+                    single.kill()?;
+                    log::info!("[Server] Single process terminated successfully");
+                }
             }
+        } else {
+            log::info!("[Server] No active processes found to shutdown");
         }
+        log::info!("[Server] Server shutdown completed");
         Ok(())
     }
 }
@@ -95,14 +108,22 @@ pub async fn run(app: &tauri::App, mode: ServerMode) -> Result<()> {
 
 /// Shutdown the server with proper error handling
 pub async fn shutdown() -> Result<()> {
+    log::info!("[Server] Global shutdown function called");
     // Lock the mutex and shutdown the server
     let mut server_guard = SERVER
         .lock()
-        .map_err(|e| anyhow::anyhow!("Failed to lock server: {}", e))?;
+        .map_err(|e| {
+            log::error!("[Server] Failed to lock server mutex: {}", e);
+            anyhow::anyhow!("Failed to lock server: {}", e)
+        })?;
 
     if let Some(server) = server_guard.as_mut() {
-        server.shutdown()?;
+        log::info!("[Server] Server instance found, calling shutdown...");
+        server.shutdown()?
+    } else {
+        log::warn!("[Server] No server instance found to shutdown");
     }
 
+    log::info!("[Server] Global shutdown function completed");
     Ok(())
 }

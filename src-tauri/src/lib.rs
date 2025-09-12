@@ -68,15 +68,15 @@ pub fn run() {
     app.run(move |_app_handle, _event| {
         #[cfg(all(desktop, not(test)))]
         match &_event {
-            RunEvent::ExitRequested { api, code, .. } => {
-                // Keep the event loop running even if all windows are closed
-                // This allow us to catch tray icon events when there is no window
-                // if we manually requested an exit (code is Some(_)) we will let it go through
-                if code.is_none() {
-                    api.prevent_exit();
+            RunEvent::Exit => {
+                log::info!("[App] Exit event received - application is terminating");
+                let shutdown_result = block_on(server::shutdown());
+                if let Err(e) = shutdown_result {
+                    log::error!("[App] Failed to shutdown server in Exit: {}", e);
+                } else {
+                    log::info!("[App] Server shutdown completed in Exit handler");
                 }
-                let _ = block_on(server::shutdown());
-                log::info!("ExitRequested...");
+                log::info!("[App] Exit handler completed");
             }
             RunEvent::WindowEvent {
                 event: tauri::WindowEvent::CloseRequested { api, .. },
