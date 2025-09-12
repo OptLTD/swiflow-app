@@ -799,9 +799,9 @@ const initializeWelcome = async () => {
   cursor: pointer;
   text-align: center;
   min-height: 100px;
-  display: flex;
+  /* display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: center; */
 }
 
 .task-card:hover {
@@ -821,12 +821,12 @@ const initializeWelcome = async () => {
 }
 
 .trial-mode-content,
-.api-config-content,
 .login-success-content {
   text-align: center;
 }
 
 .api-config-content {
+  text-align: left;
   margin: 0 auto;
   max-width: fit-content;
 }
