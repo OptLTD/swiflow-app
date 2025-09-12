@@ -590,7 +590,7 @@ const initializeWelcome = async () => {
             </template>
 
             <button v-if="state.currentStep === totalSteps" :disabled="!canProceed || state.loading" 
-              class="btn-primary" @click="completeSetup">
+              :class="[ !canProceed ? 'btn-outline' : 'btn-primary']" @click="completeSetup">
               开始使用
             </button>
           </div>

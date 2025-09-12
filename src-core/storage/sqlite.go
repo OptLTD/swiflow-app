@@ -252,7 +252,7 @@ func (s *SQLiteStorage) FindCfg(cfg *CfgEntity) error {
 }
 
 func (s *SQLiteStorage) SaveCfg(cfg *CfgEntity) error {
-	copy := CfgEntity{Type: cfg.Type, Name: cfg.Name, Data: cfg.Data}
+	// copy := CfgEntity{Type: cfg.Type, Name: cfg.Name, Data: cfg.Data}
 	where := map[string]any{"type": cfg.Type, "name": cfg.Name}
 	if !cfg.DeletedAt.Time.IsZero() {
 		if r := s.gormDB.Where(where).Delete(cfg); r.Error != nil {
@@ -262,8 +262,16 @@ func (s *SQLiteStorage) SaveCfg(cfg *CfgEntity) error {
 		return nil
 	}
 
-	query := s.gormDB.Model(cfg).Where(where).Order("id asc")
-	if r := query.Assign(copy).FirstOrCreate(cfg); r.Error != nil {
+	update := map[string]any{
+		"type": cfg.Type, "name": cfg.Name,
+		"data": cfg.Data, "deleted_at": nil,
+	}
+	clauses := clause.OnConflict{
+		Columns:   []clause.Column{{Name: "type"}, {Name: "name"}},
+		DoUpdates: clause.AssignmentColumns(maputil.Keys(update)),
+	}
+	query := s.gormDB.Model(cfg).Clauses(clauses).Assign(update)
+	if r := query.Create(cfg); r.Error != nil {
 		log.Printf("[SQLITE]failed to save config: %v", r.Error)
 		return fmt.Errorf("failed to save config: %w", r.Error)
 	}
