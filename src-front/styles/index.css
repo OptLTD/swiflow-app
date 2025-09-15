@@ -19,7 +19,7 @@
   --color-divider: #e0e0e0;
   --bg-main: #fff;
   --bg-menu: #eaeaea;
-  --bg-headbar: #fafbfc;
+  --bg-light: #fafbfc;
   --text-main: #213547;
 
   /* 状态颜色 */
@@ -47,7 +47,7 @@
   --color-tertiary: #9a9a9a;
   --bg-main: #fff;
   --bg-menu: #eaeaea;
-  --bg-headbar: #fafbfc;
+  --bg-light: #fafbfc;
   --text-main: #213547;
   --icon-color: #666;
 
@@ -74,7 +74,7 @@
   --color-divider: #2a2a2a;
   --bg-main: #303030;
   --bg-menu: #202020;
-  --bg-headbar: #222;
+  --bg-light: #222;
   --text-main: #f6f6f6;
   --icon-color: #b0b0b0;
 
@@ -156,7 +156,7 @@ body {
   position: fixed;
   box-sizing: border-box;
   height: var(--nav-height);
-  background: var(--bg-headbar);
+  background: var(--bg-light);
   border-bottom: 1px solid var(--bg-menu);
 }
 

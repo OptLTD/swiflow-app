@@ -106,7 +106,7 @@
 }
 .badge-python { background: var(--bg-menu); color: var(--color-primary); border-color: var(--color-tertiary); }
 .badge-node { background: var(--bg-main); color: var(--color-secondary); border-color: var(--color-tertiary); }
-.badge-shell { background: var(--bg-headbar); color: var(--color-tertiary); border-color: var(--color-tertiary); }
+.badge-shell { background: var(--bg-light); color: var(--color-tertiary); border-color: var(--color-tertiary); }
 .badge-other { background: var(--bg-menu); color: var(--color-secondary); border-color: var(--color-divider); }
 
 /* Market 标签栏和按钮样式（由McpMarket.vue迁移并适配主题） */
@@ -131,7 +131,7 @@
   user-select: none;
 }
 .tag-btn.active {
-  background: var(--bg-headbar);
+  background: var(--bg-light);
   color: var(--color-primary);
   font-weight: 600;
 }
@@ -143,7 +143,7 @@
   font-weight: 600;
   cursor: pointer;
   color: var(--color-primary);
-  background: var(--bg-headbar);
+  background: var(--bg-light);
   border-color: var(--color-secondary);
   transition: background 0.2s, color 0.2s;
   box-shadow: 0 1px 3px #0001;

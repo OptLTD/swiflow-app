@@ -80,6 +80,11 @@ onMounted(async () => {
   await loadTaskList()
   await setActiveTask()
 })
+
+// Expose methods for parent component access
+defineExpose({
+  setActiveBot
+})
 </script>
 
 <template>

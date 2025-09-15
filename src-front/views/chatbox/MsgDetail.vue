@@ -287,7 +287,7 @@ const hasMoreArgs = [
   padding: 0.6em 0.6em;
   align-items: center;
   transition: all 0.2s ease;
-  background-color: var(--bg-headbar);
+  background-color: var(--bg-light);
 }
 
 .btn-more:hover {

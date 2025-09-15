@@ -148,8 +148,19 @@ export const showWelcomeModal = (gateway: string, initialState = {}) => {
   const theWelcomeModal = useModal({
     component: WelcomeModal,
     attrs: {
-      onSubmit: () => {
+      onSubmit: (task: any) => {
         theWelcomeModal.close()
+        // Handle task submission by dispatching event to App.vue
+        if (task && task.prompt && task.prompt.trim()) {
+          // Dispatch custom event to App.vue to handle bot switching and prompt setting
+          const appEvent = new CustomEvent('welcome', {
+            detail: { 
+              botKey: task.botKey,
+              prompt: task.prompt 
+            }
+          })
+          window.dispatchEvent(appEvent)
+        }
       },
       onCancel: () => {
         theWelcomeModal.close()

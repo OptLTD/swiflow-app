@@ -2,8 +2,8 @@
 import { nanoid } from 'nanoid'
 import { toast } from 'vue3-toastify'
 import { throttle } from 'lodash-es'
-import { ref, unref } from 'vue'
-import { watch, onMounted } from 'vue'
+import { ref, unref, watch } from 'vue'
+import {  onMounted, onUnmounted } from 'vue'
 import { errors } from '@/support/index'
 import { parser, request } from '@/support'
 import { useAppStore } from '@/stores/app'
@@ -377,12 +377,33 @@ onMounted(() => {
   socket.useHandle(
     'message', onMessage
   )
+  // Listen for welcome task submission events from App.vue
+  // This is now handled by App.vue instead of directly here
+  
+  // Set current bot based on active bot
   currBot.value = queryBot('')
   // Load task data when component mounts
   if (task.getActive) {
     loadTaskMsgs(task.getActive)
     loadTaskInfo(task.getActive)
   }
+})
+
+onUnmounted(() => {
+  // Clean up WebSocket listeners if needed
+  // Note: socket cleanup is handled by the useWebSocket hook
+})
+
+// Method to set message content from external components
+const setMsgContent = (content: string) => {
+  if (content && content.trim()) {
+    inputMsg.value.content = content.trim()
+  }
+}
+
+// Expose methods for parent component access
+defineExpose({
+  setMsgContent
 })
 </script>
 

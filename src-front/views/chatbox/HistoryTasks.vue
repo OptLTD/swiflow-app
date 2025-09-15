@@ -203,7 +203,7 @@ const doRemoveTask = async(uuid: string) => {
   padding: 10px 20px;
   box-sizing: border-box;
   height: var(--nav-height);
-  background-color: var(--bg-headbar);
+  background-color: var(--bg-light);
   border-bottom: 1px solid var(--color-divider);
 }
 

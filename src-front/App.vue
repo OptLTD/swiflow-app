@@ -142,6 +142,7 @@ const showDialog = async () => {
 
 const listenEvent = async () => {
   window.addEventListener('storage', (_: StorageEvent) => null);
+  window.addEventListener('welcome', onWelcome as EventListener);
   window.addEventListener('dispatch', onDispatch as EventListener);
   window.addEventListener("hashchange", onHashChange as EventListener);
 }
@@ -237,6 +238,28 @@ const handleChat = (_: Record<string, any>) => {
 
 }
 
+// Component refs for method calls
+const navBarRef = ref<typeof NavBar>()
+const chatBoxRef = ref<typeof ChatBox>()
+const onWelcome = (e: CustomEvent) => {
+  const { botKey, prompt } = e.detail
+  if (botKey && navBarRef.value) {
+    const targetBot = app.getBotList.find(bot => bot.uuid === botKey)
+    if (targetBot) {
+      navBarRef.value.setActiveBot(targetBot).then(() => {
+        console.info('Switched to bot:', targetBot)
+      }).catch((err: any) => {
+        console.error('Failed to switch bot:', err)
+      })
+    }
+  }
+
+  // Set the prompt to chatbox input
+  if (prompt && prompt.trim() && chatBoxRef.value) {
+    chatBoxRef.value.setMsgContent(prompt.trim())
+  }
+}
+
 // 处理全局文件上传
 const handleFilesDropped = (files: File[]) => {
   globalFiles.value = files
@@ -251,10 +274,10 @@ const handleFilesUploaded = (uploads: string[]) => {
 <template>
   <Default>
     <template #nav>
-      <NavBar v-if="app.getLoaded"/>
+      <NavBar v-if="app.getLoaded" ref="navBarRef"/>
     </template>
     <template #left>
-      <ChatBox />
+      <ChatBox v-if="app.getLoaded" ref="chatBoxRef"/>
     </template>
     <template #main>
       <Content v-if="app.getAction == 'default'" />
