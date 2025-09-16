@@ -14,10 +14,12 @@
     "windows": [
       {
         "title": "Swiflow",
+        "width": 1200,
+        "height": 900,
         "minWidth": 450,
         "minHeight": 560,
         "resizable": true,
-        "fullscreen": true,
+        "fullscreen": false,
         "decorations": true,
         "hiddenTitle": true,
         "titleBarStyle": "Overlay",
