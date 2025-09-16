@@ -125,5 +125,5 @@ pub async fn shutdown() -> Result<()> {
     }
 
     log::info!("[Server] Global shutdown function completed");
-    Ok()
+    Ok(())
 }
