@@ -85,21 +85,6 @@ export const setHomePath = async (uuid: string, path: string) => {
   }
 }
 
-export const doOpenHome = async (uuid: string, name: string) => {
-  if (uuid == "") {
-    return
-  }
-  try {
-    const url = `/bot?act=open-home&name=${name}&uuid=${uuid}`
-    const resp = await request.post(url) as any
-    if (resp.errmsg) {
-      return toast.error(resp.errmsg)
-    }
-  } catch (err) {
-    console.error('open-home:', err)
-  }
-}
-
 export const setBotTools = async (uuid: string, tools: string) => {
   if (uuid == "") {
     return

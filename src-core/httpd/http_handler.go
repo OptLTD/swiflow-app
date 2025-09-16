@@ -102,6 +102,40 @@ func (h *HttpHandler) ToolEnv(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *HttpHandler) Launch(w http.ResponseWriter, r *http.Request) {
+	uuid := r.URL.Query().Get("uuid")
+	bot, err := h.manager.QueryBot(uuid)
+	if bot == nil || err != nil {
+		err = fmt.Errorf("找不到 Bot: %v", err)
+		if err = JsonResp(w, err); err != nil {
+			log.Println("[HTTP] resp error", err)
+		}
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	baseHome := config.GetWorkPath(bot.UUID)
+	bot.Home = support.Or(bot.Home, baseHome)
+	// Construct the full path to open
+	var targetPath string
+	if path == "." || path == "" {
+		targetPath = bot.Home
+	} else {
+		targetPath = filepath.Join(bot.Home, path)
+	}
+	// Verify the path exists
+	if _, err = os.Stat(targetPath); err != nil {
+		err = fmt.Errorf("path does not exist: %v", path)
+		JsonResp(w, map[string]string{"errmsg": err.Error()})
+		return
+	}
+	if err = h.service.DoLaunch(bot.Home, path); err != nil {
+		JsonResp(w, map[string]string{"errmsg": err.Error()})
+	} else {
+		JsonResp(w, map[string]string{"success": "Directory launched successfully"})
+	}
+}
+
 func (h *HttpHandler) Browser(w http.ResponseWriter, r *http.Request) {
 	uuid := r.URL.Query().Get("uuid")
 	bot, err := h.manager.QueryBot(uuid)

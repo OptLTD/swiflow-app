@@ -44,22 +44,23 @@ var allowedExtensions = map[string]bool{
 
 // 隐藏文件列表
 var hiddenFiles = map[string]bool{
-	".git":                                true,
-	".gitignore":                          true,
-	".DS_Store":                           true,
-	".DS_Store?":                          true,
-	"Thumbs.db":                           true,
-	".Trashes":                            true,
-	".Spotlight-V100":                     true,
-	".fseventsd":                          true,
-	".TemporaryItems":                     true,
-	".VolumeIcon.icns":                    true,
+	"._*":              true,
+	".*":               true,
+	".git":             true,
+	"Icon?":            true,
+	"Thumbs.db":        true,
+	".gitignore":       true,
+	".DS_Store":        true,
+	".DS_Store?":       true,
+	".Trashes":         true,
+	".fseventsd":       true,
+	".AppleDouble":     true,
+	".LSOverride":      true,
+	".Spotlight-V100":  true,
+	".TemporaryItems":  true,
+	".VolumeIcon.icns": true,
+
 	".com.apple.timemachine.donotpresent": true,
-	".AppleDouble":                        true,
-	".LSOverride":                         true,
-	"Icon?":                               true,
-	"._*":                                 true,
-	".*":                                  true, // 所有以点开头的文件
 }
 
 // 验证文件类型是否被允许
@@ -101,6 +102,10 @@ func isHiddenFile(name string) bool {
 		return true
 	}
 
+	// msoffice template file
+	if strings.HasPrefix(name, "~$") {
+		return true
+	}
 	return false
 }
 

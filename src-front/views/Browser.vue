@@ -6,11 +6,11 @@ import { BASE_ADDR } from '@/support/consts'
 import { useAppStore } from '@/stores/app'
 import { useTaskStore } from '@/stores/task'
 import { useViewStore } from '@/stores/view'
-import { ref, onMounted, watch, nextTick } from 'vue'
 import DocViewer from './browser/DocViewer.vue'
 import XlsViewer from './browser/XlsViewer.vue'
 import PdfViewer from './browser/PdfViewer.vue'
 import TextViewer from './browser/TextViewer.vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 
 const { t } = useI18n()
 const app = useAppStore()
@@ -30,6 +30,9 @@ const close = () => {
   // 文件状态：关闭文件回到目录
    if (preview.value) {
     closeFilePreview()
+    if (!fileList.value.length) {
+      loadData()
+    }
   } else if (currDir.value === '.') {
     app.toggleContent() // 根目录：关闭浏览器
   } else {
@@ -38,7 +41,7 @@ const close = () => {
 }
 
 // 加载文件列表或文件内容
-const loadFileData = async (path: string = '.') => {
+const loadData = async (path: string = '.') => {
   loading.value = true
   try {
     const uuid = app.getActive.uuid || ''
@@ -73,12 +76,28 @@ const loadFileData = async (path: string = '.') => {
 
 // 导航到指定路径
 const navigateTo = (path: string) => {
-  loadFileData(path)
+  loadData(path)
 }
 
 // 刷新当前目录
 const doRefresh = () => {
-  loadFileData(currDir.value)
+  loadData(currDir.value)
+}
+
+// Launch current directory or file in system explorer
+const doLaunch = async () => {
+  try {
+    const uuid = app.getActive.uuid || ''
+    const path = selected.value || currDir.value
+    const url = `/launch?uuid=${uuid}&path=${encodeURIComponent(path)}`
+    const resp = await request.post(url) as any
+    if (resp && resp.errmsg) {
+      toast.error(resp.errmsg)
+    }
+  } catch (error) {
+    console.error('Launch failed:', error)
+    toast.error(t('common.launchFailed'))
+  }
 }
 
 // 返回上一级目录
@@ -180,7 +199,7 @@ const getViewerComponent = (fileName: string) => {
 onMounted(() => {
   const change = view.getChange
   if (!change || !change.path) {
-    loadFileData()
+    loadData()
     return
   }
   if (change.type === 'directory') {
@@ -238,6 +257,13 @@ const forceUpdateComponent = () => {
         <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57
           8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 
           0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+        />
+      </svg>
+    </button>
+    <button class="btn-refresh" @click="doLaunch" :title="$t('common.openInExplorer')">
+      <svg class="icon" viewBox="0 0 24 24">
+        <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 
+          2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"
         />
       </svg>
     </button>
@@ -300,6 +326,9 @@ const forceUpdateComponent = () => {
   overflow-y: scroll;
   margin-bottom: 15px;
   height: calc(100vh - var(--nav-height));
+}
+#main-header>.main-title{
+  margin-right: 5px;
 }
 
 .file-browser {

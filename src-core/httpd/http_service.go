@@ -312,32 +312,44 @@ func (h *HttpServie) LoadGlobal() map[string]any {
 	return result
 }
 
-func (h *HttpServie) GetLaunch() map[string]any {
-	launch := map[string]any{}
-	dev := ability.DevCommandAbility{
-		Home: config.GetWorkPath(""),
-	}
-	if _, err := dev.Exec("which open", 10*time.Second); err == nil {
-		launch["open"] = "open"
-	}
-	// if _, err := dev.Exec("which code", 30*time.Second); err == nil {
-	// 	launch["code"] = "code"
-	// }
-	// if _, err := dev.Exec("which subl", 30*time.Second); err == nil {
-	// 	launch["subl"] = "subl"
-	// }
-	return launch
-}
+func (h *HttpServie) DoLaunch(base, path string) error {
+	dev := ability.DevCommandAbility{Home: base}
 
-func (h *HttpServie) DoLaunch(name string, bot *entity.BotEntity) error {
-	baseHome := config.GetWorkPath(bot.UUID)
-	bot.Home = support.Or(bot.Home, baseHome)
-	dev := ability.DevCommandAbility{Home: bot.Home}
-	if _, err := dev.Run("ls", 10*time.Second); err != nil {
-		return fmt.Errorf("目录不存在: %v", dev.Home)
+	// Use platform-specific commands to open file/directory
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "darwin": // macOS
+		cmd = "open"
+		args = []string{path}
+	case "windows":
+		cmd = "start"
+		args = []string{path}
+	case "linux":
+		// Try different Linux file managers in order of preference
+		if _, err := dev.Exec("which xdg-open", 10*time.Second); err == nil {
+			cmd = "xdg-open"
+			args = []string{path}
+		} else if _, err := dev.Exec("which nautilus", 10*time.Second); err == nil {
+			cmd = "nautilus"
+			args = []string{path}
+		} else if _, err := dev.Exec("which dolphin", 10*time.Second); err == nil {
+			cmd = "dolphin"
+			args = []string{path}
+		} else if _, err := dev.Exec("which thunar", 10*time.Second); err == nil {
+			cmd = "thunar"
+			args = []string{path}
+		} else {
+			return fmt.Errorf("no suitable file manager found on Linux system")
+		}
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
-	if data, err := dev.Run(name, 10*time.Second, dev.Home); err != nil {
-		return fmt.Errorf("launch err: %v, output: %s", err, string(data))
+
+	// Execute the launch command
+	if _, err := dev.Run(cmd, 10*time.Second, args...); err != nil {
+		return fmt.Errorf("launch failed: %v", err)
 	}
 	return nil
 }

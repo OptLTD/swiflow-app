@@ -185,14 +185,6 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 			JsonResp(w, bot.ToMap())
 			return
 		}
-	case "open-home":
-		name := r.URL.Query().Get("name")
-		if err := h.service.DoLaunch(name, bot); err != nil {
-			JsonResp(w, err)
-		} else {
-			JsonResp(w, bot.ToMap())
-		}
-		return
 	case "set-tools":
 		tools := r.URL.Query().Get("tools")
 		bot.Tools = strings.Split(tools, ",")

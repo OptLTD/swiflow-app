@@ -240,7 +240,7 @@ class Particle {
 function createParticles(x: number, y: number, hue: number) {
   // 创建50-70个粒子，增加爆炸效果
   const particleCount = Math.floor(Math.random() * 20) + 50;
-  console.log('Creating particles:', particleCount);
+  // console.log('Creating particles:', particleCount);
   
   for (let i = 0; i < particleCount; i++) {
     particles.push(new Particle(x, y, hue));
@@ -267,7 +267,7 @@ function createRandomFirework() {
     fireworks.push(new Firework(sx, sy, tx, ty));
   }
   
-  console.log('Created random fireworks:', count);
+  // console.log('Created random fireworks:', count);
 }
 
 // 主循环
@@ -278,9 +278,6 @@ function loop() {
     return;
   }
   
-  // 使用v-if后，组件只有在show为true时才会挂载，不需要再检查show属性
-  console.log('Fireworks animation loop running');
-
   // 清除画布并绘制黑色背景
   ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = 'rgba(0, 0, 0, 1)';
@@ -304,7 +301,6 @@ function loop() {
   // 随机发射烟花
   if (timerTick >= timerTotal) {
     if (!mousedown) {
-      // 使用v-if后，组件只有在show为true时才会挂载，不需要再检查show属性
       createRandomFirework();
     }
     timerTick = 0;
@@ -327,7 +323,6 @@ function loop() {
   hue += 0.5;
 
   // 请求下一帧
-  // 使用v-if后，组件只有在show为true时才会挂载，不需要再检查show属性
   animationFrameId = requestAnimationFrame(loop);
 }
 

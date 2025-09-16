@@ -734,6 +734,11 @@ span[data-v-tippy] {
   align-items: center;
   transition: all 0.2s ease;
 }
+#set-header>.btn-refresh,
+#chat-header>.btn-refresh,
+#main-header>.btn-refresh{
+  margin: 5px -2.5px;
+}
 
 #set-header>.btn-back:hover,
 #chat-header>.btn-back:hover,
