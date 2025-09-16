@@ -41,9 +41,10 @@ const handleSend = async() => {
   if (!content.trim()) {
     return
   }
-  // 如果有工具选中，缺失必要命令，则抖动工具
+  // 如果缺失必要命令，则抖动warning
   const tool = refMcpTool.value
-  if (tool?.getLossCmd!()) {
+  const loss = tool?.getLossCmd!()
+  if (tool && loss && loss.length) {
     tool.shakeElement()
     return;
   }

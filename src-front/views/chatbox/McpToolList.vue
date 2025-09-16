@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Tippy } from 'vue-tippy'
-import { ref, watch } from 'vue'
+import { ref, watch, unref } from 'vue'
 import { onMounted, PropType } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { request, alert } from '@/support/index';
@@ -166,7 +166,7 @@ const getCheckboxId = (val: string) => `select-${val}`
 
 // Get missing command list for environment check
 const getLossCmd = () => {
-  return lossCmd.value
+  return unref(lossCmd)
 }
 
 // Shake animation for warning button
@@ -207,14 +207,6 @@ const onSwitchServer = async (server: McpServer, enable: boolean) => {
   } finally {
     server.loading = false
   }
-}
-
-// Handle environment update callback
-const handleEnvUpdate = async (mcpEnv: McpEnvMeta) => {
-  // Update app store mcpEnv state
-  app.setMcpEnv(mcpEnv)
-  // Re-check MCP environment after update
-  await checkMcpEnv()
 }
 
 // Expose methods to parent component
