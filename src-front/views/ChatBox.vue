@@ -377,8 +377,11 @@ onMounted(() => {
   socket.useHandle(
     'message', onMessage
   )
-  // Listen for welcome task submission events from App.vue
-  // This is now handled by App.vue instead of directly here
+
+  inputMsg.value.placeholder = `
+    输入消息内容，按下回车键发送
+    拖拽文件到此处即可上传文件
+  `.replace(/\n\s+/g, '\n').trim()
   
   // Set current bot based on active bot
   currBot.value = queryBot('')
@@ -427,7 +430,7 @@ defineExpose({
     <div class="input-container">
       <ChatInput :running="running"
         v-model:content="inputMsg.content"
-        placeholder="输入消息内容，按下回车键发送"
+        :placeholder=" inputMsg.placeholder"
         @send="handleSend" @stop="handleStop"
       >
         <template #header>

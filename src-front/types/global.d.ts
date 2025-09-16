@@ -139,6 +139,7 @@ declare type InputMsg = {
   uploads: string[]
   newTask?: string
   homePath?: string
+  placeholder: string
 }
 
 
