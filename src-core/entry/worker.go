@@ -8,6 +8,7 @@ import (
 	"strings"
 	"swiflow/action"
 	"swiflow/agent"
+	"swiflow/entity"
 	"swiflow/support"
 )
 
@@ -49,66 +50,22 @@ func StartWork(path string) {
 
 	// Discover agents in .agent directory
 	agents, err := discoverAgents(agentDir)
-	if err != nil {
+	if err != nil || len(agents) == 0 {
 		log.Printf("[WORKER] Error: failed to discover agents: %v", err)
-		return
-	}
-
-	if len(agents) == 0 {
-		log.Printf("[WORKER] Error: no agents found in %s", agentDir)
 		return
 	}
 
 	// Initialize agent manager
 	var manager *agent.Manager
-	if manager, err = agent.NewManager(); err != nil {
-		log.Printf("[WORKER] Error: failed to initialize agent manager: %v", err)
+	if manager = agent.FromAgents(agents); manager == nil {
+		log.Printf("[WORKER] Error: failed to initialize agent manager")
 		return
-	}
-
-	// Find master agent (master.md has priority)
-	var masterAgent *AgentInfo
-	var subAgents []*AgentInfo
-
-	for _, agentInfo := range agents {
-		if agentInfo.Name == "master" {
-			masterAgent = agentInfo
-		} else {
-			subAgents = append(subAgents, agentInfo)
-		}
-	}
-
-	// If no master.md found, use the first agent as master
-	if masterAgent == nil && len(agents) > 0 {
-		masterAgent, subAgents = agents[0], agents[1:]
-		log.Printf("[WORKER] No master.md found, using %s as master agent", masterAgent.Name)
 	}
 
 	// Create task with unique ID
 	taskUUID, _ := support.UniqueID()
-
-	// Create user input with task content and working directory context
-	input := &action.UserInput{
-		Content: fmt.Sprintf("Working Directory: %s\n\nTask Description:\n%s\n\nAvailable Sub-Agents: %s",
-			workDir, taskContent, getSubAgentNames(subAgents)),
-	}
-
-	// Get or create master bot
-	bot, err := manager.SelectBot("master")
-	if err != nil {
-		// If master bot doesn't exist, try to get the first available bot
-		bot, err = manager.SelectBot("")
-		if err != nil {
-			log.Printf("[WORKER] Error: failed to get bot: %v", err)
-			return
-		}
-	}
-
-	// Set working directory for the bot
-	bot.Home = workDir
-
-	// Initialize task
-	task, err := manager.InitTask(fmt.Sprintf("Agent Work: %s", filepath.Base(workDir)), taskUUID)
+	bot, err := manager.SelectBot("leader")
+	task, err := manager.InitTask("Agent Work: Demo", taskUUID)
 	if err != nil {
 		log.Printf("[WORKER] Error: failed to initialize task: %v", err)
 		return
@@ -117,26 +74,14 @@ func StartWork(path string) {
 	// Set task working directory
 	task.Home = workDir
 
-	log.Printf("[WORKER] Starting agent work in directory: %s", workDir)
-	log.Printf("[WORKER] Master Agent: %s", masterAgent.Name)
-	log.Printf("[WORKER] Sub-Agents: %v", getSubAgentNames(subAgents))
 	log.Printf("[WORKER] Task: %s", taskContent)
-
-	// Start agent execution (similar to ws_handle.go OnMessage pattern)
+	input := &action.UserInput{Content: taskContent}
 	go manager.Handle(input, task, bot)
 }
 
-// AgentInfo holds information about discovered agents
-type AgentInfo struct {
-	Type string
-	Name string
-	Path string
-	Desc string
-}
-
 // discoverAgents finds all .md files in the .agent directory
-func discoverAgents(agentDir string) ([]*AgentInfo, error) {
-	var agents []*AgentInfo
+func discoverAgents(agentDir string) ([]*entity.BotEntity, error) {
+	var agents []*entity.BotEntity
 
 	var err error
 	var files []os.DirEntry
@@ -164,10 +109,9 @@ func discoverAgents(agentDir string) ([]*AgentInfo, error) {
 
 		// Extract agent name from filename (remove .md extension)
 		agentName := strings.TrimSuffix(file.Name(), ".md")
-		agentType := support.If(agentName == "master", "master", "slave")
-		agents = append(agents, &AgentInfo{
-			Name: agentName, Path: agentPath,
-			Type: agentType, Desc: content,
+		agents = append(agents, &entity.BotEntity{
+			Name: agentName, UUID: agentName,
+			Home: agentDir, SysPrompt: content,
 		})
 	}
 
@@ -181,17 +125,4 @@ func readFileContent(filePath string) (string, error) {
 	} else {
 		return string(data), nil
 	}
-}
-
-// getSubAgentNames returns a comma-separated list of sub-agent names
-func getSubAgentNames(subAgents []*AgentInfo) string {
-	if len(subAgents) == 0 {
-		return "None"
-	}
-
-	var names []string
-	for _, agent := range subAgents {
-		names = append(names, agent.Name)
-	}
-	return strings.Join(names, ", ")
 }

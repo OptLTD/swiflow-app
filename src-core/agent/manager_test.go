@@ -143,7 +143,7 @@ func TestManager_GetPrompt(t *testing.T) {
 			// 创建 Manager 实例
 			m := &Manager{
 				store:  tt.store,
-				mybots: tt.store.GetBots(),
+				agents: tt.store.GetBots(),
 				config: make(map[string]any),
 				active: make(map[string]*Executor),
 			}
@@ -221,10 +221,10 @@ func TestManager_buildSelfBots(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &Manager{
-				mybots: tt.myBots,
+				agents: tt.myBots,
 			}
 
-			got := m.buildSelfBots()
+			got := m.getSubAgentsInfo()
 
 			if tt.expected == "暂无" {
 				if got != "暂无" {
@@ -235,87 +235,6 @@ func TestManager_buildSelfBots(t *testing.T) {
 					t.Errorf("buildSelfBots() 结果中应该包含 '%s'，但实际结果中没有找到", tt.expected)
 					t.Logf("实际结果: %s", got)
 				}
-			}
-		})
-	}
-}
-
-// 测试 buildSelfTools 方法
-func TestManager_buildSelfTools(t *testing.T) {
-	tests := []struct {
-		name     string
-		bot      *entity.BotEntity
-		tools    []*entity.ToolEntity
-		expected []string
-	}{
-		{
-			name: "测试指定工具的机器人",
-			bot: &entity.BotEntity{
-				Tools: []string{"file_tool", "command_tool"},
-			},
-			tools: []*entity.ToolEntity{
-				{
-					Name: "file_tool",
-					Type: "file",
-					Desc: "文件操作工具",
-				},
-				{
-					Name: "command_tool",
-					Type: "command",
-					Desc: "命令执行工具",
-				},
-				{
-					Name: "other_tool",
-					Type: "other",
-					Desc: "其他工具",
-				},
-			},
-			expected: []string{"file_tool", "command_tool"},
-		},
-		{
-			name: "测试空工具列表的机器人（应该包含所有工具）",
-			bot: &entity.BotEntity{
-				Tools: []string{},
-			},
-			tools: []*entity.ToolEntity{
-				{
-					Name: "file_tool",
-					Type: "file",
-					Desc: "文件操作工具",
-				},
-				{
-					Name: "command_tool",
-					Type: "command",
-					Desc: "命令执行工具",
-				},
-			},
-			expected: []string{"file_tool", "command_tool"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockStore := storage.NewMockStore()
-			mockStore.SetTools(tt.tools)
-
-			m := &Manager{
-				store: mockStore,
-			}
-
-			got := m.buildSelfTools(tt.bot)
-
-			// 添加日志输出以查看实际格式
-			t.Logf("buildSelfTools 输出: %s", got)
-
-			for _, expected := range tt.expected {
-				if !strings.Contains(got, expected) {
-					t.Errorf("buildSelfTools() 结果中应该包含 '%s'，但实际结果中没有找到", expected)
-					t.Logf("实际结果: %s", got)
-				}
-			}
-
-			if strings.TrimSpace(got) == "" {
-				t.Errorf("buildSelfTools() 返回了空字符串")
 			}
 		})
 	}
@@ -385,7 +304,7 @@ func TestManager_GetPrompt_Logic(t *testing.T) {
 			// 创建 Manager 实例
 			m := &Manager{
 				store:  tt.store,
-				mybots: tt.store.GetBots(),
+				agents: tt.store.GetBots(),
 				config: make(map[string]any),
 				active: make(map[string]*Executor),
 			}

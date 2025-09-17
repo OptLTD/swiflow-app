@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"swiflow/ability"
 	"swiflow/action"
 	"swiflow/config"
 	"swiflow/entity"
@@ -193,24 +192,6 @@ func (r *Context) WaitTodo(act *action.WaitTodo) (err error) {
 		support.Emit("wait-todo", event, todo)
 	}
 	return
-}
-
-func (r *Context) Publish(act *action.PublishAsApp) any {
-	if act.Command == "" {
-		return fmt.Errorf("app start command is empty")
-	}
-	cmd := ability.DevCommandAbility{
-		Home: r.task.UUID,
-	}
-	pid, err := cmd.Start(act.Command)
-	if err != nil {
-		return cmd.Logs()
-	}
-	r.task.Process, r.task.Command = pid, act.Command
-	if err := r.store.SaveTask(r.task); err != nil {
-		return fmt.Errorf("error: %v", err)
-	}
-	return "success"
 }
 
 func (r *Context) SetState(state string) error {

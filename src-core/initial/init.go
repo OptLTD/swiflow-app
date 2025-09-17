@@ -16,27 +16,25 @@ import (
 //go:embed html/*
 var fs embed.FS
 
-var system = []string{
+var basic = []string{
 	"basic-tools",
 	"file-system",
 	"use-command",
 }
 
-// master 拥有交互能力
+// leader 拥有交互能力
 // 还有支配其他 bot 能力
-var master = []string{
+var leader = []string{
 	"basic-tools",
 	"file-system",
-	"use-self-bots",
 }
 
-// slave 拥有实战能力
-var slave = []string{
+// worker 拥有实战能力
+var worker = []string{
 	"basic-tools",
 	"file-system",
 	"use-command",
 	"use-mcp-tools",
-	// "use-self-tools",
 }
 
 // debug 拥有mcp能力
@@ -110,7 +108,7 @@ func GetTools() map[string]string {
 	list, _ := fs.ReadDir("tools")
 	for _, item := range list {
 		name := toolName(item.Name())
-		if slices.Contains(system, name) {
+		if slices.Contains(basic, name) {
 			continue
 		}
 		path := "tools/" + item.Name()
@@ -124,14 +122,14 @@ func GetTools() map[string]string {
 func UsePrompt(kind string) string {
 	ability := []string{}
 	switch kind {
-	case "master":
-		ability = append(ability, master...)
-	case "slave":
-		ability = append(ability, slave...)
+	case "leader":
+		ability = append(ability, leader...)
+	case "worker":
+		ability = append(ability, worker...)
 	case "debug":
 		ability = append(ability, debug...)
 	default:
-		ability = append(ability, system...)
+		ability = append(ability, basic...)
 	}
 
 	var tools strings.Builder
@@ -149,7 +147,7 @@ func UsePrompt(kind string) string {
 
 	path := fmt.Sprintf("tools/0.%s-prompt.md", kind)
 	if data, _ := fs.ReadFile(path); len(data) != 0 {
-		return strings.ReplaceAll(string(data), "${{ALL_TOOLS}}", tools.String())
+		return strings.ReplaceAll(string(data), "${{BASE_TOOLS}}", tools.String())
 	}
 
 	return ""

@@ -43,6 +43,14 @@ const (
 	STATE_COMPLETED = "completed" // 任务完成
 )
 
+const (
+	AGENT_DEBUG = "debug"
+	AGENT_BASIC = "basic"
+
+	AGENT_LEADER = "leader"
+	AGENT_WORKER = "worker"
+)
+
 func (r *Executor) Resume() error {
 	r.currentTurns = 0
 	r.isTerminated = false
@@ -184,6 +192,11 @@ func (r *Executor) Handle() *action.SuperAction {
 			}
 		}
 
+		// 触发进度文更新
+		if resp.Context != nil {
+			support.Emit("context", r.UUID, resp.Context)
+		}
+
 		if strings.TrimSpace(toolResult) != "" {
 			r.currentState = STATE_WAITING
 			r.queueLock.Lock() // tool call has result
@@ -233,10 +246,12 @@ func (r *Executor) DoPlay(super *action.SuperAction) string {
 			r.context.Memorize(act)
 		case *action.WaitTodo:
 			r.context.WaitTodo(act)
-		case *action.PublishAsApp:
-			res := r.context.Publish(act)
-			reply := support.ToXML(act, res)
-			replyMsgs = append(replyMsgs, reply)
+		case *action.StartSubtask:
+			support.Emit("subtask", r.UUID, act)
+		case *action.QuerySubtask:
+			support.Emit("subtask", r.UUID, act)
+		case *action.AbortSubtask:
+			support.Emit("subtask", r.UUID, act)
 		}
 	}
 	if len(replyMsgs) == 0 {

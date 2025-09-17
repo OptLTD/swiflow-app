@@ -218,19 +218,12 @@ func (msg *SuperAction) Hash() []string {
 			identifier = act.XMLName.Local + ":" + act.Session
 		case *AbortAsyncCmd:
 			identifier = act.XMLName.Local + ":" + act.Session
-			// 自研工具
-		case *UseSelfTool:
-			identifier = act.XMLName.Local + ":" + act.UUID
-		case *SetSelfTool:
-			identifier = act.XMLName.Local + ":" + act.UUID
-		case *PublishAsApp:
-			identifier = act.XMLName.Local + ":" + act.Command
-		// 自研Bot工具
-		case *StartBotTask:
+		// Subtask
+		case *StartSubtask:
 			identifier = act.XMLName.Local + ":" + act.Name + ":" + act.Task
-		case *QueryBotTask:
+		case *QuerySubtask:
 			identifier = act.XMLName.Local + ":" + act.Name + ":" + act.Type
-		case *AbortBotTask:
+		case *AbortSubtask:
 			identifier = act.XMLName.Local + ":" + act.Name + ":" + act.Reason
 		// MCP工具
 		case *UseMcpTool:
@@ -260,8 +253,6 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 			result[hash] = res.Result
 		case *AbortAsyncCmd:
 			result[hash] = res.Result
-		case *PublishAsApp:
-			result[hash] = res.Result
 		case *PathListFiles:
 			result[hash] = res.Result
 		case *FileGetContent:
@@ -271,16 +262,11 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 		case *FileReplaceText:
 			result[hash] = res.Result
 		// 自研Bot工具
-		case *StartBotTask:
+		case *StartSubtask:
 			result[hash] = res.Result
-		case *QueryBotTask:
+		case *QuerySubtask:
 			result[hash] = res.Result
-		case *AbortBotTask:
-			result[hash] = res.Result
-		// 自研工具
-		case *UseSelfTool:
-			result[hash] = res.Result
-		case *SetSelfTool:
+		case *AbortSubtask:
 			result[hash] = res.Result
 		// MCP工具
 		case *UseMcpTool:
@@ -300,8 +286,6 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 			res.Result, _ = result[hash]
 		case *AbortAsyncCmd:
 			res.Result, _ = result[hash]
-		case *PublishAsApp:
-			res.Result, _ = result[hash]
 		case *PathListFiles:
 			res.Result, _ = result[hash]
 		case *FileGetContent:
@@ -311,16 +295,11 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 		case *FileReplaceText:
 			res.Result, _ = result[hash]
 		// 自研Bot工具
-		case *StartBotTask:
+		case *StartSubtask:
 			res.Result, _ = result[hash]
-		case *QueryBotTask:
+		case *QuerySubtask:
 			res.Result, _ = result[hash]
-		case *AbortBotTask:
-			res.Result, _ = result[hash]
-		// 自研工具
-		case *UseSelfTool:
-			res.Result, _ = result[hash]
-		case *SetSelfTool:
+		case *AbortSubtask:
 			res.Result, _ = result[hash]
 		// MCP工具
 		case *UseMcpTool:
@@ -414,19 +393,12 @@ func parse(text string) any {
 	case FILE_REPLACE_TEXT:
 		detail = new(FileReplaceText)
 	// 自研Bot工具
-	case START_BOT_TASK:
-		detail = new(StartBotTask)
-	case QUERY_BOT_TASK:
-		detail = new(QueryBotTask)
-	case ABORT_BOT_TASK:
-		detail = new(AbortBotTask)
-	// 自研工具
-	case USE_SELF_TOOL:
-		detail = new(UseSelfTool)
-	case SET_SELF_TOOL:
-		detail = new(SetSelfTool)
-	case PUBLISH_AS_APP:
-		detail = new(PublishAsApp)
+	case START_SUBTASK:
+		detail = new(StartSubtask)
+	case QUERY_SUBTASK:
+		detail = new(QuerySubtask)
+	case ABORT_SUBTASK:
+		detail = new(AbortSubtask)
 	// MCP工具
 	case USE_MCP_TOOL:
 		detail = new(UseMcpTool)

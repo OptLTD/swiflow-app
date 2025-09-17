@@ -28,9 +28,27 @@ type Payload = action.Payload
 type Manager struct {
 	store Store
 
-	mybots []*MyBot
+	agents []*MyBot
 	config map[string]any
 	active map[string]*Executor
+}
+
+func FromAgents(agents []*MyBot) *Manager {
+	m := &Manager{}
+	// init storage
+	m.agents = agents
+	m.store, _ = m.InitStorage()
+	m.config = map[string]any{}
+	m.active = map[string]*Executor{}
+
+	provider := config.Get("SWIFLOW_PROVIDER")
+	name, model, _ := strings.Cut(provider, "@")
+	m.config[entity.KEY_USE_MODEL] = map[string]any{
+		"provider": name, "useModel": model,
+		"apiUrl": config.Get("SWIFLOW_API_URL"),
+		"apiKey": config.Get("SWIFLOW_API_KEY"),
+	}
+	return m
 }
 
 func NewManager() (*Manager, error) {
@@ -64,11 +82,46 @@ func (m *Manager) Initial() (err error) {
 	if err = m.InitConfig(); err != nil {
 		log.Println("[AGENT] init cfg error", err)
 	}
-	if m.mybots, err = m.store.LoadBot(); err == nil {
+	if m.agents, err = m.store.LoadBot(); err == nil {
 		return nil
 	}
 	log.Println("[AGENT] init bot error", err)
 	return fmt.Errorf("init bot error: %v", err)
+}
+func (m *Manager) Start(input action.Input, task *MyTask) {
+	leader, err := m.SelectBot("leader")
+	if err != nil {
+		log.Println("[AGENT] select bot error", err)
+		return
+	} else {
+		m.Handle(input, task, leader)
+	}
+	support.Listen("context", func(uuid string, data any) {
+		if _, ok := data.(*action.Context); ok {
+			if worker, _ := m.SelectBot(uuid); worker == nil {
+				log.Println("[AGENT] select bot error", err)
+			} else if worker.UUID != leader.UUID {
+				// task of worker context update
+				// need push context to leader
+			}
+		}
+	})
+	support.Listen("subtask", func(uuid string, data any) {
+
+		switch subtask := data.(type) {
+		case *action.StartSubtask:
+			worker, _ := m.SelectBot(subtask.UUID)
+			log.Println("[SUBTASK] bot", worker.UUID)
+			// leader arrange subtask to worker
+			// need push subtask to worker
+		case *action.QuerySubtask:
+			worker, _ := m.SelectBot(subtask.UUID)
+			log.Println("[SUBTASK] bot", worker.UUID)
+		case *action.AbortSubtask:
+			worker, _ := m.SelectBot(subtask.UUID)
+			log.Println("[SUBTASK] bot", worker.UUID)
+		}
+	})
 }
 
 func (m *Manager) Handle(input action.Input, task *MyTask, bot *MyBot) {
@@ -172,13 +225,13 @@ func (m *Manager) SelectBot(uuid string) (*MyBot, error) {
 	if uuid == "" {
 		uuid = m.CurrentBot()
 	}
-	for _, bot := range m.mybots {
+	for _, bot := range m.agents {
 		if bot.UUID == uuid {
 			return bot, nil
 		}
 	}
-	if uuid == "nobody" && len(m.mybots) > 0 {
-		return m.mybots[0], nil
+	if uuid == "nobody" && len(m.agents) > 0 {
+		return m.agents[0], nil
 	}
 	log.Println("[AGENT] select bot err", uuid)
 	return nil, fmt.Errorf("not found: %s", uuid)
@@ -234,10 +287,10 @@ func (m *Manager) GetExecutor(task *MyTask, bot *MyBot) *Executor {
 	}
 
 	switch bot.UUID {
-	case "master":
-		bot.Type = "master"
+	case AGENT_LEADER:
+		bot.Type = AGENT_LEADER
 	default:
-		bot.Type = "slave"
+		bot.Type = AGENT_WORKER
 	}
 	context.useMemory = m.GetMemory(bot)
 	context.usePrompt = m.GetPrompt(bot)
@@ -278,15 +331,10 @@ func (m *Manager) GetPrompt(bot *MyBot) string {
 		prompt, "${{WORK_PATH}}", bot.Home,
 	)
 	prompt = strings.ReplaceAll(
-		prompt, "${{SELF_BOTS}}",
-		m.buildSelfBots(),
+		prompt, "${{SUBAGENTS}}",
+		m.getSubAgentsInfo(),
 	)
-
-	prompt = strings.ReplaceAll(
-		prompt, "${{SELF_TOOLS}}",
-		m.buildSelfTools(bot),
-	)
-	return m.buildSysInfo(prompt)
+	return m.getSystemInfo(prompt)
 }
 
 func (m *Manager) UsePrompt(bot *MyBot) string {
@@ -296,7 +344,7 @@ func (m *Manager) UsePrompt(bot *MyBot) string {
 		prompt, "${{USER_PROMPT}}", bot.UsePrompt,
 	)
 
-	mcpTools := m.buildMcpTools(bot)
+	mcpTools := m.getMcpToolsInfo(bot)
 	prompt = strings.ReplaceAll(
 		prompt, "${{MCP_TOOLS}}", mcpTools,
 	)
@@ -306,7 +354,7 @@ func (m *Manager) UsePrompt(bot *MyBot) string {
 
 	return prompt
 }
-func (m *Manager) buildSysInfo(prompt string) string {
+func (m *Manager) getSystemInfo(prompt string) string {
 	tag := action.TOOL_RESULT_TAG
 	osName, shell := config.GetShellName()
 	prompt = strings.ReplaceAll(prompt, "${{OS_NAME}}", osName)
@@ -314,10 +362,10 @@ func (m *Manager) buildSysInfo(prompt string) string {
 	return strings.ReplaceAll(prompt, "${{TOOL_RESULT_TAG}}", tag)
 }
 
-func (m *Manager) buildSelfBots() string {
+func (m *Manager) getSubAgentsInfo() string {
 	var result strings.Builder
-	for _, bot := range m.mybots {
-		if bot.Type == "master" {
+	for _, bot := range m.agents {
+		if bot.Type == AGENT_LEADER {
 			continue
 		}
 		result.WriteString(fmt.Sprintf(
@@ -333,36 +381,8 @@ func (m *Manager) buildSelfBots() string {
 	return result.String()
 }
 
-func (m *Manager) buildSelfTools(bot *MyBot) string {
-	if len(bot.Tools) == 0 {
-		return "none"
-	}
-
-	botTools := make(map[string]bool)
-	for _, toolName := range bot.Tools {
-		botTools[toolName] = true
-	}
-
-	var result strings.Builder
-	tools, _ := m.store.LoadTool()
-	for _, tool := range tools {
-		if !botTools[tool.Name] {
-			continue
-		}
-		result.WriteString(fmt.Sprintf(
-			"- **%s** (%s): %s\n",
-			tool.Name, tool.Type, tool.Desc,
-		))
-	}
-
-	if result.Len() == 0 {
-		return "none"
-	}
-	return result.String()
-}
-
-// buildMcpTools 构建MCP工具列表
-func (m *Manager) buildMcpTools(bot *MyBot) string {
+// getMcpToolsInfo 构建MCP工具列表
+func (m *Manager) getMcpToolsInfo(bot *MyBot) string {
 	var prompt strings.Builder
 	mcpServ := amcp.GetMcpService(m.store)
 	servers := mcpServ.ListServers()
@@ -398,14 +418,14 @@ func (m *Manager) buildMcpTools(bot *MyBot) string {
 
 func (m *Manager) RefreshBot(bot *MyBot) {
 	var found bool
-	for idx, item := range m.mybots {
+	for idx, item := range m.agents {
 		if item.UUID == bot.UUID {
 			found = true
-			m.mybots[idx] = bot
+			m.agents[idx] = bot
 		}
 	}
 	if !found {
-		m.mybots = append(m.mybots, bot)
+		m.agents = append(m.agents, bot)
 	}
 }
 
