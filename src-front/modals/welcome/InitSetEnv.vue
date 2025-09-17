@@ -141,7 +141,7 @@ defineExpose({
       </div>
       
       <!-- Installation progress indicator -->
-      <div v-if="pyInstalling" class="installation-progress">
+      <div v-if="pyInstalling" class="progress">
         <div class="progress-spinner">⏳</div>
         <p>{{ $t('welcome.installingPython') }}</p>
         <p class="progress-tip">
@@ -166,9 +166,6 @@ defineExpose({
   color: var(--color-text-secondary);
 }
 
-.env-config-content {
-  /* Use global layout patterns - no custom background needed */
-}
 
 .env-status {
   display: flex;
@@ -176,7 +173,6 @@ defineExpose({
   gap: 15px;
   margin: 0 auto;
   margin-bottom: 20px;
-  max-width: 400px;
 }
 
 .env-item {
@@ -216,8 +212,12 @@ defineExpose({
   background: var(--color-error);
   color: white;
 }
+.progress,
+.env-status {
+  max-width: 400px;
+}
 
-.installation-progress {
+.progress {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -238,7 +238,7 @@ defineExpose({
   to { transform: rotate(360deg); }
 }
 
-.installation-progress p {
+.progress p {
   margin: 0;
   color: var(--color-primary);
   font-weight: 500;

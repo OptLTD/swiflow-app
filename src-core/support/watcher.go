@@ -19,7 +19,6 @@ type FileWatcher struct {
 }
 
 func WatchOutput(name string, stdout io.Reader) {
-	// 跟踪输出到日志
 	go func() {
 		buf := make([]byte, 4096)
 		for {
@@ -29,7 +28,7 @@ func WatchOutput(name string, stdout io.Reader) {
 			}
 			if err != nil {
 				if err != io.EOF {
-					log.Printf("[MCP-STDOUT-ERR] %v", err)
+					log.Printf("[%s] %s", name, err.Error())
 				}
 				break
 			}

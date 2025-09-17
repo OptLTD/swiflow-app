@@ -54,7 +54,7 @@ func (m *McpService) ServerStatus(server *McpServer) error {
 	if toolResult == nil || err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
-	for _, tool := range toolResult.Tools {
+	for _, tool := range toolResult {
 		server.Status.McpTools = append(server.Status.McpTools, tool)
 		server.Status.Checked = append(server.Status.Checked, tool.Name)
 	}
@@ -93,10 +93,10 @@ func (m *McpService) ListTools() []*McpTool {
 
 		if client := NewMcpClient(server); client == nil {
 			continue
-		} else if res, err := client.ListTools(); err != nil {
+		} else if tools, err := client.ListTools(); err != nil {
 			continue
-		} else if res != nil && len(res.Tools) > 0 {
-			allTools = append(allTools, res.Tools...)
+		} else if len(tools) > 0 {
+			allTools = tools
 		}
 	}
 	return allTools

@@ -11,15 +11,37 @@ import (
 
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/duke-git/lancet/v2/structs"
-
-	// "github.com/mark3labs/mcp-go/mcp"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 var CONNECT_TIMEOUT = 30
 var EXECUTE_TIMEOUT = 60
 
-type McpTool = mcp.Tool
+type McpTool struct {
+	Name string `json:"name"`
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]any `json:"_meta,omitempty"`
+	// Optional additional tool information.
+	//
+	// A human-readable description of the tool.
+	//
+	// This can be used by clients to improve the LLM's understanding of available
+	// tools. It can be thought of like a "hint" to the model.
+	Description string `json:"description,omitempty"`
+	// A JSON Schema object defining the expected parameters for the tool.
+	InputSchema *jsonschema.Schema `json:"inputSchema"`
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
+	// An optional JSON Schema object defining the structure of the tool's output
+	// returned in the structuredContent field of a CallToolResult.
+	OutputSchema *jsonschema.Schema `json:"outputSchema,omitempty"`
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood, even by those unfamiliar with domain-specific terminology.
+	// If not provided, Annotations.Title should be used for display if present,
+	// otherwise Name.
+	Title string `json:"title,omitempty"`
+}
 
 type McpStatus struct {
 	// collect error message

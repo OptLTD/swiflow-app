@@ -115,23 +115,26 @@ func (m *DevCommonAbility) ensureLocalBinInPath(command *exec.Cmd) {
 
 func (m *DevCommonAbility) cmdWithSandbox(ctx context.Context, cmd string, args ...string) *exec.Cmd {
 	profile := config.GetStr("SANDBOX_PROFILE", "")
-	if profile != "" && hasWindowsSandbox() {
-		// 只支持单条命令，拼接参数
-		fullCmd := cmd
-		if len(args) > 0 {
-			fullCmd = fullCmd + " " + strings.Join(args, " ")
-		}
-		wsbFile, err := m.genSandboxProfile(m.home, fullCmd)
-		if err == nil {
-			// 启动 WindowsSandbox.exe 并加载配置
-			return exec.CommandContext(ctx, "cmd", "/C", "start", "", "WindowsSandbox.exe", wsbFile)
-		}
-		// 生成失败则降级为无沙箱
-	}
 	command := exec.CommandContext(ctx, cmd, args...)
-	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+
+	if config.GetStr("DEBUG_MODE", "no") == "yes" {
+		fullCmd := strings.TrimSpace(cmd + " " + strings.Join(args, " "))
+		log.Printf("[DEBUG] Creating command: %s", fullCmd)
+	}
+
+	if profile != "" && hasWindowsSandbox() {
+		fullCmd := strings.TrimSpace(cmd + " " + strings.Join(args, " "))
+		if wsbFile, err := m.genSandboxProfile(m.home, fullCmd); err == nil {
+			command = exec.CommandContext(ctx, "cmd", "/C", "start", "WindowsSandbox.exe", wsbFile)
+			if config.GetStr("DEBUG_MODE", "no") == "yes" {
+				log.Printf("[DEBUG] Using Windows Sandbox: cmd /C start WindowsSandbox.exe %s", wsbFile)
+			}
+		}
+	}
+	command.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true, CreationFlags: 0x08000000,
+	}
 	command.Dir = m.home
-	// Ensure local bin directory is in PATH
 	m.ensureLocalBinInPath(command)
 	return command
 }
@@ -211,7 +214,6 @@ func (m *DevCommonAbility) start(command string, logFile ...string) error {
 
 	ctx := context.Background()
 	cmd := m.cmdWithSandbox(ctx, "cmd", "/C", "start /b "+command)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
 	var stdout, stderr bytes.Buffer
 	var logFileHandle *os.File

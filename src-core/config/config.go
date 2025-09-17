@@ -199,7 +199,6 @@ func GetMcpEnv(cmd string) (string, error) {
 	}
 
 	if _, err := os.Stat(localBinPath); err != nil {
-		log.Printf(" %s not found in PATH or ~/.local/bin: %v", localBinPath, err)
 		return "", fmt.Errorf("%s not found in PATH or ~/.local/bin: %w", cmd, err)
 	}
 

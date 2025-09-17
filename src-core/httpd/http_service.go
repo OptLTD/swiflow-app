@@ -76,31 +76,23 @@ func (h *HttpServie) GetMcpEnv() any {
 		Home: config.GetWorkPath(""),
 	}
 	// python env check
-	if data, err := dev.Run(python, 30*time.Second, "-V"); err == nil {
+	if data, err := dev.Run(python, 3*time.Second, "-V"); err == nil {
 		result["python"] = strings.TrimSpace(string(data))
 	}
 	// uvx env check
-	if data, err := dev.Run("uvx", 30*time.Second, "-V"); err == nil {
+	if data, err := dev.Run("uvx", 3*time.Second, "-V"); err == nil {
 		env := strings.TrimSpace(string(data))
 		result["uvx"] = strings.Split(env, "(")[0]
 	}
 
 	// node.js env check
-	if data, err := dev.Run("node", 30*time.Second, "-v"); err == nil {
+	if data, err := dev.Run("node", 3*time.Second, "-v"); err == nil {
 		result["nodejs"] = strings.TrimSpace(string(data))
 	}
 
 	// npx env check
-	if data, err := dev.Run("npx", 30*time.Second, "-v"); err == nil {
+	if data, err := dev.Run("npx", 3*time.Second, "-v"); err == nil {
 		result["npx"] = strings.TrimSpace(string(data))
-	}
-
-	file := ability.FileSystemAbility{
-		Base: config.GetWorkPath(""),
-		Path: "install.lock",
-	}
-	if data, err := file.Read(); err == nil {
-		result["running"] = strings.TrimSpace(string(data))
 	}
 	if config.IsWindows() {
 		result["windows"] = true
@@ -629,4 +621,69 @@ func (h *HttpServie) GetProfile(apiKey string) (map[string]any, error) {
 	}
 	log.Println("[AUTH] user-profile respond:", url, support.ToJson(result))
 	return result, nil
+}
+
+// InitMcpEnvAsync starts the MCP environment installation asynchronously and checks status periodically
+func (h *HttpServie) InitMcpEnvAsync(name string, env string) any {
+	log.Printf("InitMcpEnvAsync started: name=%s, env=%s", name, env)
+
+	// Start the installation process first
+	if err := h.InitMcpEnv(name, env); err != nil {
+		log.Printf("Failed to start MCP environment installation: %v", err)
+		return err
+	}
+
+	// Start asynchronous checking in a goroutine
+	go h.checkMcpEnvPeriodically(name)
+
+	return map[string]any{
+		"status":  "started",
+		"message": "MCP environment installation started, checking every 5 seconds",
+	}
+}
+
+// checkMcpEnvPeriodically checks MCP environment status every 5 seconds for up to 10 minutes
+func (h *HttpServie) checkMcpEnvPeriodically(name string) {
+	const checkInterval = 5 * time.Second
+	const maxDuration = 10 * time.Minute
+	
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+	
+	timeout := time.After(maxDuration)
+	
+	log.Printf("Starting periodic MCP environment check for %s (5s intervals, 10min timeout)", name)
+	
+	for {
+		select {
+		case <-ticker.C:
+			// Check environment status
+			env := h.GetMcpEnv().(map[string]any)
+			
+			// Check if installation is complete based on environment type
+			var isComplete bool
+			if name == "uvx-py" {
+				// For Python environment, check both python and uvx
+				python, hasPython := env["python"]
+				uvx, hasUvx := env["uvx"]
+				isComplete = hasPython && hasUvx && python != "" && uvx != ""
+				log.Printf("Python env check: python=%v, uvx=%v, complete=%v", python, uvx, isComplete)
+			} else if name == "js-npx" {
+				// For Node.js environment, check both nodejs and npx
+				nodejs, hasNodejs := env["nodejs"]
+				npx, hasNpx := env["npx"]
+				isComplete = hasNodejs && hasNpx && nodejs != "" && npx != ""
+				log.Printf("Node.js env check: nodejs=%v, npx=%v, complete=%v", nodejs, npx, isComplete)
+			}
+			
+			if isComplete {
+				log.Printf("MCP environment installation completed successfully for %s", name)
+				return
+			}
+			
+		case <-timeout:
+			log.Printf("MCP environment installation timeout reached (10 minutes) for %s", name)
+			return
+		}
+	}
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.2",
+  "version": "0.7.3",
   "productName": "Swiflow",
   "identifier": "com.option.swiflow",
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
@@ -15,7 +15,7 @@
       {
         "title": "Swiflow",
         "width": 1200,
-        "height": 900,
+        "height": 800,
         "minWidth": 450,
         "minHeight": 560,
         "resizable": true,

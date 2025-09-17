@@ -92,21 +92,20 @@ const canProceed = computed(() => {
 
 const handleSaveApiConfig = async () => {
   try {
-    state.loading = true
-    
-    // Delegate to InitSetKey widget
     if (initSetKeyRef.value?.saveApiConfig) {
-      const success = await initSetKeyRef.value.saveApiConfig()
-      if (success) {
-        state.apiConfigured = true
-        nextStep()
-      }
+      state.loading = true
+      await initSetKeyRef.value.saveApiConfig()
     }
   } catch (err) {
     console.error('API config save error:', err)
   } finally {
     state.loading = false
   }
+}
+
+const handleSaveApiSuccess = () => {
+  state.apiConfigured = true
+  nextStep()
 }
 
 const handleCheckPythonEnv = () => {
@@ -200,7 +199,7 @@ const onCancel = () => {
 
           <!-- API Key mode: Configuration widget -->
           <InitSetKey v-if="state.selectedMode === 'apikey'" 
-            @save="handleSaveApiConfig" ref="initSetKeyRef" 
+            @save="handleSaveApiSuccess" ref="initSetKeyRef" 
           />
         </div>
 

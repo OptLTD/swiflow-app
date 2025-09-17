@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 package amcp
 
 import (
@@ -92,7 +95,7 @@ func (a *McpClient) Initialize() error {
 	return nil
 }
 
-func (a *McpClient) ListTools() (*mcp.ListToolsResult, error) {
+func (a *McpClient) ListTools() ([]*McpTool, error) {
 	log.Println("[MCP] Start List Tools:", a.server.UUID)
 	if a.session == nil {
 		if err := a.Initialize(); err != nil {
@@ -100,7 +103,20 @@ func (a *McpClient) ListTools() (*mcp.ListToolsResult, error) {
 		}
 	}
 	ctx := context.Background()
-	return a.session.ListTools(ctx, &mcp.ListToolsParams{})
+	param := &mcp.ListToolsParams{}
+	result, err := a.session.ListTools(ctx, param)
+	if result == nil || err != nil {
+		return nil, err
+	}
+
+	tools := make([]*McpTool, 0)
+	for _, tool := range result.Tools {
+		tools = append(tools, &McpTool{
+			Name: tool.Name, Meta: tool.Meta,
+			Description: tool.Description,
+		})
+	}
+	return tools, nil
 }
 
 func (a *McpClient) Close() error {

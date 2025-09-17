@@ -153,7 +153,7 @@ const PLATFORM_CONFIGS = {
     },
     buildTags: 'windows',
     ldflags: (version, epigraph) => {
-      return `-X 'main.Version=${version}' -X 'main.Epigraph=${epigraph}' -s -w -H windowsgui`
+      return `-X 'main.Version=${version}' -X 'main.Epigraph=${epigraph}' -s -w` // -H windowsgui
     }
   }
 };

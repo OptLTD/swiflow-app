@@ -11,9 +11,12 @@ import (
 
 	"swiflow/ability"
 	"swiflow/action"
+	"swiflow/agent"
+	"swiflow/amcp"
 	"swiflow/config"
 	"swiflow/httpd"
 	"swiflow/service"
+	"swiflow/storage"
 )
 
 var (
@@ -33,8 +36,66 @@ func main() {
 		service.StartChat(context.Background())
 	case "test":
 		var s = new(httpd.HttpServie)
-		resp := s.InitMcpEnv("uvx-py", "mainland")
-		log.Println("[HTTP] resp error", resp)
+		resp := s.InitMcpEnvAsync("uvx-py", "mainland")
+		log.Println("[HTTP] async installation started:", resp)
+
+		// Initial environment check
+		service := new(httpd.HttpServie)
+		env := service.GetMcpEnv().(map[string]any)
+		if uv, _ := env["uvx"]; uv != "" {
+			log.Println("[HTTP] uvx already available:", uv)
+		}
+		if py, _ := env["python"]; py != "" {
+			log.Println("[HTTP] python already available:", py)
+		}
+
+		// Keep the main process running to observe the periodic checks
+		log.Println("[HTTP] Monitoring installation progress... (Press Ctrl+C to exit)")
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		<-c
+		log.Println("[HTTP] Shutting down...")
+
+	case "test-mcp":
+		// Initialize storage and MCP service for testing
+		if err := config.LoadEnv(); err != nil {
+			log.Println("load env fail:", err)
+		}
+
+		// 设置日志输出路径
+		path := "mcp-debug.txt"
+		mode := os.O_RDWR | os.O_CREATE | os.O_APPEND
+		if file, e := os.OpenFile(path, mode, 0644); e == nil {
+			defer file.Close()
+			log.SetOutput(file)
+		}
+
+		var store storage.MyStore
+		if manager, err := agent.NewManager(); err != nil {
+			panic(err.Error())
+		} else {
+			if store, err = manager.GetStorage(); err != nil {
+				log.Printf("Failed to initialize storage: %v", err)
+				return
+			}
+		}
+
+		service := amcp.GetMcpService(store)
+		server := &amcp.McpServer{
+			UUID: "pdf-reader", Name: "pdf-reader",
+			Type: "debug", Cmd: "uvx",
+			Args: []string{"mcp-pdf-reader"},
+		}
+		// new mcp test - server exists
+		if err := service.QueryServer(server, 1); err != nil {
+			log.Printf("Server not existed: %v", server.Name)
+			return
+		}
+		if err := service.ServerStatus(server); err != nil {
+			log.Printf("Status error: %v", err)
+			return
+		}
+		log.Printf("MCP test successfully. Server status: %+v", server.Status)
 	case "debug":
 		if err := config.LoadEnv(); err != nil {
 			log.Println("load env fail:", err)
