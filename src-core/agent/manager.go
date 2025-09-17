@@ -61,7 +61,7 @@ func (m *Manager) Initial() (err error) {
 		}
 		m.store.SaveCfg(epigraph)
 	}
-	if err := m.InitConfig(); err != nil {
+	if err = m.InitConfig(); err != nil {
 		log.Println("[AGENT] init cfg error", err)
 	}
 	if m.mybots, err = m.store.LoadBot(); err == nil {
@@ -510,7 +510,7 @@ func (m *Manager) InitStorage() (Store, error) {
 	// handle migrate
 	switch strings.ToLower(kind) {
 	case "sqlite", "mysql":
-		if _, err := store.LoadCfg(); err != nil {
+		if _, err = store.LoadCfg(); err != nil {
 			if strings.Contains(err.Error(), "no such table") {
 				needUpgrade = true
 			}
