@@ -23,13 +23,13 @@ The `src-core` module is written in Go and serves as the backend server for the 
 - **`agent/`** - AI agent management
 - **`config/`** - Configuration management
 - **`entity/`** - Data models and entities
+- **`entry/`**  - Business logic entry
 - **`errors/`** - Custom error types
 - **`httpd/`** - HTTP server implementation
-- **`initial/`** - Initialization and setup
 - **`model/`** - Data models and database operations
-- **`service/`** - Business logic services
 - **`storage/`** - Data storage abstractions
 - **`support/`** - Utility functions and helpers
+- **`initial/`** - Initialization and setup
 
 ## Development
 

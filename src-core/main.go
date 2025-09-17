@@ -11,12 +11,9 @@ import (
 
 	"swiflow/ability"
 	"swiflow/action"
-	"swiflow/agent"
-	"swiflow/amcp"
 	"swiflow/config"
+	"swiflow/entry"
 	"swiflow/httpd"
-	"swiflow/service"
-	"swiflow/storage"
 )
 
 var (
@@ -33,7 +30,7 @@ func main() {
 		if err := config.LoadEnv(); err != nil {
 			log.Println("load env fail:", err)
 		}
-		service.StartChat(context.Background())
+		entry.StartChat(context.Background())
 	case "test":
 		var s = new(httpd.HttpServie)
 		resp := s.InitMcpEnvAsync("uvx-py", "mainland")
@@ -56,46 +53,6 @@ func main() {
 		<-c
 		log.Println("[HTTP] Shutting down...")
 
-	case "test-mcp":
-		// Initialize storage and MCP service for testing
-		if err := config.LoadEnv(); err != nil {
-			log.Println("load env fail:", err)
-		}
-
-		// 设置日志输出路径
-		path := "mcp-debug.txt"
-		mode := os.O_RDWR | os.O_CREATE | os.O_APPEND
-		if file, e := os.OpenFile(path, mode, 0644); e == nil {
-			defer file.Close()
-			log.SetOutput(file)
-		}
-
-		var store storage.MyStore
-		if manager, err := agent.NewManager(); err != nil {
-			panic(err.Error())
-		} else {
-			if store, err = manager.GetStorage(); err != nil {
-				log.Printf("Failed to initialize storage: %v", err)
-				return
-			}
-		}
-
-		service := amcp.GetMcpService(store)
-		server := &amcp.McpServer{
-			UUID: "pdf-reader", Name: "pdf-reader",
-			Type: "debug", Cmd: "uvx",
-			Args: []string{"mcp-pdf-reader"},
-		}
-		// new mcp test - server exists
-		if err := service.QueryServer(server, 1); err != nil {
-			log.Printf("Server not existed: %v", server.Name)
-			return
-		}
-		if err := service.ServerStatus(server); err != nil {
-			log.Printf("Status error: %v", err)
-			return
-		}
-		log.Printf("MCP test successfully. Server status: %+v", server.Status)
 	case "debug":
 		if err := config.LoadEnv(); err != nil {
 			log.Println("load env fail:", err)
@@ -143,8 +100,8 @@ func main() {
 				log.SetOutput(file)
 			}
 		}
-		go service.StartWebServer("127.0.0.1:11235")
-		go service.StartSchedule(context.Background())
+		go entry.StartWebServer("127.0.0.1:11235")
+		go entry.StartSchedule(context.Background())
 		// 监听中断信号（Ctrl+C 或 kill）
 		stopChan := make(chan os.Signal, 1)
 		signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
@@ -155,18 +112,12 @@ func main() {
 			context.Background(), 5*time.Second,
 		)
 		defer cancel()
-		if err := service.StopWebServer(ctx); err != nil {
+		if err := entry.StopWebServer(ctx); err != nil {
 			log.Println("Server shutdown:", err)
 		} else {
 			log.Println("Server stopped gracefully")
 		}
-	case "schedule":
-		if err := config.LoadEnv(); err != nil {
-			log.Println("load env fail:", err)
-		}
-		service.StartSchedule(context.Background())
 	default:
-		log.Println("current env", os.Environ())
 		log.Println("nice to meet you~", *desc)
 	}
 }

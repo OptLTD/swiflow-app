@@ -1,0 +1,5 @@
+package entry
+
+func StartWork() {
+
+}

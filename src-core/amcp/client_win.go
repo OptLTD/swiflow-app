@@ -85,7 +85,7 @@ func (a *McpClient) Initialize() error {
 		return fmt.Errorf("启动MCP客户端失败: %v", err)
 	} else {
 		a.client = mcpClient
-		log.Println("[MCP] SUCCESS: %v", res.Result)
+		log.Println("[MCP] SUCCESS: %w", res.Result)
 	}
 	return nil
 }
