@@ -142,10 +142,10 @@ func TestManager_GetPrompt(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建 Manager 实例
 			m := &Manager{
-				store:  tt.store,
-				agents: tt.store.GetBots(),
-				config: make(map[string]any),
-				active: make(map[string]*Executor),
+				store:     tt.store,
+				workers:   tt.store.GetBots(),
+				configs:   make(map[string]any),
+				executors: make(map[string]*Executor),
 			}
 
 			// 调用 GetPrompt 方法
@@ -221,7 +221,7 @@ func TestManager_buildSelfBots(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &Manager{
-				agents: tt.myBots,
+				workers: tt.myBots,
 			}
 
 			got := m.getSubAgentsInfo()
@@ -303,10 +303,10 @@ func TestManager_GetPrompt_Logic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建 Manager 实例
 			m := &Manager{
-				store:  tt.store,
-				agents: tt.store.GetBots(),
-				config: make(map[string]any),
-				active: make(map[string]*Executor),
+				store:     tt.store,
+				workers:   tt.store.GetBots(),
+				configs:   make(map[string]any),
+				executors: make(map[string]*Executor),
 			}
 
 			// 调用 GetPrompt 方法

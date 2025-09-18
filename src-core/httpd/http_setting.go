@@ -226,7 +226,7 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	h.manager.RefreshBot(bot)
+	h.manager.ResetWorker(bot)
 	JsonResp(w, bot.ToMap())
 }
 func (h *SettingHandler) NewMcp(w http.ResponseWriter, r *http.Request) {
@@ -339,7 +339,7 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 			task := &entity.TaskEntity{
 				UUID: uuid, Name: uuid,
 			}
-			bot, _ := h.manager.SelectBot(uuid)
+			bot, _ := h.manager.GetWorker(uuid)
 			executor := h.manager.LoadExecutor(task, bot)
 			if err = executor.Terminate(); err != nil {
 				log.Println("query status error", err)

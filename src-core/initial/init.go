@@ -27,6 +27,7 @@ var basic = []string{
 var leader = []string{
 	"basic-tools",
 	"file-system",
+	"use-subagent",
 }
 
 // worker 拥有实战能力

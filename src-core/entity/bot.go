@@ -27,6 +27,9 @@ type BotEntity struct {
 	// Bot Memories
 	Memories []MemEntity `json:"-" gorm:"foreignKey:Bot;references:UUID"`
 
+	// Use Mcp Servers
+	McpServers map[string]any `json:"-" gorm:"-"`
+
 	gorm.Model `json:"-"`
 }
 

@@ -70,7 +70,7 @@ func (fw *FileWatcher) Start() error {
 	}
 
 	fw.active = true
-	log.Printf("[FILE] start watch: %s, 任务ID: %s", fw.path, fw.taskID)
+	log.Printf("[FILE] start watch: %s, task: %s", fw.path, fw.taskID)
 
 	// 启动监控协程
 	go fw.watchLoop()
@@ -86,7 +86,7 @@ func (fw *FileWatcher) Stop() {
 
 	fw.active = false
 	fw.watcher.Close()
-	log.Printf("[FILE] stop watch: %s, 任务ID: %s", fw.path, fw.taskID)
+	log.Printf("[FILE] stop watch: %s, task: %s", fw.path, fw.taskID)
 }
 
 // 监控循环

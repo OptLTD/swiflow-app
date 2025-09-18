@@ -220,11 +220,11 @@ func (msg *SuperAction) Hash() []string {
 			identifier = act.XMLName.Local + ":" + act.Session
 		// Subtask
 		case *StartSubtask:
-			identifier = act.XMLName.Local + ":" + act.Name + ":" + act.Task
+			identifier = act.XMLName.Local + ":" + act.SubAgent
 		case *QuerySubtask:
-			identifier = act.XMLName.Local + ":" + act.Name + ":" + act.Type
+			identifier = act.XMLName.Local + ":" + act.SubAgent
 		case *AbortSubtask:
-			identifier = act.XMLName.Local + ":" + act.Name + ":" + act.Reason
+			identifier = act.XMLName.Local + ":" + act.SubAgent
 		// MCP工具
 		case *UseMcpTool:
 			identifier = act.XMLName.Local + ":" + act.Server + ":" + act.Tool

@@ -1,15 +1,20 @@
 package entry
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"swiflow/action"
 	"swiflow/agent"
+	"swiflow/amcp"
+	"swiflow/config"
 	"swiflow/entity"
 	"swiflow/support"
+	"syscall"
 )
 
 // StartWork initializes and runs agents from the specified directory
@@ -22,7 +27,7 @@ func StartWork(path string) {
 	}
 
 	// Ensure path is absolute
-	var workDir, agentDir = "", ""
+	var workDir, taskContent = "", ""
 	if absPath, err := filepath.Abs(path); err != nil {
 		log.Printf("[WORKER] Error: failed to get absolute path for %s: %v", path, err)
 		return
@@ -33,23 +38,17 @@ func StartWork(path string) {
 		workDir = absPath
 	}
 
-	// Look for .agent directory
-	agentDir = filepath.Join(workDir, ".agent")
-	if _, err := os.Stat(agentDir); os.IsNotExist(err) {
-		log.Printf("[WORKER] Error: .agent directory not found in %s", workDir)
-		return
-	}
-
 	// Read task description from task.md
-	taskFile := filepath.Join(agentDir, "task.md")
-	taskContent, err := readFileContent(taskFile)
-	if err != nil {
+	taskFile := filepath.Join(workDir, "task.md")
+	if data, err := readFileContent(taskFile); err != nil {
 		log.Printf("[WORKER] Warning: failed to read task.md: %v", err)
 		taskContent = "No task description provided"
+	} else {
+		taskContent = data
 	}
 
 	// Discover agents in .agent directory
-	agents, err := discoverAgents(agentDir)
+	agents, err := discoverAgents(workDir)
 	if err != nil || len(agents) == 0 {
 		log.Printf("[WORKER] Error: failed to discover agents: %v", err)
 		return
@@ -57,31 +56,80 @@ func StartWork(path string) {
 
 	// Initialize agent manager
 	var manager *agent.Manager
-	if manager = agent.FromAgents(agents); manager == nil {
-		log.Printf("[WORKER] Error: failed to initialize agent manager")
+	manager, err = agent.FromAgents(agents)
+	if err != nil || manager == nil {
+		log.Printf("[WORKER] Error: failed to initialize agent manager: %v", err)
 		return
+	}
+
+	store, err := manager.GetStorage()
+	mcpServ := amcp.GetMcpService(store)
+	for _, agent := range agents {
+		go mcpServ.LoadMcpServer(agent.McpServers)
 	}
 
 	// Create task with unique ID
 	taskUUID, _ := support.UniqueID()
-	bot, err := manager.SelectBot("leader")
 	task, err := manager.InitTask("Agent Work: Demo", taskUUID)
 	if err != nil {
 		log.Printf("[WORKER] Error: failed to initialize task: %v", err)
 		return
+	} else {
+		msgDir := filepath.Join(workDir, ".msgs")
+		config.Set("DEBUG_MODE", "yes")
+		config.Set("DEBUG_PATH", msgDir)
 	}
-
-	// Set task working directory
-	task.Home = workDir
 
 	log.Printf("[WORKER] Task: %s", taskContent)
 	input := &action.UserInput{Content: taskContent}
-	go manager.Handle(input, task, bot)
+
+	// Create channels for task completion and signal handling
+	taskDone := make(chan bool, 1)
+	sigChan := make(chan os.Signal, 1)
+
+	// Register signal handler for Ctrl+C (SIGINT) and SIGTERM
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Listen for task completion event
+	support.Listen("complete", func(uuid string, data any) {
+		if uuid == taskUUID {
+			log.Printf("[WORKER] Task %s completed via event", taskUUID)
+			select {
+			case taskDone <- true:
+			default: // Non-blocking send in case channel is already closed
+			}
+		}
+	})
+
+	leader, err := manager.GetWorker("leader-office")
+	if err != nil || leader == nil {
+		log.Println("[AGENT] get worker error", err)
+		return
+	}
+
+	// Start the task execution
+	manager.Start(input, task, leader)
+
+	// Wait for either task completion or interrupt signal
+	select {
+	case <-taskDone:
+		log.Printf("[WORKER] Task %s completed successfully", taskUUID)
+	case sig := <-sigChan:
+		log.Printf("[WORKER] Received signal %v, shutting down gracefully...", sig)
+		log.Printf("[WORKER] Task %s interrupted by user", taskUUID)
+	}
 }
 
 // discoverAgents finds all .md files in the .agent directory
-func discoverAgents(agentDir string) ([]*entity.BotEntity, error) {
+func discoverAgents(workDir string) ([]*entity.BotEntity, error) {
 	var agents []*entity.BotEntity
+
+	// Look for .agent directory
+	agentDir := filepath.Join(workDir, ".agent")
+	if _, err := os.Stat(agentDir); os.IsNotExist(err) {
+		log.Printf("[WORKER] Error: .agent directory not found in %s", workDir)
+		return agents, fmt.Errorf(".agent directory not found in: %v", workDir)
+	}
 
 	var err error
 	var files []os.DirEntry
@@ -108,13 +156,43 @@ func discoverAgents(agentDir string) ([]*entity.BotEntity, error) {
 		}
 
 		// Extract agent name from filename (remove .md extension)
-		agentName := strings.TrimSuffix(file.Name(), ".md")
-		agents = append(agents, &entity.BotEntity{
-			Name: agentName, UUID: agentName,
-			Home: agentDir, SysPrompt: content,
-		})
-	}
+		name := strings.TrimSuffix(file.Name(), ".md")
+		info := &entity.BotEntity{
+			Name: name, UUID: name,
+			Home: workDir, SysPrompt: content,
+		}
+		if strings.HasPrefix(name, "leader-") {
+			info.Type = agent.AGENT_LEADER
+		} else {
+			info.Type = agent.AGENT_WORKER
+		}
 
+		jsonPath := strings.Replace(agentPath, ".md", ".json", 1)
+		if data, err := os.ReadFile(jsonPath); err == nil {
+			var value = map[string]any{}
+			json.Unmarshal(data, &value)
+			for key, val := range value {
+				switch key {
+				case "name":
+					info.Name, _ = val.(string)
+				case "desc":
+					info.Desc, _ = val.(string)
+				case "mcp", "servers", "mcpServers":
+					// 如果有mcps，Tools为[uuid:*]格式
+					if mcps, _ := val.(map[string]any); len(mcps) > 0 {
+						tools := make([]string, 0, len(mcps))
+						for uuid := range mcps {
+							tools = append(tools, uuid+":*")
+						}
+						info.Tools = tools
+						info.McpServers = mcps
+					}
+				}
+			}
+		}
+
+		agents = append(agents, info)
+	}
 	return agents, nil
 }
 

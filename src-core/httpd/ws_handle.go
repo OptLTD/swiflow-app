@@ -59,10 +59,10 @@ func (m *WebSocketHandler) OnMessage(msg *socketInput) *socketInput {
 		}
 	}
 
-	currBot := config.GetStr("ACTIVE_BOT", "")
-	bot, err := m.manager.SelectBot(currBot)
-	if err != nil || bot == nil {
-		support.Emit("errors", "", "get bot error")
+	uuid := config.GetStr("USE_WORKER", "")
+	worker, err := m.manager.GetWorker(uuid)
+	if err != nil || worker == nil {
+		support.Emit("errors", "", "get worker error")
 		return msg
 	}
 
@@ -70,7 +70,7 @@ func (m *WebSocketHandler) OnMessage(msg *socketInput) *socketInput {
 	if yes, _ := detail["newTask"].(string); yes == "yes" {
 		task, err = m.manager.InitTask(input.Content, msg.ChatID)
 	} else if strings.HasPrefix(msg.ChatID, "#debug#") {
-		bot = convertor.DeepClone(bot)
+		worker = convertor.DeepClone(worker)
 		task, err = m.manager.NewMcpTask(msg.ChatID)
 	} else {
 		task, err = m.manager.QueryTask(msg.ChatID)
@@ -80,7 +80,7 @@ func (m *WebSocketHandler) OnMessage(msg *socketInput) *socketInput {
 		return msg
 	}
 
-	go m.manager.Handle(input, task, bot)
+	go m.manager.Handle(input, task, worker)
 	return msg
 }
 

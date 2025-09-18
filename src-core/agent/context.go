@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"swiflow/action"
 	"swiflow/config"
@@ -18,8 +19,8 @@ type Context struct {
 	usePrompt string
 	useMemory string
 
-	bot  *storage.BotEntity
-	task *storage.TaskEntity
+	worker *Worker
+	mytask *MyTask
 
 	store storage.MyStore
 }
@@ -41,7 +42,7 @@ func (r *Context) GetRole(op string) string {
 	}
 }
 func (r *Context) TaskContext() string {
-	return r.task.Context
+	return r.mytask.Context
 }
 
 func (r *Context) ParseMsgs(msgs []*MyMsg) []*action.SuperAction {
@@ -81,7 +82,7 @@ func (r *Context) ParseMsgs(msgs []*MyMsg) []*action.SuperAction {
 
 func (r *Context) GetMsgs(count int) []*model.Message {
 	messages := make([]*model.Message, 0)
-	msgs, _ := r.store.LoadMsg(r.task)
+	msgs, _ := r.store.LoadMsg(r.mytask)
 	for i := 0; i < len(msgs); i++ {
 		if count > 0 && i+count <= len(msgs) {
 			continue
@@ -119,36 +120,34 @@ func (r *Context) GetContext() []*model.Message {
 }
 
 func (r *Context) GetSubject() string {
-	return r.task.Name
+	return r.mytask.Name
 }
 
 func (r *Context) DebugCall(op string, msgs []*model.Message) {
-	log.Println("[EXEC]", r.bot.Name, r.task.UUID, op)
+	log.Println("[EXEC]", r.worker.Name, r.mytask.UUID, op)
 	if config.GetStr("DEBUG_MODE", "no") != "yes" {
 		return
 	}
 
-	var p strings.Builder
 	var s strings.Builder
 	for i, msg := range msgs {
 		if i == 0 {
-			p.WriteString(msg.Content)
 			continue
 		}
 		s.WriteString("<--- " + msg.Role + " --->")
 		s.WriteString("\n" + msg.Content + "\n\n")
 	}
-
-	history := config.GetWorkPath(r.bot.UUID + ".xml")
+	path := config.GetStr("DEBUG_PATH", config.GetWorkHome())
+	history := filepath.Join(path, r.worker.UUID+".xml")
 	fileutil.WriteStringToFile(history, s.String(), false)
 
-	prompt := config.GetWorkPath(r.bot.UUID + ".md")
-	fileutil.WriteStringToFile(prompt, p.String(), false)
+	prompt := filepath.Join(path, r.worker.UUID+".md")
+	fileutil.WriteStringToFile(prompt, r.usePrompt, false)
 }
 
 func (r *Context) Memorize(act *action.Memorize) error {
 	mem := &entity.MemEntity{
-		Bot: r.bot.UUID, Type: "chat",
+		Bot: r.worker.UUID, Type: "chat",
 		Subject: act.Subject,
 		Content: act.Content,
 	}
@@ -157,14 +156,14 @@ func (r *Context) Memorize(act *action.Memorize) error {
 
 func (r *Context) Annotate(act *action.Annotate) error {
 	if act.Subject != "" {
-		r.task.Name = act.Subject
+		r.mytask.Name = act.Subject
 	}
-	r.task.Context = act.Context
+	r.mytask.Context = act.Context
 	return nil
 }
 
 func (r *Context) WaitTodo(act *action.WaitTodo) (err error) {
-	todo := &entity.TodoEntity{UUID: act.UUID, Task: r.task.UUID}
+	todo := &entity.TodoEntity{UUID: act.UUID, Task: r.mytask.UUID}
 	if act.UUID == "" && (act.Time == "" || act.Todo == "") {
 		return fmt.Errorf("error: wrong wait-todo format")
 	}
@@ -195,9 +194,9 @@ func (r *Context) WaitTodo(act *action.WaitTodo) (err error) {
 }
 
 func (r *Context) SetState(state string) error {
-	r.task.State = state
-	support.Emit("control", r.task.UUID, state)
-	if err := r.store.SaveTask(r.task); err != nil {
+	r.mytask.State = state
+	support.Emit("control", r.mytask.UUID, state)
+	if err := r.store.SaveTask(r.mytask); err != nil {
 		return fmt.Errorf("save state error: %v", err)
 	}
 	return nil

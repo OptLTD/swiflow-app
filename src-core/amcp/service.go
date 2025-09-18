@@ -160,7 +160,7 @@ func (m *McpService) DisableServer(server *McpServer) error {
 
 // LoadMcpServer: 合并mcps配置到服务，并返回所有tools key（uuid:name）
 func (m *McpService) LoadMcpServer(mcps map[string]any) {
-	if mcps == nil {
+	if len(mcps) == 0 {
 		return
 	}
 	exist := map[string]*McpServer{}

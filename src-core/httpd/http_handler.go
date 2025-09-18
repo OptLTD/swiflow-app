@@ -104,7 +104,7 @@ func (h *HttpHandler) ToolEnv(w http.ResponseWriter, r *http.Request) {
 
 func (h *HttpHandler) Launch(w http.ResponseWriter, r *http.Request) {
 	uuid := r.URL.Query().Get("uuid")
-	bot, err := h.manager.QueryBot(uuid)
+	bot, err := h.manager.QueryWorker(uuid)
 	if bot == nil || err != nil {
 		err = fmt.Errorf("找不到 Bot: %v", err)
 		if err = JsonResp(w, err); err != nil {
@@ -138,7 +138,7 @@ func (h *HttpHandler) Launch(w http.ResponseWriter, r *http.Request) {
 
 func (h *HttpHandler) Browser(w http.ResponseWriter, r *http.Request) {
 	uuid := r.URL.Query().Get("uuid")
-	bot, err := h.manager.QueryBot(uuid)
+	bot, err := h.manager.QueryWorker(uuid)
 	if bot == nil || err != nil {
 		JsonResp(w, err)
 		return
@@ -193,7 +193,7 @@ func (h *HttpHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		JsonResp(w, fmt.Errorf("找不到任务: %v", err))
 		return
 	}
-	bot, err := h.manager.QueryBot(task.Bots)
+	bot, err := h.manager.QueryWorker(task.Bots)
 	if bot == nil || err != nil {
 		JsonResp(w, fmt.Errorf("找不到Bot: %v", err))
 		return
@@ -271,7 +271,7 @@ func (h *HttpHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		JsonResp(w, fmt.Errorf("error upload data"))
 		return
 	}
-	bot, err := h.manager.QueryBot(uuid)
+	bot, err := h.manager.QueryWorker(uuid)
 	if bot == nil || err != nil {
 		err = fmt.Errorf("找不到 Bot: %v", err)
 		if err = JsonResp(w, err); err != nil {

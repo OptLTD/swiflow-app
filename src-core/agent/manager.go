@@ -19,44 +19,53 @@ import (
 )
 
 type Store = storage.MyStore
-type MyBot = entity.BotEntity
 type MyMsg = entity.MsgEntity
 type MyTask = entity.TaskEntity
-type MyInput = action.UserInput
+type Worker = entity.BotEntity
 type Payload = action.Payload
 
 type Manager struct {
 	store Store
 
-	agents []*MyBot
-	config map[string]any
-	active map[string]*Executor
+	workers []*Worker
+	configs map[string]any
+
+	executors map[string]*Executor
+	subagents map[string]*SubAgent
 }
 
-func FromAgents(agents []*MyBot) *Manager {
+func FromAgents(agents []*Worker) (*Manager, error) {
 	m := &Manager{}
 	// init storage
-	m.agents = agents
-	m.store, _ = m.InitStorage()
-	m.config = map[string]any{}
-	m.active = map[string]*Executor{}
+	m.workers = agents
+	store, err := m.InitStorage()
+	if err != nil || store == nil {
+		log.Println("[AGENT] init store error", err)
+		return nil, fmt.Errorf("init store error: %v", err)
+	} else {
+		m.store = store
+	}
+	m.configs = map[string]any{}
+	m.executors = map[string]*Executor{}
+	m.subagents = map[string]*SubAgent{}
 
 	provider := config.Get("SWIFLOW_PROVIDER")
 	name, model, _ := strings.Cut(provider, "@")
-	m.config[entity.KEY_USE_MODEL] = map[string]any{
+	m.configs[entity.KEY_USE_MODEL] = map[string]any{
 		"provider": name, "useModel": model,
 		"apiUrl": config.Get("SWIFLOW_API_URL"),
 		"apiKey": config.Get("SWIFLOW_API_KEY"),
 	}
-	return m
+	return m, nil
 }
 
 func NewManager() (*Manager, error) {
 	m := &Manager{}
 
 	// init storage
-	m.config = map[string]any{}
-	m.active = map[string]*Executor{}
+	m.configs = map[string]any{}
+	m.executors = map[string]*Executor{}
+	m.subagents = map[string]*SubAgent{}
 	store, err := m.InitStorage()
 	if err != nil || store == nil {
 		log.Println("[AGENT] init store error", err)
@@ -82,56 +91,55 @@ func (m *Manager) Initial() (err error) {
 	if err = m.InitConfig(); err != nil {
 		log.Println("[AGENT] init cfg error", err)
 	}
-	if m.agents, err = m.store.LoadBot(); err == nil {
+	if m.workers, err = m.store.LoadBot(); err == nil {
 		return nil
 	}
-	log.Println("[AGENT] init bot error", err)
-	return fmt.Errorf("init bot error: %v", err)
+	log.Println("[AGENT] init worker error", err)
+	return fmt.Errorf("init worker error: %v", err)
 }
-func (m *Manager) Start(input action.Input, task *MyTask) {
-	leader, err := m.SelectBot("leader")
-	if err != nil {
-		log.Println("[AGENT] select bot error", err)
-		return
-	} else {
-		m.Handle(input, task, leader)
-	}
-	support.Listen("context", func(uuid string, data any) {
-		if _, ok := data.(*action.Context); ok {
-			if worker, _ := m.SelectBot(uuid); worker == nil {
-				log.Println("[AGENT] select bot error", err)
-			} else if worker.UUID != leader.UUID {
-				// task of worker context update
-				// need push context to leader
+func (m *Manager) Start(input action.Input, task *MyTask, leader *Worker) {
+	support.Listen("subtask", func(tid string, data any) {
+		// Get subagent instance for the task
+		switch act := data.(type) {
+		case *action.StartSubtask:
+			subagent := m.GetSubAgent(
+				act.SubAgent, leader, task,
+			)
+			subagent.OnStart(act)
+		case *action.AbortSubtask:
+			subagent := m.GetSubAgent(
+				act.SubAgent, leader, task,
+			)
+			subagent.OnAbort(act)
+		}
+	})
+
+	support.Listen("complete", func(tid string, data any) {
+		if act, ok := data.(*action.Complete); ok {
+			var subagent *SubAgent
+			for _, item := range m.subagents {
+				if item.mytask.UUID == tid {
+					subagent = item
+				}
+			}
+			// complete
+			if subagent != nil {
+				subagent.OnComplete(act)
 			}
 		}
 	})
-	support.Listen("subtask", func(uuid string, data any) {
 
-		switch subtask := data.(type) {
-		case *action.StartSubtask:
-			worker, _ := m.SelectBot(subtask.UUID)
-			log.Println("[SUBTASK] bot", worker.UUID)
-			// leader arrange subtask to worker
-			// need push subtask to worker
-		case *action.QuerySubtask:
-			worker, _ := m.SelectBot(subtask.UUID)
-			log.Println("[SUBTASK] bot", worker.UUID)
-		case *action.AbortSubtask:
-			worker, _ := m.SelectBot(subtask.UUID)
-			log.Println("[SUBTASK] bot", worker.UUID)
-		}
-	})
+	go m.Handle(input, task, leader)
 }
 
-func (m *Manager) Handle(input action.Input, task *MyTask, bot *MyBot) {
+func (m *Manager) Handle(input action.Input, task *MyTask, worker *Worker) {
 	var executor *Executor
-	if e := m.LoadExecutor(task, bot); e != nil {
+	if e := m.LoadExecutor(task, worker); e != nil {
 		executor = e
 	}
 
 	if strings.HasPrefix(task.UUID, "#debug#") {
-		bot.UUID, bot.Type = task.Name, "debug"
+		worker.UUID, worker.Type = task.Name, "debug"
 		mcpServ := amcp.GetMcpService(m.store)
 		server := &amcp.McpServer{UUID: task.Name}
 		if err := mcpServ.QueryServer(server); err != nil {
@@ -149,9 +157,9 @@ func (m *Manager) Handle(input action.Input, task *MyTask, bot *MyBot) {
 			}
 		}
 
-		executor.context.usePrompt = m.GetPrompt(bot)
+		executor.context.usePrompt = m.GetPrompt(worker)
 		executor.context.store = mcpServ.GetMockStore()
-		log.Println("[AGENT] bot name", bot.UUID, bot.Type)
+		log.Println("[AGENT] worker", worker.UUID, worker.Type)
 		log.Println("[AGENT] prompt", executor.context.usePrompt)
 	}
 
@@ -160,7 +168,7 @@ func (m *Manager) Handle(input action.Input, task *MyTask, bot *MyBot) {
 		return
 	}
 	if executor.modelClient == nil {
-		if cfg := m.GetLLMConfig(bot.Provider); cfg == nil {
+		if cfg := m.GetLLMConfig(worker.Provider); cfg == nil {
 			support.Emit("errors", task.UUID, "no model avalible")
 			return
 		} else {
@@ -177,7 +185,7 @@ func (m *Manager) InitTask(name string, uuid string) (*MyTask, error) {
 		uuid, _ = support.UniqueID()
 	}
 	task := &MyTask{
-		UUID: uuid, Bots: m.CurrentBot(),
+		UUID: uuid, Bots: m.CurrentWorker(),
 		Name: support.Substring(name, 20),
 	}
 
@@ -210,30 +218,30 @@ func (m *Manager) QueryTask(uuid string) (*MyTask, error) {
 	return task, nil
 }
 
-func (m *Manager) QueryBot(uuid string) (*MyBot, error) {
-	var bot = &MyBot{UUID: uuid}
-	if err := m.store.FindBot(bot); err != nil {
+func (m *Manager) QueryWorker(uuid string) (*Worker, error) {
+	var worker = &Worker{UUID: uuid}
+	if err := m.store.FindBot(worker); err != nil {
 		log.Println("[AGENT] find bot err:", uuid, err)
 		return nil, err
 	}
-	baseHome := config.GetWorkPath(bot.UUID)
-	bot.Home = support.Or(bot.Home, baseHome)
-	return bot, nil
+	baseHome := config.GetWorkPath(worker.UUID)
+	worker.Home = support.Or(worker.Home, baseHome)
+	return worker, nil
 }
 
-func (m *Manager) SelectBot(uuid string) (*MyBot, error) {
+func (m *Manager) GetWorker(uuid string) (*Worker, error) {
 	if uuid == "" {
-		uuid = m.CurrentBot()
+		uuid = m.CurrentWorker()
 	}
-	for _, bot := range m.agents {
-		if bot.UUID == uuid {
-			return bot, nil
+	for _, worker := range m.workers {
+		if worker.UUID == uuid {
+			return worker, nil
 		}
 	}
-	if uuid == "nobody" && len(m.agents) > 0 {
-		return m.agents[0], nil
+	if uuid == "nobody" && len(m.workers) > 0 {
+		return m.workers[0], nil
 	}
-	log.Println("[AGENT] select bot err", uuid)
+	log.Println("[AGENT] get worker err", uuid)
 	return nil, fmt.Errorf("not found: %s", uuid)
 }
 
@@ -242,11 +250,11 @@ func (m *Manager) GetLLMConfig(name string) *model.LLMConfig {
 	cfg := &model.LLMConfig{}
 	provider := strings.ToLower(name)
 	if provider != "" {
-		val, _ := m.config[provider]
+		val, _ := m.configs[provider]
 		data, _ = val.(map[string]any)
 	}
 	if provider == "" || len(data) == 0 {
-		val, _ := m.config[entity.KEY_USE_MODEL]
+		val, _ := m.configs[entity.KEY_USE_MODEL]
 		data, _ = val.(map[string]any)
 	}
 	if len(data) == 0 {
@@ -264,15 +272,15 @@ func (m *Manager) GetLLMConfig(name string) *model.LLMConfig {
 	return cfg
 }
 
-func (m *Manager) GetExecutor(task *MyTask, bot *MyBot) *Executor {
-	baseHome := config.GetWorkPath(bot.UUID)
-	bot.Home = support.Or(bot.Home, baseHome)
+func (m *Manager) GetExecutor(task *MyTask, worker *Worker) *Executor {
+	baseHome := config.GetWorkPath(worker.UUID)
+	worker.Home = support.Or(worker.Home, baseHome)
 	payload := &Payload{
 		UUID: task.UUID, Time: time.Now(),
-		Home: bot.Home, Path: task.Home,
+		Home: worker.Home, Path: task.Home,
 	}
 	context := &Context{
-		bot: bot, task: task,
+		worker: worker, mytask: task,
 		store: m.store,
 	}
 	executor := &Executor{
@@ -280,41 +288,56 @@ func (m *Manager) GetExecutor(task *MyTask, bot *MyBot) *Executor {
 		context: context,
 		payload: payload,
 	}
-	if cfg := m.GetLLMConfig(bot.Provider); cfg != nil {
+	if cfg := m.GetLLMConfig(worker.Provider); cfg != nil {
 		cfg.TaskId = task.UUID
 		c := model.GetClient(cfg)
 		executor.modelClient = c
 	}
 
-	switch bot.UUID {
-	case AGENT_LEADER:
-		bot.Type = AGENT_LEADER
+	switch worker.Type {
+	case AGENT_DEBUG, AGENT_BASIC:
+	case AGENT_LEADER, AGENT_WORKER:
 	default:
-		bot.Type = AGENT_WORKER
+		worker.Type = AGENT_WORKER
 	}
-	context.useMemory = m.GetMemory(bot)
-	context.usePrompt = m.GetPrompt(bot)
-	log.Println("[AGENT] bot's tools", bot.Name, bot.Tools)
+	context.useMemory = m.GetMemory(worker)
+	context.usePrompt = m.GetPrompt(worker)
+	log.Println("[AGENT] tools of", worker.Name, worker.Tools)
 
 	return executor
 }
 
-func (m *Manager) LoadExecutor(task *MyTask, bot *MyBot) *Executor {
-	key := task.UUID + "-" + bot.UUID
-	if executor, ok := m.active[key]; ok {
+func (m *Manager) LoadExecutor(task *MyTask, worker *Worker) *Executor {
+	key := task.UUID + "-" + worker.UUID
+	if executor, ok := m.executors[key]; ok {
 		return executor
 	}
-	executor := m.GetExecutor(task, bot)
+	executor := m.GetExecutor(task, worker)
 	if executor != nil {
-		m.active[key] = executor
+		m.executors[key] = executor
 		return executor
 	}
 	return nil
 }
 
-func (m *Manager) GetMemory(bot *MyBot) string {
+// GetSubAgent creates or retrieves a SubAgent instance for the given task and leader
+func (m *Manager) GetSubAgent(key string, leader *Worker, task *MyTask) *SubAgent {
+	if subagent, ok := m.subagents[key]; ok {
+		return subagent
+	}
+
+	subagent := &SubAgent{
+		leader: leader,
+		ldtask: task,
+		parent: m,
+	}
+	m.subagents[key] = subagent
+	return subagent
+}
+
+func (m *Manager) GetMemory(worker *Worker) string {
 	var memory strings.Builder
-	for _, mem := range bot.Memories {
+	for _, mem := range worker.Memories {
 		memory.WriteString("\n")
 		memorize := &action.Memorize{
 			Content:  strings.TrimSpace(mem.Content),
@@ -325,10 +348,10 @@ func (m *Manager) GetMemory(bot *MyBot) string {
 	}
 	return memory.String()
 }
-func (m *Manager) GetPrompt(bot *MyBot) string {
-	prompt := m.UsePrompt(bot)
+func (m *Manager) GetPrompt(worker *Worker) string {
+	prompt := m.UsePrompt(worker)
 	prompt = strings.ReplaceAll(
-		prompt, "${{WORK_PATH}}", bot.Home,
+		prompt, "${{WORK_PATH}}", worker.Home,
 	)
 	prompt = strings.ReplaceAll(
 		prompt, "${{SUBAGENTS}}",
@@ -337,14 +360,13 @@ func (m *Manager) GetPrompt(bot *MyBot) string {
 	return m.getSystemInfo(prompt)
 }
 
-func (m *Manager) UsePrompt(bot *MyBot) string {
-	bot.Type = support.Or(bot.Type, "slave")
-	var prompt = initial.UsePrompt(bot.Type)
+func (m *Manager) UsePrompt(worker *Worker) string {
+	var prompt = initial.UsePrompt(worker.Type)
 	prompt = strings.ReplaceAll(
-		prompt, "${{USER_PROMPT}}", bot.UsePrompt,
+		prompt, "${{USER_PROMPT}}", worker.UsePrompt,
 	)
 
-	mcpTools := m.getMcpToolsInfo(bot)
+	mcpTools := m.getMcpToolsInfo(worker)
 	prompt = strings.ReplaceAll(
 		prompt, "${{MCP_TOOLS}}", mcpTools,
 	)
@@ -364,13 +386,13 @@ func (m *Manager) getSystemInfo(prompt string) string {
 
 func (m *Manager) getSubAgentsInfo() string {
 	var result strings.Builder
-	for _, bot := range m.agents {
-		if bot.Type == AGENT_LEADER {
+	for _, worker := range m.workers {
+		if worker.Type == AGENT_LEADER {
 			continue
 		}
 		result.WriteString(fmt.Sprintf(
-			"- **%s** (%s): %s\n",
-			bot.Name, bot.UUID, bot.Desc,
+			"- **%s** (id: %s): %s\n",
+			worker.Name, worker.UUID, worker.Desc,
 		))
 	}
 
@@ -382,19 +404,12 @@ func (m *Manager) getSubAgentsInfo() string {
 }
 
 // getMcpToolsInfo 构建MCP工具列表
-func (m *Manager) getMcpToolsInfo(bot *MyBot) string {
+func (m *Manager) getMcpToolsInfo(worker *Worker) string {
 	var prompt strings.Builder
 	mcpServ := amcp.GetMcpService(m.store)
 	servers := mcpServ.ListServers()
 	for _, server := range servers {
-		enable := server.Status.Enable
-		tools := server.Status.McpTools
-		if enable && len(tools) == 0 {
-			prompt.Reset()
-			prompt.WriteString("error:server-no-tools")
-			break
-		}
-		checked := server.Checked(bot)
+		checked := server.Checked(worker)
 		if len(checked) == 0 {
 			continue
 		}
@@ -413,19 +428,28 @@ func (m *Manager) getMcpToolsInfo(bot *MyBot) string {
 	if prompt.Len() == 0 {
 		return "none"
 	}
+	for _, server := range servers {
+		enable := server.Status.Enable
+		tools := server.Status.McpTools
+		if enable && len(tools) == 0 {
+			prompt.Reset()
+			prompt.WriteString("error:server-no-tools")
+			break
+		}
+	}
 	return prompt.String()
 }
 
-func (m *Manager) RefreshBot(bot *MyBot) {
+func (m *Manager) ResetWorker(worker *Worker) {
 	var found bool
-	for idx, item := range m.agents {
-		if item.UUID == bot.UUID {
+	for idx, item := range m.workers {
+		if item.UUID == worker.UUID {
 			found = true
-			m.agents[idx] = bot
+			m.workers[idx] = worker
 		}
 	}
 	if !found {
-		m.agents = append(m.agents, bot)
+		m.workers = append(m.workers, worker)
 	}
 }
 
@@ -463,10 +487,10 @@ func (h *Manager) UpdateEnv(cfg *entity.CfgEntity) error {
 	return result
 }
 
-func (m *Manager) CurrentBot() string {
-	bot := config.GetStr("ACTIVE_BOT", "")
-	for key, val := range m.config {
-		if key != entity.KEY_ACTIVE_BOT {
+func (m *Manager) CurrentWorker() string {
+	uuid := config.GetStr("USE_WORKER", "")
+	for key, val := range m.configs {
+		if key != entity.KEY_USE_WORKER {
 			continue
 		}
 		data, _ := val.(map[string]any)
@@ -474,10 +498,10 @@ func (m *Manager) CurrentBot() string {
 			continue
 		}
 		if data, ok := data["uuid"]; ok {
-			bot, _ = data.(string)
+			uuid, _ = data.(string)
 		}
 	}
-	return support.Or(bot, "nobody")
+	return support.Or(uuid, "nobody")
 }
 
 func (m *Manager) GetStorage() (Store, error) {
@@ -495,11 +519,11 @@ func (m *Manager) InitConfig() error {
 	for _, item := range list {
 		if item.Type == entity.KEY_CFG_DATA {
 		} else {
-			m.config[item.Name] = item.Data
+			m.configs[item.Name] = item.Data
 		}
 	}
 	// 清除
-	for _, item := range m.active {
+	for _, item := range m.executors {
 		if !item.IsRunning() {
 			item.modelClient = nil
 		}

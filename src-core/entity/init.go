@@ -9,6 +9,6 @@ const (
 	KEY_APP_SETUP = "app-setup"
 
 	KEY_MCP_SERVER = "mcp-server"
-	KEY_ACTIVE_BOT = "active-bot"
+	KEY_USE_WORKER = "use-worker"
 	KEY_LOGIN_USER = "login-user"
 )

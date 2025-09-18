@@ -31,6 +31,11 @@ func main() {
 			log.Println("load env fail:", err)
 		}
 		entry.StartChat(context.Background())
+	case "work":
+		if err := config.LoadEnv(); err != nil {
+			log.Println("load env fail:", err)
+		}
+		entry.StartWork("../workdata")
 	case "test":
 		var s = new(httpd.HttpServie)
 		resp := s.InitMcpEnvAsync("uvx-py", "mainland")

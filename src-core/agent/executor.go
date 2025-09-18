@@ -98,13 +98,13 @@ func (r *Executor) Handle() *action.SuperAction {
 		maxTurns := config.GetInt("MAX_CALL_TURNS", 25)
 		if maxTurns > 0 && r.currentTurns > maxTurns {
 			r.currentState = STATE_WAITING
-			log.Println("[EXEC]", r.UUID, errors.ErrExceededMaximumTurns)
+			log.Println("[EXEC] task", r.UUID, errors.ErrExceededMaximumTurns)
 			support.Emit("errors", r.UUID, errors.ErrExceededMaximumTurns)
 			break
 		}
 		if r.isTerminated {
 			r.currentState = STATE_CANCELED
-			log.Println("[EXEC]", r.UUID, errors.ErrTaskTerminatedByUser)
+			log.Println("[EXEC] task", r.UUID, errors.ErrTaskTerminatedByUser)
 			support.Emit("errors", r.UUID, errors.ErrTaskTerminatedByUser)
 			break
 		}
@@ -146,7 +146,7 @@ func (r *Executor) Handle() *action.SuperAction {
 		resp := r.CallLLM(messages)
 		if err := len(resp.Errors); err > 0 {
 			r.currentState = STATE_FAILED
-			log.Println("[EXEC]", r.UUID, resp.Errors[0])
+			log.Println("[EXEC] task", r.UUID, resp.Errors[0])
 			support.Emit("errors", r.UUID, resp.Errors[0])
 			continue
 		}
@@ -161,7 +161,7 @@ func (r *Executor) Handle() *action.SuperAction {
 			})
 		} else if resp != nil && resp.Origin == "" {
 			r.currentState = STATE_FAILED
-			log.Println("[EXEC]", r.UUID, errors.ErrEmptyLlmResponse)
+			log.Println("[EXEC] task", r.UUID, errors.ErrEmptyLlmResponse)
 			support.Emit("errors", r.UUID, errors.ErrEmptyLlmResponse)
 			break
 		}
@@ -177,7 +177,7 @@ func (r *Executor) Handle() *action.SuperAction {
 		support.Emit("respond", r.UUID, resp)
 		if r.isTerminated {
 			r.currentState = STATE_CANCELED
-			log.Println("[EXEC]", r.UUID, errors.ErrTaskTerminatedByUser)
+			log.Println("[EXEC] task", r.UUID, errors.ErrTaskTerminatedByUser)
 			support.Emit("errors", r.UUID, errors.ErrTaskTerminatedByUser)
 			break
 		}
@@ -190,11 +190,6 @@ func (r *Executor) Handle() *action.SuperAction {
 			default:
 				r.currentState = STATE_WAITING
 			}
-		}
-
-		// 触发进度文更新
-		if resp.Context != nil {
-			support.Emit("context", r.UUID, resp.Context)
 		}
 
 		if strings.TrimSpace(toolResult) != "" {
@@ -214,7 +209,7 @@ func (r *Executor) Handle() *action.SuperAction {
 			// r.queueLock.Unlock()
 			continue
 		} else {
-			log.Println("[EXEC]", r.UUID, STATE_COMPLETED)
+			log.Println("[EXEC] task", r.UUID, STATE_COMPLETED)
 		}
 	}
 	r.stopFileWatcher()
@@ -240,12 +235,13 @@ func (r *Executor) DoPlay(super *action.SuperAction) string {
 	}
 	for _, tool := range super.UseTools {
 		switch act := tool.(type) {
-		case *action.Complete:
-			r.SendNotify("complete")
 		case *action.Memorize:
 			r.context.Memorize(act)
 		case *action.WaitTodo:
 			r.context.WaitTodo(act)
+		case *action.Complete:
+			r.SendNotify("complete")
+			support.Emit("complete", r.UUID, act)
 		case *action.StartSubtask:
 			support.Emit("subtask", r.UUID, act)
 		case *action.QuerySubtask:
@@ -322,28 +318,28 @@ func (r *Executor) startFileWatcher() {
 		return
 	}
 
-	// Get bot directory path
-	botPath := r.context.bot.Home
-	if botPath == "" {
-		log.Printf("[EXEC] Unable to get bot dir path, skipping file monitoring")
+	// Get worker directory path
+	workPath := r.context.worker.Home
+	if workPath == "" {
+		log.Printf("[EXEC] task Unable to get worker dir path, skipping file monitoring")
 		return
 	}
 
 	// Create file watcher
-	watcher, err := support.NewFileWatcher(botPath, r.UUID)
+	watcher, err := support.NewFileWatcher(workPath, r.UUID)
 	if err != nil {
-		log.Printf("[EXEC] Failed to create file watcher: %v", err)
+		log.Printf("[EXEC] task Failed to create file watcher: %v", err)
 		return
 	}
 
 	// Start monitoring
 	if err := watcher.Start(); err != nil {
-		log.Printf("[EXEC] Failed to start file monitoring: %v", err)
+		log.Printf("[EXEC] task Failed to start file monitoring: %v", err)
 		return
 	}
 
 	r.fileWatcher = watcher
-	log.Printf("[EXEC] File monitoring started: %s", botPath)
+	log.Printf("[EXEC] task File monitoring started: %s", workPath)
 }
 
 // Stop file watcher
@@ -351,6 +347,6 @@ func (r *Executor) stopFileWatcher() {
 	if r.fileWatcher != nil {
 		r.fileWatcher.Stop()
 		r.fileWatcher = nil
-		log.Printf("[EXEC] File monitoring stopped")
+		log.Printf("[EXEC] task File monitoring stopped")
 	}
 }
