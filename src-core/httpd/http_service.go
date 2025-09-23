@@ -646,41 +646,42 @@ func (h *HttpServie) InitMcpEnvAsync(name string, env string) any {
 func (h *HttpServie) checkMcpEnvPeriodically(name string) {
 	const checkInterval = 5 * time.Second
 	const maxDuration = 10 * time.Minute
-	
+
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
-	
+
 	timeout := time.After(maxDuration)
-	
+
 	log.Printf("Starting periodic MCP environment check for %s (5s intervals, 10min timeout)", name)
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			// Check environment status
 			env := h.GetMcpEnv().(map[string]any)
-			
+
 			// Check if installation is complete based on environment type
 			var isComplete bool
-			if name == "uvx-py" {
+			switch name {
+			case "uvx-py":
 				// For Python environment, check both python and uvx
 				python, hasPython := env["python"]
 				uvx, hasUvx := env["uvx"]
 				isComplete = hasPython && hasUvx && python != "" && uvx != ""
 				log.Printf("Python env check: python=%v, uvx=%v, complete=%v", python, uvx, isComplete)
-			} else if name == "js-npx" {
+			case "js-npx":
 				// For Node.js environment, check both nodejs and npx
 				nodejs, hasNodejs := env["nodejs"]
 				npx, hasNpx := env["npx"]
 				isComplete = hasNodejs && hasNpx && nodejs != "" && npx != ""
 				log.Printf("Node.js env check: nodejs=%v, npx=%v, complete=%v", nodejs, npx, isComplete)
 			}
-			
+
 			if isComplete {
 				log.Printf("MCP environment installation completed successfully for %s", name)
 				return
 			}
-			
+
 		case <-timeout:
 			log.Printf("MCP environment installation timeout reached (10 minutes) for %s", name)
 			return

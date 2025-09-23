@@ -27,13 +27,14 @@ func (m *DevAsyncCmdAbility) Logs() string {
 }
 
 func (m *DevAsyncCmdAbility) Start(command string) error {
-	if runtime.GOOS == "windows" {
-		log.Println("start not support")
-		return fmt.Errorf("not support")
-	}
-
 	m.logs = append(m.logs, command)
-	newCmd := cmd.NewCmd("sh", "-c", command)
+	var newCmd *cmd.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		newCmd = cmd.NewCmd("cmd", "/C", command)
+	default:
+		newCmd = cmd.NewCmd("sh", "-c", command)
+	}
 	newCmd.Dir = m.Home
 
 	newCmd.Start()
@@ -42,23 +43,58 @@ func (m *DevAsyncCmdAbility) Start(command string) error {
 	store.pool[m.Name] = newCmd
 	store.Unlock()
 
-	// 0.5s后获取Stdout，若为空则继续，每1s最多等5s
-	var output, maxWait = "", 5 // 1s * 5 = 5s
+	// Wait for command output with timeout
+	var hasOutput = false
+	var maxWait = 5 // 1s * 5 = 5s
 	for i := 0; i < maxWait; i++ {
 		time.Sleep(1000 * time.Millisecond)
-		output = strings.Join(newCmd.Status().Stdout, "\n")
-		if output != "" {
-			m.logs = append(m.logs, output)
+
+		// Check stdout
+		stdoutLines := newCmd.Status().Stdout
+		if len(stdoutLines) > 0 {
+			output := strings.Join(stdoutLines, "\n")
+			if output != "" {
+				m.logs = append(m.logs, output)
+				hasOutput = true
+			}
+		}
+
+		// Check stderr - some commands output to stderr even when successful
+		stderrLines := newCmd.Status().Stderr
+		if len(stderrLines) > 0 {
+			errOutput := strings.Join(stderrLines, "\n")
+			if errOutput != "" {
+				m.logs = append(m.logs, errOutput)
+				hasOutput = true
+			}
+		}
+
+		// If we have any output, break the waiting loop
+		if hasOutput {
 			break
 		}
 	}
 
-	if out := newCmd.Status().Stdout; len(out) == 0 {
-		if err := newCmd.Status().Stderr; len(err) > 0 {
-			return fmt.Errorf("command start error: %s", err)
-		} else {
-			return fmt.Errorf("command start timeout")
+	// Check if command is still running or has finished
+	status := newCmd.Status()
+
+	// If command has finished with an exit code, check the exit code
+	if status.Complete {
+		if status.Exit != 0 {
+			// Command completed with non-zero exit code - this is an actual error
+			errOutput := strings.Join(status.Stderr, "\n")
+			if errOutput != "" {
+				return fmt.Errorf("command failed with exit code %d: %s", status.Exit, errOutput)
+			}
+			return fmt.Errorf("command failed with exit code %d", status.Exit)
 		}
+		// Command completed successfully (exit code 0)
+		return nil
+	}
+
+	// Command is still running - check if we got any output during the wait period
+	if !hasOutput {
+		return fmt.Errorf("command start timeout - no output received within %d seconds", maxWait)
 	}
 
 	return nil

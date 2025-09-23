@@ -16,8 +16,7 @@
 **/*.local
 
 # tmp data
-**/workdata/.work
-**/workdata/.prompt
+**/workdata
 
 # Editor directories and files
 **/.vscode/*

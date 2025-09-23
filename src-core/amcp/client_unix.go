@@ -91,7 +91,11 @@ func (a *McpClient) Initialize() error {
 	}
 	a.session = session
 
-	log.Println("[MCP] SUCCESS: connect ok")
+	// InitializeResult
+	if resp := session.InitializeResult(); resp != nil {
+		log.Println("[MCP] SUCCESS: %w", resp.ServerInfo)
+	}
+
 	return nil
 }
 

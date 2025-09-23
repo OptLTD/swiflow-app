@@ -43,8 +43,7 @@ const handleSend = async() => {
   }
   // 如果缺失必要命令，则抖动warning
   const tool = refMcpTool.value
-  const loss = tool?.getLossCmd!()
-  if (tool && loss && loss.length) {
+  if (tool?.getMcpReady() == false) {
     tool.shakeElement()
     return;
   }

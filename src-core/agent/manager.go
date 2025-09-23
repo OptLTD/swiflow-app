@@ -88,6 +88,7 @@ func (m *Manager) Handle(input action.Input, task *MyTask, bot *MyBot) {
 		}
 		if len(server.Status.McpTools) == 0 {
 			log.Println("[AGENT] start mcp server", server.UUID)
+			// need load package first
 			err := mcpServ.ServerStatus(server)
 			if len(server.Status.McpTools) == 0 {
 				log.Println("[AGENT] query status error", err)
@@ -382,7 +383,9 @@ func (m *Manager) buildMcpTools(bot *MyBot) string {
 		for _, tool := range checked {
 			prompt.WriteString(fmt.Sprintf("### **%s**\n", tool.Name))
 			prompt.WriteString(fmt.Sprintf("- 描述： %s\n", tool.Description))
-			if data, err := tool.InputSchema.MarshalJSON(); err == nil {
+			if input := tool.InputSchema; input == nil {
+				continue
+			} else if data, err := input.MarshalJSON(); err == nil {
 				prompt.WriteString("- 入参：\n")
 				prompt.WriteString("```json\n")
 				prompt.WriteString(string(data))

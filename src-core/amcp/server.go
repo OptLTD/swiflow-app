@@ -190,7 +190,7 @@ func (s *McpServer) Checked(bot *entity.BotEntity) []*McpTool {
 		return nil
 	}
 	if bot.Type == "debug" && bot.UUID == s.UUID {
-		log.Println("[AGENT] #debug#", bot.Tools)
+		log.Println("[MCP] #debug#", bot.Tools)
 		return s.Status.McpTools
 	}
 
@@ -210,6 +210,33 @@ func (s *McpServer) Checked(bot *entity.BotEntity) []*McpTool {
 		result = append(result, tool)
 	}
 	return result
+}
+
+func (s *McpServer) Preload() error {
+	if s.Cmd == "" {
+		return nil // No command to preload
+	}
+
+	var pkg = &PackageInfo{}
+	err := pkg.ParseCommand(s.Cmd, s.Args)
+	if err != nil || pkg.Name == "" {
+		log.Printf("[MCP] Command parsing failed (not uvx/npx?): %v", err)
+		return nil
+	}
+
+	log.Printf("[MCP] Install %s for %s", pkg.Name, s.Name)
+	if installed, err := pkg.IsInstalled(); err != nil {
+		log.Printf("[MCP] Check package %s is failed: %v", pkg.Name, err)
+		return err
+	} else if installed {
+		return nil
+	}
+
+	if err := pkg.Install(); err != nil {
+		log.Printf("[MCP] Install package %s: %v", s.Name, err)
+		return err
+	}
+	return nil
 }
 
 func (s *McpServer) GetCmd() (*exec.Cmd, error) {

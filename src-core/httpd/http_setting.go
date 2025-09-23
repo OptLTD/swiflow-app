@@ -245,6 +245,7 @@ func (h *SettingHandler) NewMcp(w http.ResponseWriter, r *http.Request) {
 			JsonResp(w, fmt.Errorf("upsert: %v", err))
 			return
 		}
+		// need load package first
 		if err := service.ServerStatus(server); err == nil {
 			_ = service.EnableServer(server)
 			err = JsonResp(w, server)
@@ -262,6 +263,7 @@ func (h *SettingHandler) NewMcp(w http.ResponseWriter, r *http.Request) {
 			JsonResp(w, fmt.Errorf("server existed: %v", server.Name))
 			return
 		}
+		// need load package first
 		if err := service.ServerStatus(server); err != nil {
 			JsonResp(w, fmt.Errorf("Status: %v", err))
 			return
@@ -346,19 +348,6 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 			}
 			JsonResp(w, "success")
 		}
-	case "prompt":
-		if err := service.ServerStatus(found); err != nil {
-			log.Println("query status error", err)
-		}
-		debug := &entity.BotEntity{
-			UUID: uuid, Type: "debug",
-			Tools: found.Status.Checked,
-			Home:  config.GetWorkPath("debug"),
-		}
-		data := h.manager.GetPrompt(debug)
-		if _, err := w.Write([]byte(data)); err != nil {
-			log.Println("query status error", err)
-		}
 	case "execute":
 		tool := r.URL.Query().Get("tool")
 		data := h.service.ReadMap(r.Body)
@@ -374,6 +363,11 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "active":
+		if err := found.Preload(); err != nil {
+			err = JsonResp(w, err)
+			return
+		}
+		// need load package first
 		if err := service.ServerStatus(found); err == nil {
 			_ = service.EnableServer(found)
 			err = JsonResp(w, found.Status)
