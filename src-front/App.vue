@@ -3,6 +3,7 @@ import { watch, ref } from 'vue'
 import { onMounted, onUnmounted } from 'vue'
 import { ModalsContainer } from 'vue-final-modal';
 import { useAppStore } from '@/stores/app'
+import { useMsgStore } from '@/stores/msg'
 import { useWebSocket } from '@/hooks/index'
 import { request, toast } from '@/support/index';
 import { getWebSocketUrl } from '@/support/consts';
@@ -22,6 +23,7 @@ import Fireworks from '@/widgets/Fireworks.vue'
 import { showWelcomeModal } from './logics/index';
 
 const app = useAppStore()
+const msg = useMsgStore()
 const socket = useWebSocket()
 
 // 全局文件上传状态
@@ -49,6 +51,7 @@ onMounted(async () => {
   }
   socket.doConnect(getWebSocketUrl())
   socket.useHandle('system', onSystemMsg)
+  socket.useHandle('message', onMessage)
   // 所有初始化事件处理完毕后移除 loading
   setTimeout(() => {
     const removeLoading = (window as any).__removeLoading
@@ -147,15 +150,20 @@ const listenEvent = async () => {
   window.addEventListener("hashchange", onHashChange as EventListener);
 }
 
-const onSystemMsg = (msg: SocketMsg) => {
-  switch (msg.action) {
+const onSystemMsg = (socketMsg: SocketMsg) => {
+  switch (socketMsg.action) {
     case 'errors': {
-      return toast.error(msg.detail || 'System Error!');
+      return toast.error(socketMsg.detail || 'System Error!');
     }
     case 'welcome': {
       // return task.setActive('')
     }
   }
+}
+
+const onMessage = (socketMsg: SocketMsg) => {
+  // Process all chat messages through the msg store
+  msg.processMessage(socketMsg)
 }
 
 const onHashChange = (e: HashChangeEvent) => {

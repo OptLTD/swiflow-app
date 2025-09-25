@@ -4,9 +4,10 @@ import { toast } from 'vue3-toastify'
 import { throttle } from 'lodash-es'
 import { ref, unref, watch } from 'vue'
 import {  onMounted, onUnmounted } from 'vue'
-import { errors } from '@/support/index'
 import { parser, request } from '@/support'
 import { useAppStore } from '@/stores/app'
+import { useMsgStore } from '@/stores/msg'
+import { eventEmitter } from '@/stores/msg'
 import { useWebSocket } from '@/hooks/index'
 import { useTaskStore } from '@/stores/task'
 import { useViewStore } from '@/stores/view'
@@ -21,17 +22,14 @@ import { setBotTools, setBotProvider } from '@/logics/chat'
 import { showDisplayAct, autoScrollToEnd } from '@/logics/chat'
 
 const app = useAppStore()
+const msg = useMsgStore()
 const task = useTaskStore()
 const view = useViewStore()
 
-const chatid = ref("")
-const errmsg = ref("")
-const running = ref(false)
 const socket = useWebSocket()
 const currBot = ref<BotEntity>()
 const taskInfo = ref<TaskEntity>()
 const inputMsg = ref({} as InputMsg)
-const nextMsg = ref<ActionMsg|null>()
 const messages = ref<ActionMsg[]>([])
 const refMcpTool = ref<typeof McpToolList>()
 const emit = defineEmits(['new-chat'])
@@ -47,15 +45,16 @@ const handleSend = async() => {
     tool.shakeElement()
     return;
   }
-  const msg: SocketMsg = {
+  const socketMsg: SocketMsg = {
     method: "message", 
     action: "user-input",
-    chatid: unref(chatid),
+    chatid: msg.getChatId,
     detail: inputMsg.value
   }
-  if (chatid.value == '') {
-    chatid.value = nanoid(12)
-    msg.chatid = chatid.value
+  if (msg.getChatId == '') {
+    const newChatId = nanoid(12)
+    msg.setChatId(newChatId)
+    socketMsg.chatid = newChatId
     inputMsg.value.newTask = 'yes'
   }
 
@@ -65,7 +64,7 @@ const handleSend = async() => {
   }
 
   const conn = socket.getConnect()
-  conn!.send(JSON.stringify(msg))
+  conn!.send(JSON.stringify(socketMsg))
   inputMsg.value = {} as InputMsg
 }
 
@@ -76,19 +75,19 @@ const handleRemoveUpload = (index: number) => {
 }
 
 const handleStop = async() => {
-  if (!running.value) {
+  if (!msg.isRunning) {
     return
   }
   try {
-    const url = `/execute?act=stop&uuid=${chatid.value}`
+    const url = `/execute?act=stop&uuid=${msg.getChatId}`
     const resp = await request.post(url) as any
     if (resp?.errmsg) {
       console.log("cancel error", resp)
       return toast.error(resp.errmsg)
     }
-    nextMsg.value = null
-    running.value = false
-    delete(streamData.value[chatid.value])
+    msg.setNextMsg(null)
+    msg.setRunning(false)
+    msg.clearStream(msg.getChatId)
   } catch (err) {
     console.error('use bot:', err)
   }
@@ -125,7 +124,7 @@ const loadTaskInfo = async (uuid: string) => {
       return toast.error(resp.errmsg)
     }
     taskInfo.value = resp as TaskEntity
-    running.value = resp.state == 'running'
+    msg.setRunning(resp.state == 'running')
   } catch (e) {
     console.error('use bot:', e)
   }
@@ -140,13 +139,13 @@ const loadTaskMsgs = async (uuid: string) => {
     }
 
     const msgs = resp as ActionMsg[]
-    messages.value = msgs.map(x => x)
+    messages.value = msgs as ActionMsg[]
     const last = msgs[msgs.length - 1]
     last && startPlayAction(last, true)
   } catch (err) {
     console.error('use bot:', err)
   } finally {
-    chatid.value = uuid
+    msg.setChatId(uuid)
     setTimeout(() => {
       autoScrollToEnd(true)
     }, 240)
@@ -192,17 +191,17 @@ const handleTools = (tools: string[]) => {
 }
 const handleSwitch = (tid: string) => {
   if (!tid) {
-    errmsg.value = ''
-    chatid.value = ''
-    messages.value = []
-    running.value = false
+    msg.setErrorMsg('')
+    msg.setChatId('')
+    msg.clearMessages()
+    msg.setRunning(false)
     view.setAction(null)
     return;
   }
-  if (tid != unref(chatid)) {
-    errmsg.value = ''
-    running.value = false
-    nextMsg.value = null
+  if (tid != msg.getChatId) {
+    msg.setErrorMsg('')
+    msg.setRunning(false)
+    msg.setNextMsg(null)
     loadTaskMsgs(tid)
     loadTaskInfo(tid)
   }
@@ -210,7 +209,7 @@ const handleSwitch = (tid: string) => {
 
 const autoScroll = throttle(autoScrollToEnd, 500)
 const setNextMsg = throttle((stream: any  = {}) => {
-  if (!running.value) {
+  if (!msg.isRunning) {
     return
   }
   var data = ''
@@ -222,7 +221,7 @@ const setNextMsg = throttle((stream: any  = {}) => {
     }
   }
   const next = parser.Parse(data)
-  nextMsg.value = next as any as ActionMsg;
+  msg.setNextMsg(next as any as ActionMsg);
   startPlayAction(next as any as ActionMsg)
   setTimeout(() => autoScroll(false), 150)
 }, 180)
@@ -241,115 +240,6 @@ const startPlayAction = (msg: ActionMsg, force: boolean = false) => {
     return;
   }
   find && handleDisplay(find)
-}
-
-const streamData = ref<any>({})
-const onMessage =  (msg: SocketMsg) => {
-  switch (msg.action) {
-    case "user-input": {
-      nextMsg.value = {
-        actions:[] as MsgAct[]
-      } as unknown as ActionMsg
-      streamData.value[msg.chatid] = {}
-      messages.value.push({ actions: [{
-        type: 'user-input', ...msg.detail
-      }]} as ActionMsg)
-      setTimeout(() => autoScroll(true), 150)
-      break
-    }
-    case 'control': {
-      if (msg.detail == "running") {
-        running.value = true
-      }
-      if (msg.detail != "running") {
-        nextMsg.value = null
-        running.value = false
-        delete(streamData.value[msg.chatid])
-        setTimeout(() => {
-          if (!running.value) {
-            nextMsg.value = null
-          }
-        }, 500)
-      }
-      
-      // 更新任务状态到history中
-      const current = task.getHistory.find(t => {
-        return t.uuid === (msg.chatid || task.getActive)
-      })
-      if (current && current.state != msg.detail) {
-        current.state = msg.detail
-      }
-      break;
-    }
-    case 'respond': {
-      errmsg.value = ''
-      nextMsg.value = {
-        actions: [] as MsgAct[]
-      } as unknown as ActionMsg
-      if (!task.getActive) {
-        task.setActive(msg.chatid)
-      }
-      startPlayAction(msg.detail)
-      messages.value.push(msg.detail)
-      delete(streamData.value[msg.chatid])
-      setNextMsg(streamData.value[msg.chatid])
-      break;
-    }
-    case 'stream': {
-      errmsg.value = ''
-      if (!task.getActive) {
-        chatid.value = msg.chatid
-        task.setActive(msg.chatid)
-      }
-      if (!streamData.value[msg.chatid]) {
-        streamData.value[msg.chatid] = {}
-      }
-      const {idx, str} =  msg.detail as any
-      streamData.value[msg.chatid][idx] = str
-      setNextMsg(streamData.value[msg.chatid])
-      break;
-    }
-    case 'errors': {
-      return handleErrors(msg.detail)
-    }
-    case 'change': {
-      handleFileChange(msg.detail)
-      break;
-    }
-  }
-}
-const handleErrors = (detail: string) => {
-  if (!detail || !detail.split) {
-    return;
-  }
-  var error = detail.split(':').shift()
-  switch (error) {
-    case errors.EMPTY_LLM_RESPONSE:
-    case errors.NO_RESULT_PRESENT: {
-      break
-    }
-    case errors.EXCEEDED_MAXIMUM_TURNS:
-    case errors.TASK_TERMINATED_BY_USER: {
-      nextMsg.value = null
-      running.value = false
-      errmsg.value = detail
-      break
-    }
-    default: {
-      nextMsg.value = null
-      running.value = false
-      errmsg.value = detail
-    }
-  }
-}
-
-// 处理文件变动消息
-const handleFileChange = (detail: any) => {
-  if (detail && detail.path) {
-    app.setContent(true)
-    app.setAction('browser')
-    view.setChange(detail)
-  }
 }
 
 // Handle file click from UploadFiles component
@@ -374,9 +264,28 @@ watch(() => app.getActive, () => {
   currBot.value = queryBot('')
 })
 onMounted(() => {
-  socket.useHandle(
-    'message', onMessage
-  )
+  // Listen to UI-specific events from msg store
+  eventEmitter.on('user-input', (socketMsg: SocketMsg) => {
+    // Add user input message to local messages
+    messages.value.push({ 
+      actions: [{
+        type: 'user-input', 
+        ...socketMsg.detail
+      }]
+    } as ActionMsg)
+    setTimeout(() => autoScroll(true), 150)
+  })
+  
+  eventEmitter.on('respond', (socketMsg: SocketMsg) => {
+    // Add response message to local messages
+    messages.value.push(socketMsg.detail)
+    startPlayAction(socketMsg.detail)
+    setNextMsg(msg.getStream[socketMsg.chatid])
+  })
+  
+  eventEmitter.on('stream', (socketMsg: SocketMsg) => {
+    setNextMsg(msg.getStream[socketMsg.chatid])
+  })
 
   inputMsg.value.placeholder = `
     输入消息内容，按下回车键发送
@@ -393,8 +302,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  // Clean up WebSocket listeners if needed
-  // Note: socket cleanup is handled by the useWebSocket hook
+  // Clean up event listeners
+  eventEmitter.off('user-input', () => {})
+  eventEmitter.off('respond', () => {})
+  eventEmitter.off('stream', () => {})
 })
 
 // Method to set message content from external components
@@ -415,9 +326,9 @@ defineExpose({
   <div class="chat-container">
     <div class="list-container">
       <ChatMsgList
-        :errmsg="errmsg"
         :currbot="currBot"
-        :loading="nextMsg"
+        :errmsg="msg.getErrMsg"
+        :loading="msg.getNextMsg"
         :messages="messages"
         @check="handleCheck"
         @display="handleDisplay"
@@ -428,7 +339,7 @@ defineExpose({
      </ChatMsgList>
     </div>
     <div class="input-container">
-      <ChatInput :running="running"
+      <ChatInput :running="msg.isRunning"
         v-model:content="inputMsg.content"
         :placeholder=" inputMsg.placeholder"
         @send="handleSend" @stop="handleStop"
