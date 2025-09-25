@@ -99,7 +99,7 @@ func fetchTodoList(name string) {
 	scheduler.RemoveByTags()
 
 	store, _ := manager.GetStorage()
-	list, err := store.LoadTodo()
+	list, err := store.LoadTodo() // Call without parameters to maintain existing behavior
 	if len(list) == 0 || err != nil {
 		log.Printf("[%s] no todo list", name)
 		return

@@ -10,7 +10,7 @@ type MyStore interface {
 	InitTask(*TaskEntity) error
 	FindTask(*TaskEntity) error
 	SaveTask(*TaskEntity) error
-	LoadTask() ([]*TaskEntity, error)
+	LoadTask(query ...any) ([]*TaskEntity, error)
 
 	FindMsg(*MsgEntity) error
 	SaveMsg(*MsgEntity) error
@@ -18,24 +18,23 @@ type MyStore interface {
 
 	FindBot(*BotEntity) error
 	SaveBot(*BotEntity) error
-	LoadBot() ([]*BotEntity, error)
+	LoadBot(query ...any) ([]*BotEntity, error)
 
 	FindCfg(*CfgEntity) error
 	SaveCfg(*CfgEntity) error
-	LoadCfg() ([]*CfgEntity, error)
+	LoadCfg(query ...any) ([]*CfgEntity, error)
 
 	FindMem(*MemEntity) error
 	SaveMem(*MemEntity) error
-	LoadMem() ([]*MemEntity, error)
+	LoadMem(query ...any) ([]*MemEntity, error)
 
 	FindTool(*ToolEntity) error
 	SaveTool(*ToolEntity) error
-	LoadTool() ([]*ToolEntity, error)
+	LoadTool(query ...any) ([]*ToolEntity, error)
 
 	FindTodo(*TodoEntity) error
 	SaveTodo(*TodoEntity) error
-	LoadTodo() ([]*TodoEntity, error)
-	LoadDone() ([]*TodoEntity, error)
+	LoadTodo(query ...any) ([]*TodoEntity, error)
 }
 
 func NewStorage(kind string, config map[string]any) (MyStore, error) {

@@ -40,6 +40,8 @@ func StartWebServer(address string) (err error) {
 	mux.HandleFunc("/api/mcp", setting.McpSet)
 	mux.HandleFunc("/api/task", setting.TaskSet)
 	mux.HandleFunc("/api/todo", setting.TodoSet)
+	mux.HandleFunc("/api/msgs", setting.GetMsgs)
+	mux.HandleFunc("/api/tasks", setting.GetTasks)
 
 	mux.HandleFunc("/api/global", handler.Global)
 	mux.HandleFunc("/api/upload", handler.Upload)

@@ -15,6 +15,7 @@ type TaskEntity struct {
 	Bots  string `json:"bots" gorm:"bots;size:200"`
 	Desc  string `json:"desc" gorm:"desc;size:200"`
 	State string `json:"state" gorm:"state;size:10"`
+	Group string `json:"group" gorm:"group;size:36"`
 	// 任务状态 (process, running, completed, failed, canceled)
 
 	Context string `json:"context" gorm:"context"`
@@ -31,8 +32,9 @@ func (m *TaskEntity) TableName() string {
 func (m *TaskEntity) ToMap() map[string]any {
 	return map[string]any{
 		"bots": strings.Split(m.Bots, ","),
-		"uuid": m.UUID, "name": m.Name, "home": m.Home,
-		"command": m.Command, "process": m.Process,
+		"uuid": m.UUID, "name": m.Name,
+		"group": m.Group, "home": m.Home,
 		"context": m.Context, "state": m.State,
+		"command": m.Command, "process": m.Process,
 	}
 }

@@ -91,7 +91,7 @@ func (m *Manager) Initial() (err error) {
 	if err = m.InitConfig(); err != nil {
 		log.Println("[AGENT] init cfg error", err)
 	}
-	if m.workers, err = m.store.LoadBot(); err == nil {
+	if m.workers, err = m.store.LoadBot(); err == nil { // Call without parameters to maintain existing behavior
 		return nil
 	}
 	log.Println("[AGENT] init worker error", err)
@@ -129,6 +129,7 @@ func (m *Manager) Start(input action.Input, task *MyTask, leader *Worker) {
 		}
 	})
 
+	task.Group = task.UUID
 	go m.Handle(input, task, leader)
 }
 
@@ -195,6 +196,19 @@ func (m *Manager) InitTask(name string, uuid string) (*MyTask, error) {
 		return nil, err
 	}
 	return task, nil
+}
+func (m *Manager) InitSubtask(worker string, group string) (*MyTask, error) {
+	uuid, _ := support.UniqueID()
+	subtask := &MyTask{
+		UUID: "sub-" + uuid,
+		Bots: worker, Group: group,
+	}
+
+	if err := m.store.InitTask(subtask); err != nil {
+		log.Println("[AGENT] init subtask err", err)
+		return nil, err
+	}
+	return subtask, nil
 }
 
 func (m *Manager) NewMcpTask(uuid string) (*MyTask, error) {
@@ -515,7 +529,7 @@ func (m *Manager) GetStorage() (Store, error) {
 }
 
 func (m *Manager) InitConfig() error {
-	list, err := m.store.LoadCfg()
+	list, err := m.store.LoadCfg() // Call without parameters to maintain existing behavior
 	if err != nil {
 		return err
 	}
@@ -557,7 +571,7 @@ func (m *Manager) InitStorage() (Store, error) {
 	// handle migrate
 	switch strings.ToLower(kind) {
 	case "sqlite", "mysql":
-		if _, err = store.LoadCfg(); err != nil {
+		if _, err = store.LoadCfg(); err != nil { // Call without parameters to maintain existing behavior
 			if strings.Contains(err.Error(), "no such table") {
 				needUpgrade = true
 			}

@@ -7,8 +7,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
+	"swiflow/action"
 	"swiflow/agent"
 	"swiflow/amcp"
 	"swiflow/config"
@@ -34,10 +36,11 @@ func NewSettingHandle(m *agent.Manager) *SettingHandler {
 	return &SettingHandler{s, m}
 }
 
-func (h *SettingHandler) LoadTask(w http.ResponseWriter, r *http.Request) {
+func (h *SettingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	tasks := []map[string]any{}
 	store, _ := h.manager.GetStorage()
-	if list, err := store.LoadTask(); err == nil {
+	query := "`group`='' || `group`=`uuid`"
+	if list, err := store.LoadTask(query); err == nil {
 		for _, item := range list {
 			tasks = append(tasks, item.ToMap())
 		}
@@ -45,35 +48,38 @@ func (h *SettingHandler) LoadTask(w http.ResponseWriter, r *http.Request) {
 	JsonResp(w, tasks)
 }
 
+func (h *SettingHandler) GetMsgs(w http.ResponseWriter, r *http.Request) {
+	uuid := r.URL.Query().Get("task")
+	store, _ := h.manager.GetStorage()
+	tasks, _ := store.LoadTask("group", uuid)
+	context := agent.Context{}
+	result := []*action.SuperAction{}
+	for _, task := range tasks {
+		msgs, err := store.LoadMsg(task)
+		if err != nil || len(msgs) == 0 {
+			continue
+		}
+
+		acts := context.ParseMsgs(msgs)
+		result = append(result, acts...)
+	}
+	// Sort by datetime using sort function
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Datetime < result[j].Datetime
+	})
+
+	// SuperAction now has custom MarshalJSON method that uses ToMap format
+	if err := JsonResp(w, result); err != nil {
+		log.Println("[HTTP] resp error", err)
+	}
+}
+
 func (h *SettingHandler) TaskSet(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
 	uuid := r.URL.Query().Get("uuid")
-	if act == "load-task" && r.Method == "GET" {
-		h.LoadTask(w, r)
-		return
-	}
 	task, _ := h.manager.QueryTask(uuid)
 	if act == "get-task" || act == "" {
 		JsonResp(w, task.ToMap())
-		return
-	}
-	store, _ := h.manager.GetStorage()
-	if act == "history" {
-		if msgs, err := store.LoadMsg(task); err != nil {
-			if err := JsonResp(w, err); err != nil {
-				log.Println("[HTTP] resp error", err)
-			}
-		} else {
-			ctx := agent.Context{}
-			result := []map[string]any{}
-			acts := ctx.ParseMsgs(msgs)
-			for _, act := range acts {
-				result = append(result, act.ToMap())
-			}
-			if err := JsonResp(w, result); err != nil {
-				log.Println("[HTTP] resp error", err)
-			}
-		}
 		return
 	}
 	switch act {
@@ -84,6 +90,7 @@ func (h *SettingHandler) TaskSet(w http.ResponseWriter, r *http.Request) {
 	case "set-home":
 		task.Home = r.URL.Query().Get("home")
 	}
+	store, _ := h.manager.GetStorage()
 	if err := store.SaveTask(task); err != nil {
 		JsonResp(w, fmt.Errorf("error: %w", err))
 		return
@@ -102,7 +109,7 @@ func (h *SettingHandler) TodoSet(w http.ResponseWriter, r *http.Request) {
 	switch act {
 	case "get-todo":
 		resp := []any{}
-		list, _ := store.LoadTodo()
+		list, _ := store.LoadTodo("done = ?", 0)
 		for _, item := range list {
 			resp = append(resp, item)
 		}
@@ -112,7 +119,7 @@ func (h *SettingHandler) TodoSet(w http.ResponseWriter, r *http.Request) {
 		return
 	case "get-done":
 		resp := []any{}
-		list, _ := store.LoadDone()
+		list, _ := store.LoadTodo("done = ?", 1)
 		for _, item := range list {
 			resp = append(resp, item.ToMap())
 		}

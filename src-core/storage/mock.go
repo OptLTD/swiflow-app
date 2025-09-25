@@ -95,7 +95,9 @@ func (m *MockStore) SaveTask(tool *TaskEntity) error {
 	return nil
 }
 
-func (m *MockStore) LoadTask() ([]*TaskEntity, error) {
+func (m *MockStore) LoadTask(query ...any) ([]*TaskEntity, error) {
+	// Mock implementation simply returns all tasks
+	// In a real implementation, you would filter based on query parameters
 	return m.tasks, nil
 }
 
@@ -175,7 +177,10 @@ func (m *MockStore) SaveBot(bot *BotEntity) error {
 	return nil
 }
 
-func (m *MockStore) LoadBot() ([]*BotEntity, error) {
+// LoadBot loads bots with optional query parameters (mock implementation returns all bots)
+func (m *MockStore) LoadBot(query ...any) ([]*BotEntity, error) {
+	// Note: Mock implementation returns all bots regardless of query parameters
+	// In a real implementation, query parameters would be used to filter results
 	return m.bots, nil
 }
 
@@ -202,7 +207,10 @@ func (m *MockStore) SaveCfg(cfg *CfgEntity) error {
 	return nil
 }
 
-func (m *MockStore) LoadCfg() ([]*CfgEntity, error) {
+// LoadCfg loads configurations with optional query parameters (mock implementation returns all configs)
+func (m *MockStore) LoadCfg(query ...any) ([]*CfgEntity, error) {
+	// Note: Mock implementation returns all configs regardless of query parameters
+	// In a real implementation, query parameters would be used to filter results
 	return m.cfgs, nil
 }
 
@@ -227,7 +235,10 @@ func (m *MockStore) SaveMem(mem *MemEntity) error {
 	return nil
 }
 
-func (m *MockStore) LoadMem() ([]*MemEntity, error) {
+// LoadMem loads memories with optional query parameters (mock implementation returns all memories)
+func (m *MockStore) LoadMem(query ...any) ([]*MemEntity, error) {
+	// Note: Mock implementation returns all memories regardless of query parameters
+	// In a real implementation, query parameters would be used to filter results
 	return m.mems, nil
 }
 
@@ -252,7 +263,10 @@ func (m *MockStore) SaveTool(tool *ToolEntity) error {
 	return nil
 }
 
-func (m *MockStore) LoadTool() ([]*ToolEntity, error) {
+// LoadTool loads tools with optional query parameters (mock implementation returns all tools)
+func (m *MockStore) LoadTool(query ...any) ([]*ToolEntity, error) {
+	// Note: Mock implementation returns all tools regardless of query parameters
+	// In a real implementation, query parameters would be used to filter results
 	return m.tools, nil
 }
 
@@ -277,16 +291,37 @@ func (m *MockStore) SaveTodo(todo *TodoEntity) error {
 	return nil
 }
 
-func (m *MockStore) LoadTodo() ([]*TodoEntity, error) {
-	return m.todos, nil
-}
-
-func (m *MockStore) LoadDone() ([]*TodoEntity, error) {
+// LoadTodo loads todos with optional query parameters (mock implementation returns all todos)
+func (m *MockStore) LoadTodo(query ...any) ([]*TodoEntity, error) {
 	var result []*TodoEntity
-	for _, t := range m.todos {
-		if t.Done != 0 {
-			result = append(result, t)
+
+	// If no query parameters provided, default to undone todos (backward compatibility)
+	if len(query) == 0 {
+		for _, t := range m.todos {
+			if t.Done == 0 {
+				result = append(result, t)
+			}
+		}
+	} else {
+		// For mock implementation, we support basic done status filtering
+		// First parameter should be "done = ?" and second should be the value (0 or 1)
+		if len(query) >= 2 {
+			if query[0] == "done = ?" {
+				doneValue := query[1]
+				for _, t := range m.todos {
+					if (doneValue == 0 && t.Done == 0) || (doneValue == 1 && t.Done != 0) {
+						result = append(result, t)
+					}
+				}
+			} else {
+				// For other query types, return all todos
+				result = m.todos
+			}
+		} else {
+			// Fallback to all todos
+			result = m.todos
 		}
 	}
+
 	return result, nil
 }

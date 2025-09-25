@@ -60,8 +60,7 @@ const leaders = computed(() => {
 
 const loadTaskList = async () => {
   try {
-    const url = '/task?act=load-task'
-    const resp = await request.get(url)
+    const resp = await request.get('/tasks')
     if (Array.isArray(resp)) {
       task.setHistory(resp as TaskEntity[])
     }

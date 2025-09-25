@@ -129,10 +129,10 @@ const loadTaskInfo = async (uuid: string) => {
     console.error('use bot:', e)
   }
 }
-const loadTaskMsgs = async (uuid: string) => {
+const loadTaskMsgs = async (task: string) => {
   try {
-    const url = `/task?act=history&uuid=${uuid}`
-    const resp = await request.post(url) as any
+    const url = `/msgs?task=${task}`
+    const resp = await request.post<any>(url)
     if (resp?.errmsg) {
       console.log("cancel error", resp)
       return toast.error(resp.errmsg)
@@ -145,7 +145,7 @@ const loadTaskMsgs = async (uuid: string) => {
   } catch (err) {
     console.error('use bot:', err)
   } finally {
-    msg.setTaskId(uuid)
+    msg.setTaskId(task)
     setTimeout(() => {
       autoScrollToEnd(true)
     }, 240)

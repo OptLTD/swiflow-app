@@ -283,7 +283,7 @@ func (h *HttpServie) LoadGlobal() map[string]any {
 	}
 
 	// default bot config
-	if list, err := h.store.LoadCfg(); err == nil {
+	if list, err := h.store.LoadCfg(); err == nil { // Call without parameters to maintain existing behavior
 		for _, item := range list {
 			switch item.Type {
 			case entity.KEY_LOGIN_USER:
@@ -407,7 +407,7 @@ func (h *HttpServie) SaveSetupCfg(cfg *entity.CfgEntity) error {
 
 func (h *HttpServie) LoadModelCfg() any {
 	result := map[string]any{}
-	if list, err := h.store.LoadCfg(); err == nil {
+	if list, err := h.store.LoadCfg(); err == nil { // Call without parameters to maintain existing behavior
 		models := map[string]any{}
 		result["models"] = &models
 		for _, item := range list {
@@ -467,7 +467,7 @@ func (h *HttpServie) InitBot() []*entity.BotEntity {
 }
 
 func (h *HttpServie) LoadBot() []*entity.BotEntity {
-	bots, _ := h.store.LoadBot()
+	bots, _ := h.store.LoadBot() // Call without parameters to maintain existing behavior
 	return bots
 }
 
@@ -495,7 +495,7 @@ func (h *HttpServie) UseBot(bot *entity.BotEntity) error {
 }
 
 func (h *HttpServie) LoadMem() []*entity.MemEntity {
-	list, _ := h.store.LoadMem()
+	list, _ := h.store.LoadMem() // Call without parameters to maintain existing behavior
 	return list
 }
 
@@ -525,7 +525,7 @@ func (h *HttpServie) LoadMsg(task *entity.TaskEntity, msgid string) *storage.Msg
 }
 
 func (h *HttpServie) LoadCache(key string) map[string]any {
-	list, err := h.store.LoadCfg()
+	list, err := h.store.LoadCfg() // Call without parameters to maintain existing behavior
 	if err != nil || len(list) == 0 {
 		return nil
 	}

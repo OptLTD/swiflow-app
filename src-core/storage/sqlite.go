@@ -78,13 +78,20 @@ func (s *SQLiteStorage) InitTask(task *TaskEntity) error {
 	return nil
 }
 
-// LoadTask 列出任务
-func (s *SQLiteStorage) LoadTask() ([]*TaskEntity, error) {
+// LoadTask lists tasks with optional query parameters
+func (s *SQLiteStorage) LoadTask(query ...any) ([]*TaskEntity, error) {
 	var models []*TaskEntity
 	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
 
-	query := s.gormDB.Where("updated_at >= ?", threeMonthsAgo)
-	if result := query.Order("id DESC").Find(&models); result.Error != nil {
+	// Start with base query for time filter
+	db := s.gormDB.Where("updated_at >= ?", threeMonthsAgo)
+
+	// Apply additional query conditions if provided
+	if len(query) > 0 {
+		db = db.Where(query[0], query[1:]...)
+	}
+
+	if result := db.Order("id DESC").Find(&models); result.Error != nil {
 		log.Printf("[SQLITE]failed to list task: %v", result.Error)
 		return nil, fmt.Errorf("failed to list task: %w", result.Error)
 	}
@@ -228,10 +235,17 @@ func (s *SQLiteStorage) SaveBot(bot *BotEntity) error {
 	return nil
 }
 
-func (s *SQLiteStorage) LoadBot() ([]*BotEntity, error) {
+// LoadBot loads bots with optional query parameters
+func (s *SQLiteStorage) LoadBot(query ...any) ([]*BotEntity, error) {
 	var result []*BotEntity
-	query := s.gormDB.Model(&BotEntity{}).Order("id desc")
-	if r := query.Preload("Memories").Find(&result); r.Error != nil {
+	db := s.gormDB.Model(&BotEntity{})
+
+	// Apply additional query conditions if provided
+	if len(query) > 0 {
+		db = db.Where(query[0], query[1:]...)
+	}
+
+	if r := db.Order("id desc").Preload("Memories").Find(&result); r.Error != nil {
 		log.Printf("[SQLITE]failed to query bot: %v", r.Error)
 		return result, fmt.Errorf("failed to query bot: %w", r.Error)
 	}
@@ -278,10 +292,17 @@ func (s *SQLiteStorage) SaveCfg(cfg *CfgEntity) error {
 	return nil
 }
 
-func (s *SQLiteStorage) LoadCfg() ([]*CfgEntity, error) {
+// LoadCfg loads configurations with optional query parameters
+func (s *SQLiteStorage) LoadCfg(query ...any) ([]*CfgEntity, error) {
 	var result []*CfgEntity
-	query := s.gormDB.Model(&CfgEntity{}).Order("id ASC")
-	if r := query.Find(&result); r.Error != nil {
+	db := s.gormDB.Model(&CfgEntity{})
+
+	// Apply additional query conditions if provided
+	if len(query) > 0 {
+		db = db.Where(query[0], query[1:]...)
+	}
+
+	if r := db.Order("id ASC").Find(&result); r.Error != nil {
 		log.Printf("[SQLITE]failed to query config: %v", r.Error)
 		return result, fmt.Errorf("failed to query config: %w", r.Error)
 	}
@@ -332,10 +353,17 @@ func (s *SQLiteStorage) SaveMem(mem *MemEntity) error {
 	return nil
 }
 
-func (s *SQLiteStorage) LoadMem() ([]*MemEntity, error) {
+// LoadMem loads memories with optional query parameters
+func (s *SQLiteStorage) LoadMem(query ...any) ([]*MemEntity, error) {
 	var result []*MemEntity
-	query := s.gormDB.Model(&MemEntity{}).Order("id desc")
-	if r := query.Find(&result); r.Error != nil {
+	db := s.gormDB.Model(&MemEntity{})
+
+	// Apply additional query conditions if provided
+	if len(query) > 0 {
+		db = db.Where(query[0], query[1:]...)
+	}
+
+	if r := db.Order("id desc").Find(&result); r.Error != nil {
 		log.Printf("[SQLITE]failed to query mem: %v", r.Error)
 		return nil, fmt.Errorf("failed to query mem: %w", r.Error)
 	}
@@ -384,10 +412,17 @@ func (s *SQLiteStorage) SaveTool(tool *ToolEntity) error {
 	return nil
 }
 
-func (s *SQLiteStorage) LoadTool() ([]*ToolEntity, error) {
+// LoadTool loads tools with optional query parameters
+func (s *SQLiteStorage) LoadTool(query ...any) ([]*ToolEntity, error) {
 	var result []*ToolEntity
-	query := s.gormDB.Model(&ToolEntity{}).Order("id desc")
-	if r := query.Find(&result); r.Error != nil {
+	db := s.gormDB.Model(&ToolEntity{})
+
+	// Apply additional query conditions if provided
+	if len(query) > 0 {
+		db = db.Where(query[0], query[1:]...)
+	}
+
+	if r := db.Order("id desc").Find(&result); r.Error != nil {
 		log.Printf("[SQLITE]failed to query tools: %v", r.Error)
 		return nil, fmt.Errorf("failed to query tools: %w", r.Error)
 	}
@@ -426,22 +461,22 @@ func (s *SQLiteStorage) SaveTodo(todo *TodoEntity) error {
 	return nil
 }
 
-func (s *SQLiteStorage) LoadTodo() ([]*TodoEntity, error) {
+// LoadTodo loads todos with optional query parameters
+func (s *SQLiteStorage) LoadTodo(query ...any) ([]*TodoEntity, error) {
 	var result []*TodoEntity
-	query := s.gormDB.Model(&TodoEntity{}).Order("id desc")
-	if r := query.Where("done = ?", 0).Find(&result); r.Error != nil {
+	db := s.gormDB.Model(&TodoEntity{})
+
+	// If no query parameters provided, default to undone todos (backward compatibility)
+	if len(query) == 0 {
+		db = db.Where("done = ?", 0)
+	} else {
+		// Apply query conditions - first parameter can be used to specify done status
+		db = db.Where(query[0], query[1:]...)
+	}
+
+	if r := db.Order("id desc").Find(&result); r.Error != nil {
 		log.Printf("[SQLITE]failed to query todos: %v", r.Error)
 		return nil, fmt.Errorf("failed to query todos: %w", r.Error)
-	}
-	return result, nil
-}
-
-func (s *SQLiteStorage) LoadDone() ([]*TodoEntity, error) {
-	var result []*TodoEntity
-	query := s.gormDB.Model(&TodoEntity{}).Order("id desc")
-	if r := query.Where("done = ?", 1).Find(&result); r.Error != nil {
-		log.Printf("[SQLITE]failed to query done todos: %v", r.Error)
-		return nil, fmt.Errorf("failed to query done todos: %w", r.Error)
 	}
 	return result, nil
 }

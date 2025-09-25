@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"swiflow/action"
-	"swiflow/support"
 )
 
 type SubAgent struct {
@@ -29,9 +28,8 @@ func (sa *SubAgent) OnStart(act *action.StartSubtask) {
 	log.Println("[SUBTASK] bot", worker.UUID)
 	// leader arrange subtask to worker
 	// need push subtask to worker
-	taskUUID, _ := support.UniqueID(8)
-	subtask, err := sa.parent.InitTask(
-		act.TaskDesc, "sub-"+taskUUID,
+	subtask, err := sa.parent.InitSubtask(
+		worker.UUID, sa.ldtask.Group,
 	)
 	if err == nil && subtask != nil {
 		// ensure work in same dir

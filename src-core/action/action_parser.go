@@ -1,6 +1,7 @@
 package action
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io/fs"
@@ -187,9 +188,9 @@ func Parse(data string) *SuperAction {
 	return msg
 }
 
-func (msg *SuperAction) Hash() []string {
+func (act *SuperAction) Hash() []string {
 	result := []string{}
-	for idx, act := range msg.UseTools {
+	for idx, act := range act.UseTools {
 		var identifier string
 		switch act := act.(type) {
 		case *Memorize:
@@ -308,20 +309,20 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 	}
 }
 
-func (msg *SuperAction) ToMap() map[string]any {
+func (act *SuperAction) ToMap() map[string]any {
 	result := map[string]any{
-		"theMsgId": msg.TheMsgId,
-		"thinking": msg.Thinking,
-		"datetime": msg.Datetime,
+		"theMsgId": act.TheMsgId,
+		"thinking": act.Thinking,
+		"datetime": act.Datetime,
 	}
-	if msg.Context != nil {
-		result["context"] = support.ToMap(msg.Context)
+	if act.Context != nil {
+		result["context"] = support.ToMap(act.Context)
 	}
-	if len(msg.Errors) > 0 {
-		result["errors"] = msg.Errors
+	if len(act.Errors) > 0 {
+		result["errors"] = act.Errors
 	}
-	actions, hash := []any{}, msg.Hash()
-	for idx, tool := range msg.UseTools {
+	actions, hash := []any{}, act.Hash()
+	for idx, tool := range act.UseTools {
 		if act, _ := tool.(IAct); act != nil {
 			value := support.ToMap(act)
 			value["hash"] = hash[idx]
@@ -334,6 +335,12 @@ func (msg *SuperAction) ToMap() map[string]any {
 
 	result["actions"] = actions
 	return result
+}
+
+// MarshalJSON implements custom JSON serialization for SuperAction
+// This ensures consistent API output format when using json.Marshal or json.Encoder
+func (act *SuperAction) MarshalJSON() ([]byte, error) {
+	return json.Marshal(act.ToMap())
 }
 
 func snap(text string, tag string) (string, string) {
