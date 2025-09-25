@@ -171,7 +171,6 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 15px;
-  margin: 0 auto;
   margin-bottom: 20px;
 }
 
@@ -214,6 +213,7 @@ defineExpose({
 }
 .progress,
 .env-status {
+  margin: 0 auto;
   max-width: 400px;
 }
 

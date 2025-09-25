@@ -34,6 +34,15 @@ const install = ref({
 
 // Single button control object
 const buttonControl = computed(() => {
+  // Priority 0: Missing components
+  if (unref(lossCmd).length > 0) {
+    return {
+      text: '⚠️ 缺少必要组件，请点击修复',
+      classes: ['btn-warning'],
+      onClick: showSetupEnvModal
+    }
+  }
+
   // Priority 1: Installing state
   if (install.value.running) {
     return {
@@ -68,16 +77,6 @@ const buttonControl = computed(() => {
       onClick: startMcpEnv
     }
   }
-  
-  // Priority 5: Missing components
-  if (unref(lossCmd).length > 0) {
-    return {
-      text: '⚠️ 缺少必要组件，请点击修复',
-      classes: ['btn-warning'],
-      onClick: showSetupEnvModal
-    }
-  }
-
   return null
 })
 onMounted(async () => {
@@ -91,7 +90,7 @@ watch(() => props.tools, (val) => {
 })
 watch(() => app.getMcpEnv, () => {
   startMcpEnv()
-})
+}, {deep: true})
 
 const doActiveMcp = async (server: McpServer) => {
   try {
@@ -252,10 +251,11 @@ const getCheckboxId = (val: string) => `select-${val}`
 // Check if MCP is ready: lossCmd is empty and no installation errors
 const getMcpReady = () => {
   const hasLossCmd = unref(lossCmd).length > 0
+  const isRunning = install.value.running === true
   const hasMcpError = install.value.result === 'error'
   
   // Return true only when lossCmd is empty and no installation errors
-  return !hasLossCmd && !hasMcpError
+  return  !hasLossCmd && !isRunning && !hasMcpError
 }
 
 const isInstalling = () => {
