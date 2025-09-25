@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"swiflow/config"
 	"swiflow/support"
 	"time"
 
@@ -44,19 +45,19 @@ func (a *McpClient) Initialize() error {
 
 	// Create client based on server type
 	var mcpClient *client.Client
-	var err error
-
 	switch a.server.Type {
 	case "debug":
+		cmdPath, err := config.GetMcpEnv(a.server.Cmd)
 		mcpClient, err = client.NewStdioMCPClient(
-			a.server.Cmd, a.server.GetEnv(), a.server.Args...,
+			cmdPath, a.server.GetEnv(), a.server.Args...,
 		)
 		if err != nil {
 			return fmt.Errorf("启动MCP客户端失败: %v", err)
 		}
 	default:
+		cmdPath, err := config.GetMcpEnv(a.server.Cmd)
 		mcpClient, err = client.NewStdioMCPClient(
-			a.server.Cmd, a.server.GetEnv(), a.server.Args...,
+			cmdPath, a.server.GetEnv(), a.server.Args...,
 		)
 		if err != nil {
 			return fmt.Errorf("启动MCP客户端失败: %v", err)

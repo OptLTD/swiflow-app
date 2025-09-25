@@ -11,6 +11,7 @@ import (
 
 	"swiflow/ability"
 	"swiflow/action"
+	"swiflow/amcp"
 	"swiflow/config"
 	"swiflow/entry"
 	"swiflow/httpd"
@@ -38,12 +39,11 @@ func main() {
 		entry.StartWork("../workdata")
 	case "test":
 		var s = new(httpd.HttpServie)
-		resp := s.InitMcpEnvAsync("uvx-py", "mainland")
-		log.Println("[HTTP] async installation started:", resp)
+		// resp := s.InitMcpEnvAsync("uvx-py", "mainland")
+		// log.Println("[HTTP] async installation started:", resp)
 
 		// Initial environment check
-		service := new(httpd.HttpServie)
-		env := service.GetMcpEnv().(map[string]any)
+		env := s.GetMcpEnv().(map[string]any)
 		if uv, _ := env["uvx"]; uv != "" {
 			log.Println("[HTTP] uvx already available:", uv)
 		}
@@ -51,8 +51,17 @@ func main() {
 			log.Println("[HTTP] python already available:", py)
 		}
 
-		// Keep the main process running to observe the periodic checks
-		log.Println("[HTTP] Monitoring installation progress... (Press Ctrl+C to exit)")
+		// check mcp tool is available
+		mcpLark := &amcp.McpServer{
+			Name: "mcp-pdf-reader",
+			Cmd:  "npx", Args: []string{
+				"-y", "@larksuiteoapi/lark-mcp",
+			},
+		}
+		if err := mcpLark.Preload(); err != nil {
+			log.Println("[HTTP] preload mcp pdf reader fail:", err)
+		}
+		log.Println("[HTTP] progress... (Press Ctrl+C to exit)")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		<-c

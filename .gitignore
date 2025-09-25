@@ -15,7 +15,8 @@ output
 *.local
 
 # tmp data
-workdata
+workdata/
+workdata/**
 
 # Editor directories and files
 .vscode/*

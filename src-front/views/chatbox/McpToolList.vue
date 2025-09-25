@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Tippy } from 'vue-tippy'
-import { ref, watch, unref } from 'vue'
-import { onMounted, PropType } from 'vue'
+import { ref,  unref, computed } from 'vue'
+import { watch, onMounted, PropType } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { request, alert } from '@/support/index';
 import { showSetupEnvModal } from '@/logics/popup'
@@ -24,29 +24,95 @@ const lossCmd = ref<string[]>([])
 const servers = ref<McpServer[]>([])
 const checked = ref(props.tools || [])
 const groupChecked = ref<Record<string, boolean>>({})
+
+// Installation status tracking
+const install = ref({
+  result: '',
+  message: '',
+  running: false,
+})
+
+// Single button control object
+const buttonControl = computed(() => {
+  // Priority 0: Missing components
+  if (unref(lossCmd).length > 0) {
+    return {
+      text: '⚠️ 缺少必要组件，请点击修复',
+      classes: ['btn-warning'],
+      onClick: showSetupEnvModal
+    }
+  }
+
+  // Priority 1: Installing state
+  if (install.value.running) {
+    return {
+      text: `🔄 ${install.value.message}`,
+      classes: ['btn-installing'],
+    }
+  }
+  
+  // Priority 2: Installation success
+  if (install.value.result === 'success') {
+    return {
+      text: `✅ ${install.value.message}`,
+      classes: ['btn-success'],
+    }
+  }
+  
+  // Priority 3: Installation error
+  if (install.value.result === 'error') {
+    return {
+      text: `❌ ${install.value.message} - Click to retry`,
+      classes: ['btn-error'],
+      onClick: showSetupEnvModal
+    }
+  }
+  
+  // Priority 4: Some enabled MCP servers failed to activate
+  const enabledServers = servers.value.filter(s => s.status?.enable)
+  if (enabledServers.some(s => !s.status?.active)) {
+    return {
+      text: '❌ Some MCP servers failed to activate - Click to retry',
+      classes: ['btn-error'],
+      onClick: startMcpEnv
+    }
+  }
+  return null
+})
 onMounted(async () => {
   // Load MCP list when component mounts
   await loadMcpList()
-  await checkMcpEnv()
+  await startMcpEnv()
 })
 watch(() => props.tools, (val) => {
   checked.value = val || [] as string[]
   groupChecked.value = getGroupChecked()
 })
 watch(() => app.getMcpEnv, () => {
-  checkMcpEnv()
-})
+  startMcpEnv()
+}, {deep: true})
+
 const doActiveMcp = async (server: McpServer) => {
   try {
     server.loading = true
+    install.value.result = ""
+    install.value.message = `Installing ${server.name}`
     const url = `/mcp?act=active&uuid=${server.uuid}`
     const resp = await request.post(url) as McpStatus
-    if ((resp as any)?.errmsg) {
-      throw (resp as any)?.errmsg
+    const data = (resp as any)
+    if (data && data?.errmsg) {
+      install.value.result = 'error'
+      install.value.message = data.errmsg
+      throw data.errmsg
     }
     if (resp) {
       resp.enable = !!resp.enable
       server.status = resp as McpStatus
+      const active = server.status?.active
+      install.value.result = active ? 'success' : 'error'
+      install.value.message = active
+        ? `${server.name} installed successfully`
+        : `${server.name} installation failed`
     }
     return resp
   } catch (err) {
@@ -71,8 +137,10 @@ const loadMcpList = async () => {
   }
 }
 
-const checkMcpEnv = async () => {
+const startMcpEnv = async () => {
   const loss = [] as string[]
+  const errors = [] as string[]
+  install.value.running = true
   for (var item of servers.value) {
     if (!item.status?.enable) {
       continue
@@ -84,6 +152,22 @@ const checkMcpEnv = async () => {
     }
     const status = await doActiveMcp(item)
     item.status = status || {} as McpStatus
+    // collection error messages
+    if (install.value.result === 'error') {
+      errors.push(install.value.message)
+    }
+  }
+  install.value.running = false
+  if (errors.length > 0) {
+    install.value.result = 'error'
+    install.value.message = errors.join('\n')
+  } else {
+    install.value.result = 'success'
+    install.value.message = 'all mcp install successfully'
+    setTimeout(() => {
+      install.value.result = ''
+      install.value.message = ''
+    }, 3000)
   }
   groupChecked.value = getGroupChecked()
   lossCmd.value = [...new Set(loss)] // Remove duplicates from loss array
@@ -164,9 +248,18 @@ const isToolChecked = (tool: any, server: McpServer) => {
 
 const getCheckboxId = (val: string) => `select-${val}`
 
-// Get missing command list for environment check
-const getLossCmd = () => {
-  return unref(lossCmd)
+// Check if MCP is ready: lossCmd is empty and no installation errors
+const getMcpReady = () => {
+  const hasLossCmd = unref(lossCmd).length > 0
+  const isRunning = install.value.running === true
+  const hasMcpError = install.value.result === 'error'
+  
+  // Return true only when lossCmd is empty and no installation errors
+  return  !hasLossCmd && !isRunning && !hasMcpError
+}
+
+const isInstalling = () => {
+  return install.value.running
 }
 
 // Shake animation for warning button
@@ -211,8 +304,9 @@ const onSwitchServer = async (server: McpServer, enable: boolean) => {
 
 // Expose methods to parent component
 defineExpose({
-  getLossCmd,
-  shakeElement
+  getMcpReady,
+  isInstalling,
+  shakeElement,
 })
 
 </script>
@@ -244,10 +338,12 @@ defineExpose({
       </div>
     </template>
   </tippy>
-  <button class="btn-warning"
-   v-if="lossCmd.length" 
-   @click="showSetupEnvModal">
-    ⚠️ 缺少必要组件，请点击修复
+  
+  <!-- Single dynamic status button -->
+  <button v-if="buttonControl"
+    :class="buttonControl.classes"
+    @click="buttonControl.onClick!()">
+    {{ buttonControl.text }}
   </button>
 </template>
 
@@ -294,11 +390,57 @@ defineExpose({
 .tools-panel .dropdown-item input[type="checkbox"] {
   margin-right: 8px;
 }
+.btn-installing {
+  outline: none;
+  border-width: 0;
+  background-color: #e3f2fd;
+  color: #1976d2;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: not-allowed;
+  font-size: 12px;
+  text-align: left;
+  position: relative;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+}
+
+.btn-success {
+  outline: none;
+  border-width: 0;
+  background-color: #e8f5e8;
+  color: #2e7d32;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: not-allowed;
+  font-size: 12px;
+  text-align: left;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.btn-error {
+  outline: none;
+  border-width: 0;
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.btn-error:hover {
+  background-color: #ffcdd2;
+}
+
 .btn-warning {
   outline: none;
   border-width: 0;
   background-color: #fff3cd;
-  /* border: 1px solid #ffeaa7; */
   color: #856404;
   padding: 8px 12px;
   border-radius: 4px;
@@ -313,6 +455,7 @@ defineExpose({
   background-color: #ffeaa7;
   border-color: #fdcb6e;
 }
+
 /* CSS class to trigger shake animation */
 .btn-warning.shake {
   animation: shake 0.6s ease-in-out;

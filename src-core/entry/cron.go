@@ -149,7 +149,7 @@ func fetchSystemEnv(_ string) {
 	}
 	if err := store.FindCfg(cfg); err == nil {
 		err = manager.UpdateEnv(cfg)
-		log.Println("[BOOT] 更新ENV", err)
+		log.Println("[BOOT] PRESET ENV", err)
 	}
 
 	// @todo bot.Home Future Disabled
@@ -216,11 +216,10 @@ func startMcpServers(_ string) {
 		if !server.Status.Enable {
 			continue
 		}
-		err := mcpSrv.ServerStatus(server)
-		if err != nil {
-			log.Printf("[MCP] 启动服务器 %s 失败: %v", server.Name, err)
+		if err := server.Preload(); err != nil {
+			log.Printf("[MCP] Preload Mcp Tools %s Failure: %v", server.Name, err)
 		} else {
-			log.Printf("[MCP] 启动服务器 %s 成功", server.Name)
+			log.Printf("[MCP] Preload Mcp Tools %s Success", server.Name)
 		}
 	}
 }

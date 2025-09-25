@@ -2,6 +2,7 @@ package amcp
 
 import (
 	"fmt"
+	"log"
 	"swiflow/entity"
 	"swiflow/storage"
 	"sync"
@@ -180,7 +181,12 @@ func (m *McpService) LoadMcpServer(mcps map[string]any) {
 			exist[uuid] = server
 		}
 		if len(server.Status.McpTools) == 0 {
-			m.ServerStatus(server)
+			// need load package first
+			if err := m.ServerStatus(server); err != nil {
+				log.Printf("[MCP] 启动服务器 %s 失败: %v", server.Name, err)
+			} else {
+				log.Printf("[MCP] 启动服务器 %s 成功", server.Name)
+			}
 			m.EnableServer(server)
 		}
 	}
