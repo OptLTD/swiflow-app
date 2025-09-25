@@ -52,6 +52,12 @@ const getRunning = computed(() => {
   return (bot: BotEntity) => task.getRunning(bot.uuid)
 })
 
+const leaders = computed(() => {
+  return app.getBotList.filter((bot) => {
+    return !bot.leader
+  })
+})
+
 const loadTaskList = async () => {
   try {
     const url = '/task?act=load-task'
@@ -93,20 +99,20 @@ defineExpose({
   </div>
   <div id="nav-container">
     <dl class="nav-list">
-      <template v-if="app.getBotList.length == 0">
+      <template v-if="leaders.length == 0">
         <div class="empty-result">
           {{ $t('common.empty') }}
         </div>
       </template>
-      <template v-for="item in app.getBotList" :key="item.uuid">
-        <dd :class="clazz(item)" @click="onSwitchBot(item)">
+      <template v-for="leader in leaders" :key="leader.uuid">
+        <dd :class="clazz(leader)" @click="onSwitchBot(leader)">
           <div class="bot-container">
-            <tippy :theme="app.getTheme" placement="left-start" :content="item.name">
-              {{ emoji.get(item.emoji || 'man_technologist') }}
+            <tippy :theme="app.getTheme" placement="left-start" :content="leader.name">
+              {{ emoji.get(leader.emoji || 'man_technologist') }}
             </tippy>
-            <div v-if="getRunning(item)" class="running-task">
+            <div v-if="getRunning(leader)" class="running-task">
               <tippy :theme="app.getTheme" placement="left-start" 
-                :content="`正在运行: ${getRunning(item)?.name}`">
+                :content="`正在运行: ${getRunning(leader)?.name}`">
                 <div class="task-indicator">●</div>
               </tippy>
             </div>

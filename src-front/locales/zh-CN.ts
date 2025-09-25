@@ -36,6 +36,7 @@ export default {
   common: {
     view: '查看',
     save: '保存',
+    edit: '修改',
     addNew: '新增',
     result: '结果',
     cancel: '取消',
@@ -62,10 +63,14 @@ export default {
     notAvailable: '暂不可用',
     toolsAvailable: '个工具可用',
     empty: 'EMPTY LIST',
-
+    
     gotoSignUp: '去注册',
     historyTasks: '历史任务',
 
+    botNoDesc: '无描述',
+    editDescTitle: '修改描述',
+    editDescTips: '描述信息用于介绍此Bot的能力，Head Bot会根据此描述进行不同的任务分配',
+    
     // 用户配置相关
     login: '登录',
     logout: '退出登录',

@@ -9,9 +9,9 @@ export class XMLParser {
   private static readonly ANNOTATE = 'annotate';
   // private static readonly MEMORIZE = 'memorize';
 
-  private static readonly START_BOT_TASK = "start-bot-task"
-  private static readonly QUERY_BOT_TASK = "query-bot-task"
-  private static readonly ABORT_BOT_TASK = "abort-bot-task"
+  private static readonly START_SUBTASK = "start-subtask"
+  private static readonly QUERY_SUBTASK = "query-subtask"
+  private static readonly ABORT_SUBTASK = "abort-subtask"
   private static readonly EXECUTE_COMMAND = 'execute-command';
   private static readonly START_ASYNC_CMD = "start-async-cmd"
   private static readonly QUERY_ASYNC_CMD = "query-async-cmd"
@@ -20,6 +20,7 @@ export class XMLParser {
   private static readonly FILE_GET_CONTENT = 'file-get-content';
   private static readonly FILE_PUT_CONTENT = 'file-put-content';
   private static readonly FILE_REPLACE_TEXT = 'file-replace-text';
+
 
   private static readonly USE_MCP_TOOL = 'use-mcp-tool';
   private static readonly USE_SELF_TOOL = 'use-self-tool';
@@ -140,9 +141,9 @@ export class XMLParser {
         }
         return result as MsgAct
       }
-      case XMLParser.START_BOT_TASK:
-      case XMLParser.QUERY_BOT_TASK:
-      case XMLParser.ABORT_BOT_TASK: {
+      case XMLParser.START_SUBTASK:
+      case XMLParser.QUERY_SUBTASK:
+      case XMLParser.ABORT_SUBTASK: {
         if (!result['session']) {
           return null
         }

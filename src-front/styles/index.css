@@ -357,16 +357,12 @@ button:focus-visible {
 }
 
 .group-header {
-  background: var(--bg-menu);
+  background: var(--color-divider);
   color: var(--text-main);
   border-radius: 4px;
   font-weight: 600;
   font-size: 14px;
   transition: background 0.2s;
-}
-
-.group-header:hover {
-  background: rgba(120, 120, 120, 0.08);
 }
 
 .modal-content {

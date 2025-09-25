@@ -125,7 +125,10 @@ defineExpose({ getFormModel: () => formModel.value })
           </tippy>
         </template>
       </FormKit>
-      <SelectInput v-model="formModel.tools" :options="mcpTools" label="Use Tools" grouped/>
+      <SelectInput v-model="formModel.tools" 
+        :options="mcpTools" label="Use Tools"
+        grouped :disabled="!formModel.leader"
+      />
       <FormKit
         type="select"
         name="provider"

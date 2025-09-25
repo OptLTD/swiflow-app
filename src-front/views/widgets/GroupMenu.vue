@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { PropType, ref, watch, computed } from 'vue'
+import { PropType, onMounted } from 'vue'
+import { ref, watch, computed } from 'vue'
 
 const props = defineProps({
   current: {
@@ -7,60 +8,45 @@ const props = defineProps({
     default: () => ''
   },
   items: {
-    type: Array as PropType<MemEntity[]>,
+    type: Array as PropType<MenuMeta[]>,
     default: () => []
   },
-  bots: {
-    type: Array as PropType<BotEntity[]>,
+  group: {
+    type: Array as PropType<MenuMeta[]>,
     default: () => []
   },
   active: {
-    type: Object as PropType<BotEntity>,
+    type: Object as PropType<MenuMeta>,
     default: () => null
+  },
+  divide: {
+    type: Boolean as PropType<Boolean>,
+    default: () => true
   }
 })
 
 const active = ref<string>(props.current)
 const emit = defineEmits(['click', 'create', 'remove'])
 
-// 折叠状态管理 - 默认展开活跃 Bot 的记忆，折叠其他的
-const collapsedGroups = computed(() => {
-  const collapsed = new Set<string>()
-  
-  // 遍历所有 bot 分组
-  Object.keys(groupedItems.value).forEach(botId => {
-    // 如果不是活跃的 bot，则折叠
-    if (props.active && botId !== props.active.uuid) {
-      collapsed.add(botId)
-    }
-  })
-  
-  // 添加用户手动折叠的分组
-  userCollapsedGroups.value.forEach(botId => {
-    collapsed.add(botId)
-  })
-  
-  return collapsed
-})
-
 // 用户手动折叠状态管理
-const userCollapsedGroups = ref<Set<string>>(new Set())
+const allCollapsed = ref<Set<string>>(new Set())
 
-// 按bot分组items
+// 按group分组items
 const groupedItems = computed(() => {
-  const groups: Record<string, MemEntity[]> = {}
+  const groups: Record<string, MenuMeta[]> = {}
   
-  // 初始化所有bot的分组
-  props.bots.forEach(bot => {
-    groups[bot.uuid] = []
+  // 初始化所有group的分组
+  props.group.forEach(groupItem => {
+    groups[groupItem.value] = []
   })
   
-  // 将items按bot分组
+  // 将items按group分组
   props.items.forEach(item => {
-    if (groups[item.bot]) {
-      groups[item.bot].push(item)
+    const groupKey = item.group || 'other'
+    if (groups[groupKey]) {
+      groups[groupKey].push(item)
     } else {
-      // 如果bot不存在，创建一个"其他"分组
+      // 如果group不存在，创建一个"其他"分组
       if (!groups['other']) {
         groups['other'] = []
       }
@@ -71,39 +57,60 @@ const groupedItems = computed(() => {
   return groups
 })
 
-const clazz = (item: MemEntity) => {
-  return active.value == String(item.id) ? 'active': ''
+const clazz = (item: MenuMeta) => {
+  return active.value == String(item.value) ? 'active': ''
 }
 
-const onClick = (item: MemEntity) => {
-  active.value = String(item.id)
+const onClick = (item: MenuMeta) => {
+  active.value = String(item.value)
   emit('click', item)
 }
 
-const onCreate = (botId: string) => {
-  emit('create', botId)
-}
-
-const onRemove = (item: MemEntity) => {
+const onDelGroup = (groupId: string) => {
+  const item = props.group.find(g => {
+    return g.value === groupId
+  })
   emit('remove', item)
 }
 
-const getBotName = (botId: string) => {
-  const bot = props.bots.find(b => b.uuid === botId)
-  return bot ? bot.name : '其他'
+const onViewGroup = (groupId: string) => {
+  const item = props.group.find(g => {
+    return g.value === groupId
+  })
+  emit('click', item)
+}
+const onAddSub = (groupId: string) => {
+  emit('create', groupId)
+}
+
+const onRemove = (item: MenuMeta) => {
+  emit('remove', item)
+}
+
+const getGroupName = (groupId: string) => {
+  const groupItem = props.group.find(g => g.value === groupId)
+  return groupItem ? groupItem.label : '其他'
+}
+
+const onHeaderClick = (groupId: string) => {
+  const groupItem = props.group.find(g => {
+    return g.value === groupId
+  })
+  active.value = String(groupId)
+  emit('click', groupItem)
 }
 
 // 折叠/展开功能
-const toggleCollapse = (botId: string) => {
-  if (userCollapsedGroups.value.has(botId)) {
-    userCollapsedGroups.value.delete(botId)
+const toggleCollapse = (groupId: string) => {
+  if (allCollapsed.value.has(groupId)) {
+    allCollapsed.value.delete(groupId)
   } else {
-    userCollapsedGroups.value.add(botId)
+    allCollapsed.value.add(groupId)
   }
 }
 
-const isCollapsed = (botId: string) => {
-  return collapsedGroups.value.has(botId)
+const isCollapsed = (groupId: string) => {
+  return allCollapsed.value.has(groupId)
 }
 
 watch(() => props.current, (val, old) => {
@@ -111,53 +118,72 @@ watch(() => props.current, (val, old) => {
     active.value = props.current
   }
 })
-
-// 监听活跃 Bot 变化，清除用户手动折叠状态
-watch(() => props.active, () => {
-  userCollapsedGroups.value.clear()
+onMounted(() => {
+  Object.keys(groupedItems.value).forEach(groupId => {
+    // 如果不是活跃的 group，则折叠
+    if (props.active && groupId !== props.active.value) {
+      allCollapsed.value.add(groupId)
+    }
+  })
 })
 </script>
 
 <template>
   <div class="group-menu">
-    <template v-for="(items, botId) in groupedItems" :key="botId">
-      <div class="group-header" @click="toggleCollapse(botId)">
+    <template v-for="(items, groupId) in groupedItems" :key="groupId">
+      <div class="group-header" @click="toggleCollapse(groupId)">
         <div class="group-header-left">
-          <span class="collapse-icon" :class="{ 'collapsed': isCollapsed(botId) }">
+          <span class="collapse-icon" :class="{ 
+            'collapsed': isCollapsed(groupId)
+          }">
             ▼
           </span>
-          <span class="group-title">{{ getBotName(botId) }}</span>
+          <span class="group-title">
+            {{ getGroupName(groupId) }}
+          </span>
+          <button v-if="!divide" class="btn-view"
+            @click.stop="onViewGroup(groupId)">
+            <span class="icon">查看</span>
+          </button>
         </div>
-        <button class="btn-add" 
-          @click.stop="onCreate(botId)" 
-          :title="$t('common.addMem')">
-          <span class="icon">+</span>
-        </button>
+        <div class="group-header-right">
+          <button v-if="!divide" class="btn-del" 
+            @click.stop="onDelGroup(groupId)">
+            <span class="icon">x</span>
+          </button>
+          <button class="btn-add" 
+            @click.stop="onAddSub(groupId)" 
+            :title="$t('common.addMem')">
+            <span class="icon">+</span>
+          </button>
+        </div>
       </div>
       <div class="menu-list-container" 
-        :class="{ 'collapsed': isCollapsed(botId) }">
+        :class="{ 'collapsed': isCollapsed(groupId) }">
         <ul class="menu-list">
           <template v-if="items.length > 0">
-            <template v-for="item in items" :key="String(item.id)">
+            <template v-for="item in items" :key="String(item.value)">
               <li :class="clazz(item)" @click="onClick(item)">
                 <slot name="default" :item="item">
                   <span class="item-label">
-                    {{ item.data.substring(0, 12) }}
+                    {{ item.label }}
                   </span>
+                  <button class="btn-remove" 
+                    @click.stop="onRemove(item)" 
+                    :title="$t('common.delMemTip')">
+                    <span class="icon">×</span>
+                  </button>
                 </slot>
-                <button class="btn-remove" 
-                  @click.stop="onRemove(item)" 
-                  :title="$t('common.delMemTip')">
-                  <span class="icon">×</span>
-                </button>
               </li>
             </template>
           </template>
           <template v-else>
             <li class="empty-item">
-              <span class="empty-label">
-                {{ $t('common.noMem') }}
-              </span>
+              <slot name="empty">
+                <span class="empty-label">
+                  {{ $t('common.empty') }}
+                </span>
+              </slot>
             </li>
           </template>
         </ul>
@@ -177,23 +203,15 @@ watch(() => props.active, () => {
   justify-content: space-between;
   padding: 8px 12px;
   margin: 8px 0 4px 0;
-  background-color: #f5f5f5;
   border-radius: 4px;
   font-weight: 600;
   font-size: 14px;
   color: #333;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.group-header:hover {
-  background-color: #e9ecef;
 }
 
 .group-header-left {
   display: flex;
   align-items: center;
-  flex: 1;
 }
 
 .collapse-icon {
@@ -201,6 +219,7 @@ watch(() => props.active, () => {
   font-size: 12px;
   transition: transform 0.3s ease;
   color: #666;
+  cursor: pointer;
 }
 
 .collapse-icon.collapsed {
@@ -209,21 +228,29 @@ watch(() => props.active, () => {
 
 .group-title {
   flex: 1;
+  cursor: pointer;
 }
 
-.btn-add {
+.btn-add,.btn-del,.btn-view {
   background: none;
   border: none;
-  color: #007bff;
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 16px;
   font-weight: bold;
+  outline: none;
+  color: var(--color-secondary);
   transition: background-color 0.2s;
 }
+.btn-view{
+  font-size: 13px;
+}
 
+.btn-view:hover,
+.btn-del:hover,
 .btn-add:hover {
+  color: var(--color-primary);
   background-color: #e3f2fd;
 }
 
@@ -245,28 +272,25 @@ watch(() => props.active, () => {
   list-style: none;
 }
 
-.menu-list > li {
-  height: 24px;
+.menu-list>li{
   margin: 2px 0;
-  padding: 0.5em 0.5em;
-  line-height: 24px;
+  padding: 0.5em 8px;
   border-radius: 5px;
+
   display: flex;
   cursor: pointer;
   align-items: center;
   justify-content: space-between;
-  font-weight: bold;
-  transition: background-color 0.2s;
-  position: relative;
 }
 
 .menu-list > li:hover {
-  background-color: #f8f9fa;
+  background: transparent;
+  color: var(--text-main);
 }
 
 .menu-list > li.active {
-  background-color: #007bff;
-  color: white;
+  color: var(--text-main);
+  background: var(--bg-menu);
 }
 
 .empty-item {
@@ -280,7 +304,6 @@ watch(() => props.active, () => {
   justify-content: space-between;
   font-weight: normal;
   color: #999;
-  font-style: italic;
   cursor: default;
   background-color: transparent;
 }
@@ -303,7 +326,6 @@ watch(() => props.active, () => {
 }
 
 .btn-remove {
-  right: 8px;
   position: absolute;
   background: none;
   border: none;
@@ -329,4 +351,4 @@ watch(() => props.active, () => {
   display: inline-block;
   line-height: 1;
 }
-</style> 
+</style>

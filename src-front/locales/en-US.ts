@@ -65,6 +65,10 @@ export default {
     gotoSignUp: 'Go Sign Up',
     historyTasks: 'History Tasks',
 
+    botNoDesc: 'No description, please complete',
+    editDescTitle: 'Edit Description',
+    editDescTips: 'Description is used to introduce the capabilities of this Bot, Head Bot will assign different tasks based on this description',
+
     // User profile related
     login: 'Login',
     logout: 'Logout',

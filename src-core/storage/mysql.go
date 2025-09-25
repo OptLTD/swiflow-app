@@ -226,7 +226,7 @@ func (s *MySQLStorage) SaveBot(bot *BotEntity) error {
 		"name": bot.Name, "type": bot.Type, "desc": bot.Desc,
 		"emoji": bot.Emoji, "tools": bot.Tools, "deleted_at": nil,
 		"sys_prompt": bot.SysPrompt, "use_prompt": bot.UsePrompt,
-		"home": bot.Home, "provider": bot.Provider,
+		"leader": bot.Leader, "home": bot.Home, "provider": bot.Provider,
 	}
 
 	clauses := clause.OnConflict{

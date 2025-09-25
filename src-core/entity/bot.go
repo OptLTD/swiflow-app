@@ -13,8 +13,9 @@ type BotEntity struct {
 	Home string `json:"home" gorm:"column:home;size:200"`
 	Desc string `json:"desc" gorm:"column:desc;size:200"`
 
-	Emoji string   `json:"emoji" gorm:"column:emoji;size:50"`
-	Tools []string `json:"tools" gorm:"tools;serializer:json;"`
+	Emoji  string   `json:"emoji" gorm:"column:emoji;size:50"`
+	Tools  []string `json:"tools" gorm:"tools;serializer:json;"`
+	Leader string   `json:"leader" gorm:"column:leader;size:16"`
 
 	UsePrompt string `json:"usePrompt" gorm:"column:use_prompt"`
 	SysPrompt string `json:"sysPrompt" gorm:"column:sys_prompt"`
@@ -40,7 +41,7 @@ func (m *BotEntity) TableName() string {
 func (r *BotEntity) ToMap() map[string]any {
 	return map[string]any{
 		"uuid": r.UUID, "type": r.Type, "name": r.Name,
-		"home": r.Home, "tools": r.Tools, "desc": r.Desc,
-		"provider": r.Provider, "emoji": r.Emoji,
+		"home": r.Home, "tools": r.Tools, "emoji": r.Emoji,
+		"leader": r.Leader, "provider": r.Provider, "desc": r.Desc,
 	}
 }

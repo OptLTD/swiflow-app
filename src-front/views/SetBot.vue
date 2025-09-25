@@ -2,18 +2,59 @@
 import { useI18n } from 'vue-i18n';
 import { isEmpty } from 'lodash-es';
 import { toast } from 'vue3-toastify';
-import { onMounted, watch, ref } from 'vue';
+import { onMounted, watch, ref, computed } from 'vue';
 import { useAppStore } from '@/stores/app';
-import BasicMenu from './widgets/BasicMenu.vue';
+import GroupMenu from './widgets/GroupMenu.vue';
 import SetHeader from './widgets/SetHeader.vue';
 import FormSetBot from '@/widgets/FormSetBot.vue'
 import { confirm, request, alert } from '@/support';
+import { showInputModal } from '@/logics/popup';
 
 const app = useAppStore()
-const items = ref<MenuMeta[]>([])
 const active = ref('' as string)
 const current = ref({} as BotEntity)
 const theForm = ref<typeof FormSetBot>()
+
+const groupedBots = computed(() => {
+  const leaders: BotEntity[] = []
+  const workers: BotEntity[] = []
+  
+  app.getBotList.forEach(bot => {
+    if (bot.leader === '' || !bot.leader) {
+      // This is a leader bot
+      leaders.push(bot)
+    } else {
+      // This is a worker bot
+      workers.push(bot)
+    }
+  })
+  
+  return { leaders, workers }
+})
+
+const botLeaders = computed(() => {
+  return groupedBots.value.leaders.map(bot => ({
+    label: bot.name, value: bot.uuid,
+    group: 'leader', other: bot
+  } as MenuMeta))
+})
+
+const botWorkers = computed(() => {
+  return groupedBots.value.workers.map(bot => ({
+    label: bot.name, value: bot.uuid,
+    group: bot.leader, other: bot
+  } as MenuMeta))
+})
+const botActive = computed(() => {
+  if (!app.getActive) {
+    return undefined
+  }
+  const bot = app.getActive
+  return {
+    label: bot.name, value: bot.uuid,
+    group: bot.leader, other: bot
+  } as MenuMeta
+})
 
 const { t } = useI18n({
   inheritLocale: true,
@@ -39,7 +80,6 @@ onMounted(async () => {
         active.value = curr.uuid
       }
     } else {
-      // 重置bots
       if (await confirm(t('tips.initBotMsg'))){
         await doInit()
       }
@@ -51,20 +91,13 @@ onMounted(async () => {
 
 const resetItems = () => {
   try {
-    items.value = app.getBotList.map((item) => {
-      return {
-        label: item.name || '',
-        value: item.uuid || '',
-      }
-    })
     return app.getBotList.length
   } catch (error) {
     console.error('Error in resetItems:', error)
-    items.value = []
     return 0
   }
 }
-const resetBots = (act: string, {uuid, name}: BotEntity) => {
+const resetBots = (act: string, {uuid, name, leader}: BotEntity) => {
   try {
     const bots = app.getBotList
     for(var i in bots) {
@@ -76,7 +109,7 @@ const resetBots = (act: string, {uuid, name}: BotEntity) => {
       }
     }
     if (act == 'add-bot') {
-      bots.push({uuid, name} as BotEntity)
+      bots.push({uuid, name, leader} as BotEntity)
     }
     app.setBotList(bots.filter(x => x.name))
     if (resetItems() > 0 && act == 'add-bot') {
@@ -87,20 +120,27 @@ const resetBots = (act: string, {uuid, name}: BotEntity) => {
   }
 }
 
-const onCreate = () => {
+const onSelectBot = async (item: MenuMeta) => {
   try {
-    current.value = {'provider': 'doubao'} as BotEntity
+    await doLoad(item.value)
   } catch (error) {
-    console.error('Error in onCreate:', error)
+    console.error('Error in onSelect:', error)
   }
 }
 
-const onRemove = async (item: MenuMeta) => {
+const onCreateBot = (leaderId: string) => {
+  current.value = {
+    'leader': leaderId
+  } as BotEntity
+  active.value = ''
+}
+
+const onRemoveBot = async (item: MenuMeta) => {
   const msg = t('tips.delBotMsg')
-  // const tip = t('tips.delBotTip')
   const answer = await confirm(msg)
   if (!answer) return
-  await doRemove(item.value)
+
+  await doRemoveBot(item.value)
 
   if (app.getBotList.length > 0) {
     const curr = app.getBotList[0]
@@ -109,21 +149,13 @@ const onRemove = async (item: MenuMeta) => {
     return
   }
 
-  // 重置bots
-  if (await confirm(t('tips.initBotMsg'))){
+  // Reset bots if no bots left
+  if (await confirm(t('tips.initBotMsg'))) {
     await doInit()
   }
 }
 
-const onSelect = async (item: MenuMeta) => {
-  try {
-    await doLoad(item.value)
-  } catch (error) {
-    console.error('Error in onSelect:', error)
-  }
-}
-
-const doRemove = async (uuid: string) => {
+const doRemoveBot = async (uuid: string) => {
   try {
     const url = `/bot?act=del-bot&uuid=${uuid}`
     const resp = await request.post(url) 
@@ -165,7 +197,7 @@ const doLoad = async (uuid: string) => {
     console.error('get bot:', err)
     toast('ERROR:'+err)
     // 设置一个默认的bot实体以防止UI错误
-    current.value = { uuid: uuid, name: '', provider: 'deepseek' } as BotEntity
+    current.value = { uuid: uuid, name: '', provider: '' } as BotEntity
   }
 }
 const doSaveBot = () => {
@@ -174,14 +206,14 @@ const doSaveBot = () => {
     const formData = form?.getFormModel()
     if (formData && formData.name) {
       delete(formData.sysPrompt)
-      doSumbit(formData)
+      doSubmit(formData)
     }
   } catch (error) {
     console.error('Error in doSaveBot:', error)
   }
 }
 
-const doSumbit = async (bot: BotEntity) => {
+const doSubmit = async (bot: BotEntity) => {
   try {
     const url = `/bot?act=set-bot&uuid=${bot.uuid || ''}`
     const resp = await request.post<any>(url, bot)
@@ -203,27 +235,82 @@ const doSumbit = async (bot: BotEntity) => {
   }
 }
 
+const onEditBot = (item: MenuMeta) => {
+  // Show modal to edit bot description
+  const bot = item.other as BotEntity
+  const props = {
+    input: bot.desc, 
+    tips: t('common.editDescTips'), 
+    title: t('common.editDescTitle'), 
+   }
+  showInputModal(props, async (text: string) => {
+    bot.desc = text
+    await doUpdateBotDesc(bot)
+    if (active.value === item.value) {
+      await doLoad(item.value)
+    }
+  })
+}
+
+const doUpdateBotDesc = async (bot: BotEntity) => {
+  try {
+    const url = `/bot?act=set-bot&uuid=${bot.uuid}`
+    const resp = await request.post<any>(url, { uuid: bot.uuid, desc: bot.desc })
+    if (resp?.errmsg) {
+      alert(resp.errmsg)
+      return
+    }
+    // Update the bot in the store
+    const botIndex = app.getBotList.findIndex(b => b.uuid === bot.uuid)
+    if (botIndex !== -1) {
+      app.getBotList[botIndex].desc = bot.desc
+    }
+    toast('SUCCESS')
+  } catch (err) {
+    console.error('update bot desc:', err)
+    toast('ERROR:' + err)
+  }
+}
+
 </script>
 
 <template>
   <SetHeader :title="$t('menu.botSet')"/>
   <div id="bot-setting" class="set-view">
     <div id="bot-menu" class="set-menu">
-      <button class="btn-add-new" @click="onCreate">
+      <GroupMenu
+        :divide="false"
+        :current="active"
+        :items="botWorkers"
+        :group="botLeaders"
+        :active="botActive"
+        @click="onSelectBot"
+        @create="onCreateBot"
+        @remove="onRemoveBot">
+        <template v-slot="{ item }">
+          <div class="item-header">
+            <h5>{{ item.label }}</h5>
+            <p v-if="(item.other as BotEntity)?.desc">
+              {{ (item.other as BotEntity).desc }}
+            </p>
+            <p v-else>
+              {{ $t('common.botNoDesc') }}
+            </p>
+          </div>
+          <div class="item-action">
+            <button @click.stop="onRemoveBot(item)" 
+              class="btn-icon icon-small btn-remove" 
+            />
+            <a class="btn-modify" 
+              @click="onEditBot(item)">
+              {{ $t('common.edit') }}
+            </a>
+          </div>
+        </template>
+      </GroupMenu>
+      <button class="btn-add-new" @click="onCreateBot('')">
         {{ $t('common.addBot') }}
       </button>
-      <BasicMenu
-        :items="items || []"
-        :active="active"
-        :keyby="'value'"
-        @click="onSelect">
-        <template v-slot="{ item }">
-          <span>{{ item?.label || '' }}</span>
-          <a class="btn-icon btn-remove" 
-            @click.stop="onRemove(item)"
-          />
-        </template>
-      </BasicMenu>
     </div>
     <div id="bot-panel" class="set-main">
       <FormSetBot 
@@ -246,14 +333,9 @@ const doSumbit = async (bot: BotEntity) => {
   font-weight: normal;
   width: -webkit-fill-available;
 }
-#bot-menu :deep(li) {
-  min-height: 24px;
-}
-#bot-menu .btn-remove{
-  display: none;
-  margin-right: -5px;
-}
-#bot-menu .active:hover .btn-remove{
-  display: inline-flex;
+
+.item-action .btn-modify{
+  margin-top: 5px;
+  margin-bottom: 0;
 }
 </style>

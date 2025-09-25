@@ -158,12 +158,24 @@ export const getActDesc = (item: MsgAct): string => {
       return `执行异步命令: ${act.session}(${act.command})`
     }
     case "query-async-cmd": {
-      const act = (item as StartAsyncCmd)
+      const act = (item as QueryAsyncCmd)
       return `查询异步命令: ${act.session}`
     }
     case "abort-async-cmd": {
-      const act = (item as StartAsyncCmd)
+      const act = (item as AbortAsyncCmd)
       return `终止异步命令: ${act.session}`
+    }
+    case "start-subtask": {
+      const act = (item as StartSubtask)
+      return `执行子任务: ${act['sub-agent']}`
+    }
+    case "query-subtask": {
+      const act = (item as QuerySubtask)
+      return `查询子任务: ${act['sub-agent']}`
+    }
+    case "abort-subtask": {
+      const act = (item as AbortSubtask)
+      return `终止子任务: ${act['sub-agent']}`
     }
     case 'path-list-files': {
       const act = (item as PathListFiles)
@@ -178,8 +190,7 @@ export const getActDesc = (item: MsgAct): string => {
       const act = (item as FilePutContent)
       return `修改文件: ${act.path || ''}`
     }
-    case "use-mcp-tool":
-    case "use-self-tool": {
+    case "use-mcp-tool": {
       const act = (item as UseMcpTool)
       return `Use Tool: ${act.title}`
     }

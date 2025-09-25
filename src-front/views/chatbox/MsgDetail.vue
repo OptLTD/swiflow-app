@@ -108,20 +108,21 @@ const handleDisplayDirect = (act: MsgAct) => {
 }
 
 const toolsName = [
+  'use-mcp-tool',
   'execute-command',
   'path-list-files',
   'file-put-content',
   'file-get-content',
   'file-replace-text',
-  'use-mcp-tool',
-  'use-self-tool',
   'start-async-cmd',
   'query-async-cmd',
   'abort-async-cmd',
+  'start-subtask',
+  'query-subtask',
+  'abort-subtask',
 ]
 const hasMoreArgs = [
   'use-mcp-tool',
-  'use-self-tool',
 ]
 </script>
 

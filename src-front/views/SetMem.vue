@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { toast } from 'vue3-toastify';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { useAppStore } from '@/stores/app';
 import { confirm, request } from '@/support';
 import GroupMenu from './widgets/GroupMenu.vue';
@@ -18,14 +18,50 @@ const active = ref('' as string)
 const current = ref({} as MemEntity)
 const memForm = ref<typeof FormSetMem>()
 
-const mybots = app.getBotList
+// Convert bots to MenuMeta structure for GroupMenu compatibility
+const botGroups = computed(() => {
+  return app.getBotList.map(bot => ({
+    label: bot.name,
+    value: bot.uuid,
+    group: 'bot',
+    other: bot
+  } as MenuMeta))
+})
+
+const botActive = computed(() => {
+  if (!app.getActive) {
+    return undefined
+  }
+  const bot = app.getActive
+  return {
+    label: bot.name, value: bot.uuid,
+    group: bot.leader, other: bot
+  } as MenuMeta
+})
+
+// Convert mems to MenuMeta structure for GroupMenu compatibility
+const memItems = computed(() => {
+  if (!mems.value) return []
+  return mems.value.map(mem => ({
+    label: mem.subject || 'Untitled',
+    value: String(mem.id),
+    group: mem.bot || 'other',
+    other: mem
+  } as MenuMeta))
+})
+
+
 onMounted(async () => {
   await doLoad()
 })
 
-const onSelect = (item: MemEntity) => {
-  active.value = String(item.id)
-  current.value = item
+const onSelect = (item: MenuMeta) => {
+  active.value = item.value
+  // Find the original MemEntity from the MenuMeta
+  const mem = mems.value?.find(m => String(m.id) === item.value)
+  if (mem) {
+    current.value = mem
+  }
 }
 
 const onCreate = (botId: string) => {
@@ -35,14 +71,14 @@ const onCreate = (botId: string) => {
   active.value = ''
 }
 
-const onRemove = async (item: MemEntity) => {
+const onRemove = async (item: MenuMeta) => {
   const msg = t('tips.delMemMsg')
   // const tip = t('tips.delMemTip')
   const answer = await confirm(msg);
   if (!answer) {
     return
   }
-  await doRemove(String(item.id))
+  await doRemove(item.value)
 }
 
 const doRemove = async (uuid: string) => {
@@ -63,7 +99,7 @@ const doLoad = async () => {
     const resp = await request.post(url) 
     mems.value = resp as MemEntity[]
   } catch (err) {
-    console.error('get mem:', err)
+    console.error('get-mem:', err)
     return toast('ERROR:'+err)
   }
 }
@@ -112,20 +148,13 @@ const doSumbit = async (mem: MemEntity) => {
   <div id="mem-setting"  class="set-view">
     <div id="mem-menu"  class="set-menu">
       <GroupMenu
-        :items="mems"
-        :bots="mybots"
         :current="active"
-        :active="app.getActive"
+        :items="memItems"
+        :group="botGroups"
+        :active="botActive"
         @click="onSelect"
         @create="onCreate"
         @remove="onRemove">
-        <template v-slot="{ item }">
-          <div class="mem-item">
-            <div class="mem-content">
-              {{ item.subject }}
-            </div>
-          </div>
-        </template>
       </GroupMenu>
     </div>
     <div id="mem-panel" class="set-main">
@@ -147,14 +176,5 @@ const doSumbit = async (mem: MemEntity) => {
   color: #666;
   font-weight: normal;
   margin-bottom: 2px;
-}
-
-.mem-content {
-  font-size: 14px;
-  color: inherit;
-  font-weight: bold;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 </style>

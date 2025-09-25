@@ -6,6 +6,7 @@ import UseToolModal from '@/modals/UseToolModal.vue';
 import ProviderModal from '@/modals/ProviderModal.vue';
 import SetupEnvModal from '@/modals/SetupEnvModal.vue';
 import McpConfigModal from '@/modals/McpConfigModal.vue';
+import TextInputModal from '@/modals/TextInputModal.vue';
 
 export const showContext = (context: any) => {
   const theContextView = useModal({
@@ -139,6 +140,29 @@ export const showProviderPopup = (provider = '', callback: CallableFunction) => 
   var attrs = theProviderModal.options.attrs || {}
   Object.assign(attrs, { provider, from: 'provider' })
   theProviderModal.open()
+}
+
+export const showInputModal = (data: any, callback: CallableFunction) => {
+  if (useVfm().get('theInputModal')) {
+    return
+  }
+
+  const theInputModal = useModal({
+    component: TextInputModal,
+    attrs: {
+      input: '', title: '', tips: '',
+      onSubmit: (text: string) => {
+        theInputModal.close()
+        callback && callback(text)
+      },
+      onCancel: () => {
+        theInputModal.close()
+      },
+    },
+  })
+  var attrs = theInputModal.options.attrs || {}
+  Object.assign(attrs, { ...data })
+  theInputModal.open()
 }
 
 export const showWelcomeModal = (gateway: string, initialState = {}) => {

@@ -22,6 +22,10 @@ const props = defineProps({
   placeholder: {
     type: String,
     default: '请选择'
+  },
+  disabled: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -182,15 +186,15 @@ const getCheckboxId = (val: string) => `tagselect-${val}`
   <div class="formkit-outer">
     <div class="formkit-wrapper">
       <label v-if="label" class="formkit-label">{{ label }}</label>
-      <div tabindex="0" :class="{ 'is-focused': focused }"
+      <div tabindex="0" :class="{ 'is-focused': focused, 'is-disabled': disabled }"
           class="formkit-input select-input formkit-inner"
-          @click="focused = !focused" @blur="onBlur"
+          @click="!disabled && (focused = !focused)" @blur="onBlur"
         >
           <span class="tag-select-label" :class="{empty: !selected.length}">
             {{ displayText }}
           </span>
           <span class="tag-select-arrow" :class="{open: showDropdown}">▼</span>
-          <div v-if="showDropdown" class="dropdown-wrapper" :style="{width}">
+          <div v-if="showDropdown && !disabled" class="dropdown-wrapper" :style="{width}">
             <div
               v-if="!props.grouped" v-for="item in options"
               :key="item.value" class="dropdown-item"
@@ -252,6 +256,21 @@ const getCheckboxId = (val: string) => `tagselect-${val}`
   outline: none;
   font-size: 1em;
   box-sizing: border-box;
+}
+
+/* Disabled state styles */
+.select-input.formkit-input.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background: var(--bg-secondary, #f5f5f5);
+}
+
+.select-input.formkit-input.is-disabled .tag-select-label {
+  color: var(--color-disabled, #999);
+}
+
+.select-input.formkit-input.is-disabled .tag-select-arrow {
+  color: var(--color-disabled, #999);
 }
 .select-input>.tag-select-label {
   flex: 1;

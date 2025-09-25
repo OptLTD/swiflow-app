@@ -70,6 +70,29 @@ declare type StartAsyncCmd = {
   command: string;
 }
 
+declare type QueryAsyncCmd = {
+  session: string;
+}
+
+declare type AbortAsyncCmd = {
+  session: string;
+}
+
+declare type StartSubtask = {
+  'sub-agent': string;
+  'task-desc': string;
+  context: string;
+  require: string;
+}
+
+declare type QuerySubtask = {
+  "sub-agent": string;
+}
+
+declare type AbortSubtask = {
+  "sub-agent": string;
+}
+
 declare type UseMcpTool = {
   title?: string;
   args?: Record;
@@ -103,7 +126,7 @@ declare type DefaultProps = {
 declare type MsgAct = (
    Annotate | Thinking | UserInput | BotReply
   | ExecuteCommand | DefaultAction | MakeAsk | Complete
-  | UseMcpTool | UseSelfTool | SetSelfTool | StartAsyncCmd
+  | UseMcpTool | StartAsyncCmd | StartSubtask | QuerySubtask | AbortSubtask
   | FileGetContent | FilePutContent | FileReplaceText | PathListFiles
 ) & DefaultResult & DefaultProps
 
@@ -164,7 +187,9 @@ declare type TodoEntity = {
 declare type BotEntity = {
   uuid: string
   name: string
+  desc: string
   emoji: string
+  leader: string
   tools: string[]
   provider: string
   endpoint: string
@@ -257,6 +282,7 @@ declare type McpEnvMeta = {
 declare type MenuMeta = {
   label: string
   value: string
+  group?: string
   other?: object
 }
 

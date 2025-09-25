@@ -54,6 +54,7 @@
   flex-direction: column;
 }
 
+.item-action>.btn-modify,
 .item-action>.btn-detail {
   font-size: 12px;
   margin-bottom: 5px;
@@ -61,6 +62,7 @@
   color: var(--color-secondary);
 }
 
+.item-action:hover>.btn-modify,
 .item-action:hover>.btn-detail {
   color: var(--color-primary);
 }
