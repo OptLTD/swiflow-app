@@ -224,7 +224,7 @@ func TestManager_buildSelfBots(t *testing.T) {
 				workers: tt.myBots,
 			}
 
-			got := m.getSubAgentsInfo()
+			got := m.getSubAgents(tt.myBots[0])
 
 			if tt.expected == "暂无" {
 				if got != "暂无" {

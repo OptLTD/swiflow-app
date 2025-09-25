@@ -215,7 +215,8 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if bot.UUID == "" {
-			bot.UUID, _ = support.UniqueID()
+			uuid, _ := support.UniqueID(8)
+			bot.UUID = "bot-" + uuid
 		}
 		if len(bot.Tools) > 0 {
 			data := h.manager.UsePrompt(bot)

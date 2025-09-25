@@ -27,11 +27,11 @@ const task = useTaskStore()
 const view = useViewStore()
 
 const socket = useWebSocket()
-const currBot = ref<BotEntity>()
 const taskInfo = ref<TaskEntity>()
 const inputMsg = ref({} as InputMsg)
 const messages = ref<ActionMsg[]>([])
 const refMcpTool = ref<typeof McpToolList>()
+const workerMaps = ref<BotEntity>()
 const emit = defineEmits(['new-chat'])
 
 const handleSend = async() => {
@@ -48,13 +48,13 @@ const handleSend = async() => {
   const socketMsg: SocketMsg = {
     method: "message", 
     action: "user-input",
-    chatid: msg.getChatId,
+    taskid: msg.getChatId,
     detail: inputMsg.value
   }
   if (msg.getChatId == '') {
     const newChatId = nanoid(12)
-    msg.setChatId(newChatId)
-    socketMsg.chatid = newChatId
+    msg.setTaskId(newChatId)
+    socketMsg.taskid = newChatId
     inputMsg.value.newTask = 'yes'
   }
 
@@ -94,14 +94,14 @@ const handleStop = async() => {
 }
 
 const onProviderChange = async (item: OptMeta) => {
-  if (!currBot.value) {
+  if (!workerMaps.value) {
     return
   }
   try {
-    const uuid = unref(currBot)?.uuid as string
+    const uuid = unref(workerMaps)?.uuid as string
     const resp = await setBotProvider(uuid, item.value)
-    if (!resp?.errmsg && currBot.value) {
-      currBot.value.provider = item.value
+    if (!resp?.errmsg && workerMaps.value) {
+      workerMaps.value.provider = item.value
     } else {
       throw resp.errmsg
     }
@@ -145,7 +145,7 @@ const loadTaskMsgs = async (uuid: string) => {
   } catch (err) {
     console.error('use bot:', err)
   } finally {
-    msg.setChatId(uuid)
+    msg.setTaskId(uuid)
     setTimeout(() => {
       autoScrollToEnd(true)
     }, 240)
@@ -185,23 +185,24 @@ const handleCheck = (val: string) => {
   inputMsg.value.content = `${text}\n${val.trim()}`.trim()
 }
 const handleTools = (tools: string[]) => {
-  currBot.value!.tools = tools
-  const uuid = unref(currBot)?.uuid
+  workerMaps.value!.tools = tools
+  const uuid = unref(workerMaps)?.uuid
   setBotTools(uuid as string, tools.join())
 }
 const handleSwitch = (tid: string) => {
+  console.log(tid, 'ddddddd')
   if (!tid) {
-    msg.setErrorMsg('')
-    msg.setChatId('')
-    msg.clearMessages()
+    msg.setTaskId('')
+    msg.setErrMsg('')
     msg.setRunning(false)
     view.setAction(null)
+    messages.value = []
     return;
   }
   if (tid != msg.getChatId) {
-    msg.setErrorMsg('')
-    msg.setRunning(false)
+    msg.setErrMsg('')
     msg.setNextMsg(null)
+    msg.setRunning(false)
     loadTaskMsgs(tid)
     loadTaskInfo(tid)
   }
@@ -258,10 +259,10 @@ watch(() => task.getActive, (uuid) => {
   handleSwitch(uuid)
 })
 watch(() => app.getBotList, () => {
-  currBot.value = queryBot('')
+  workerMaps.value = queryBot('')
 })
 watch(() => app.getActive, () => {
-  currBot.value = queryBot('')
+  workerMaps.value = queryBot('')
 })
 onMounted(() => {
   // Listen to UI-specific events from msg store
@@ -280,11 +281,11 @@ onMounted(() => {
     // Add response message to local messages
     messages.value.push(socketMsg.detail)
     startPlayAction(socketMsg.detail)
-    setNextMsg(msg.getStream[socketMsg.chatid])
+    setNextMsg(msg.getStream[socketMsg.taskid])
   })
   
   eventEmitter.on('stream', (socketMsg: SocketMsg) => {
-    setNextMsg(msg.getStream[socketMsg.chatid])
+    setNextMsg(msg.getStream[socketMsg.taskid])
   })
 
   inputMsg.value.placeholder = `
@@ -293,7 +294,7 @@ onMounted(() => {
   `.replace(/\n\s+/g, '\n').trim()
   
   // Set current bot based on active bot
-  currBot.value = queryBot('')
+  workerMaps.value = queryBot('')
   // Load task data when component mounts
   if (task.getActive) {
     loadTaskMsgs(task.getActive)
@@ -326,7 +327,7 @@ defineExpose({
   <div class="chat-container">
     <div class="list-container">
       <ChatMsgList
-        :currbot="currBot"
+        :currbot="workerMaps"
         :errmsg="msg.getErrMsg"
         :loading="msg.getNextMsg"
         :messages="messages"
@@ -358,11 +359,11 @@ defineExpose({
           />
           <McpToolList v-if="app.getLoaded" 
             ref="refMcpTool" @change="handleTools"
-            :tools="currBot?.tools" :enable="!task.getActive">
+            :tools="workerMaps?.tools" :enable="!task.getActive">
             <button class="btn-icon btn-tools"/>
           </McpToolList>
           <ShowSelect v-if="app.multi" :items="getProviders()"
-            :active="currBot?.provider" @select="onProviderChange">
+            :active="workerMaps?.provider" @select="onProviderChange">
             <button class="btn-icon btn-switch"/>
           </ShowSelect>
         </template>

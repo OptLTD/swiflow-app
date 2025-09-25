@@ -60,7 +60,7 @@ const handleSend = async() => {
   const msg: SocketMsg = {
     method: "message", 
     action: "user-input",
-    chatid: getChatId(),
+    taskid: getChatId(),
     detail: {
       content: content.value
     }
@@ -152,7 +152,7 @@ const onMessage = (msg: SocketMsg) => {
       nextMsg.value = {
         actions:[] as MsgAct[]
       } as unknown as ActionMsg
-      streamData.value[msg.chatid] = {}
+      streamData.value[msg.taskid] = {}
       messages.value.push({ actions: [{
         type: 'user-input', ...msg.detail
       }]} as ActionMsg)
@@ -169,18 +169,18 @@ const onMessage = (msg: SocketMsg) => {
       if (finished.includes(msg.detail)) {
         nextMsg.value = null
         running.value = false
-        delete(streamData.value[msg.chatid])
+        delete(streamData.value[msg.taskid])
       }
       break;
     }
     case 'running': {
       errmsg.value = ''
-      if (!streamData.value[msg.chatid]) {
-        streamData.value[msg.chatid] = {}
+      if (!streamData.value[msg.taskid]) {
+        streamData.value[msg.taskid] = {}
       }
       const {idx, str} =  msg.detail as any
-      streamData.value[msg.chatid][idx] = str
-      setNextMsg(streamData.value[msg.chatid])
+      streamData.value[msg.taskid][idx] = str
+      setNextMsg(streamData.value[msg.taskid])
       break;
     }
     case 'respond': {
@@ -189,7 +189,7 @@ const onMessage = (msg: SocketMsg) => {
         actions: [] as MsgAct[]
       } as unknown as ActionMsg
       messages.value.push(msg.detail)
-      delete(streamData.value[msg.chatid])
+      delete(streamData.value[msg.taskid])
       break;
     }
     case 'errors': {

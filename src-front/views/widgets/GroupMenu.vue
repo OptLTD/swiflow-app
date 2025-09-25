@@ -92,14 +92,6 @@ const getGroupName = (groupId: string) => {
   return groupItem ? groupItem.label : '其他'
 }
 
-const onHeaderClick = (groupId: string) => {
-  const groupItem = props.group.find(g => {
-    return g.value === groupId
-  })
-  active.value = String(groupId)
-  emit('click', groupItem)
-}
-
 // 折叠/展开功能
 const toggleCollapse = (groupId: string) => {
   if (allCollapsed.value.has(groupId)) {

@@ -23,7 +23,7 @@ func (sa *SubAgent) OnStart(act *action.StartSubtask) {
 			"agent(%s) not found %v",
 			act.SubAgent, err,
 		)
-		sa.parent.Handle(act, sa.ldtask, worker)
+		sa.parent.Handle(act, sa.ldtask, sa.leader)
 		return
 	}
 	log.Println("[SUBTASK] bot", worker.UUID)
@@ -34,6 +34,8 @@ func (sa *SubAgent) OnStart(act *action.StartSubtask) {
 		act.TaskDesc, "sub-"+taskUUID,
 	)
 	if err == nil && subtask != nil {
+		// ensure work in same dir
+		worker.Home = sa.leader.Home
 		sa.worker, sa.mytask = worker, subtask
 		sa.parent.Handle(act, subtask, worker)
 	}

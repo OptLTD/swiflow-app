@@ -32,7 +32,7 @@ export const useWebBrowser = () => {
             url: msg.detail, height: 750 * show, width: 1000 * show,
             alwaysOnBottom: true, visible: false, hiddenTitle: true,
           }
-          const webview = new WebviewWindow(msg.chatid, options);
+          const webview = new WebviewWindow(msg.taskid, options);
           webview.once(TauriEvent.WEBVIEW_CREATED, () => {
             webview.reparent(mainWindow)
             !show && webview.hide()

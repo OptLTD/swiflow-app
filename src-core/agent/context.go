@@ -37,6 +37,12 @@ func (r *Context) GetRole(op string) string {
 		return "assistant"
 	case "tool-result":
 		return "user"
+	case "start-subtask":
+		return "user"
+	case "query-subtask":
+		return "user"
+	case "abort-subtask":
+		return "user"
 	default:
 		return "system"
 	}

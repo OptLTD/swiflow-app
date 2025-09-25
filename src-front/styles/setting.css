@@ -25,7 +25,8 @@
 /* menu-item */
 .item-header {
   display: flex;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   flex-direction: column;
 }
 
@@ -44,12 +45,11 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  width: -webkit-fill-available;
 }
 
 .item-action {
-  width: 40px;
   display: flex;
+  min-width: 2rem;
   align-items: flex-end;
   flex-direction: column;
 }

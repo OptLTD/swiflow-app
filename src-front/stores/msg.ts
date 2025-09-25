@@ -32,9 +32,10 @@ export const eventEmitter = new MsgEventEmitter()
 
 export const useMsgStore = defineStore('msg', {
   state: () => ({
-    chatid: '' as string,
+    taskid: '' as string,
     errmsg: '' as string,
-    running: false,
+    running: false as boolean,
+    subtasks: [] as string[],
     nextMsg: null as ActionMsg | null,
     streams: {} as Record<string, any>,
   }),
@@ -45,7 +46,7 @@ export const useMsgStore = defineStore('msg', {
       this.nextMsg = {
         actions: [] as MsgAct[]
       } as unknown as ActionMsg
-      this.streams[msg.chatid] = {}
+      this.streams[msg.taskid] = {}
       
       // Emit UI event for adding message and auto-scroll
       eventEmitter.emit('user-input', msg)
@@ -62,7 +63,7 @@ export const useMsgStore = defineStore('msg', {
       if (msg.detail !== "running") {
         this.nextMsg = null
         this.running = false
-        delete this.streams[msg.chatid]
+        delete this.streams[msg.taskid]
         
         // Clear nextMsg after delay if still not running
         setTimeout(() => {
@@ -74,7 +75,7 @@ export const useMsgStore = defineStore('msg', {
       
       // Update task state in history
       const current = task.getHistory.find(t => {
-        return t.uuid === (msg.chatid || task.getActive)
+        return t.uuid === (msg.taskid || task.getActive)
       })
       if (current && current.state !== msg.detail) {
         current.state = msg.detail
@@ -91,10 +92,10 @@ export const useMsgStore = defineStore('msg', {
       } as unknown as ActionMsg
       
       if (!task.getActive) {
-        task.setActive(msg.chatid)
+        task.setActive(msg.taskid)
       }
       
-      delete this.streams[msg.chatid]
+      delete this.streams[msg.taskid]
       
       // Emit UI events for adding message
       eventEmitter.emit('respond', msg)
@@ -106,16 +107,16 @@ export const useMsgStore = defineStore('msg', {
       
       this.errmsg = ''
       if (!task.getActive) {
-        this.chatid = msg.chatid
-        task.setActive(msg.chatid)
+        this.taskid = msg.taskid
+        task.setActive(msg.taskid)
       }
       
-      if (!this.streams[msg.chatid]) {
-        this.streams[msg.chatid] = {}
+      if (!this.streams[msg.taskid]) {
+        this.streams[msg.taskid] = {}
       }
       
       const {idx, str} = msg.detail as any
-      this.streams[msg.chatid][idx] = str
+      this.streams[msg.taskid][idx] = str
       
       // Emit UI event for stream processing
       eventEmitter.emit('stream', msg)
@@ -194,27 +195,27 @@ export const useMsgStore = defineStore('msg', {
       this.running = running
     },
 
-    setChatId(chatid: string) {
-      this.chatid = chatid
+    setTaskId(taskid: string) {
+      this.taskid = taskid
+    },
+
+    setErrMsg(errmsg: string) {
+      this.errmsg = errmsg
     },
 
     setNextMsg(nextMsg: ActionMsg | null) {
       this.nextMsg = nextMsg
     },
 
-    setErrorMsg(errmsg: string) {
-      this.errmsg = errmsg
+    clearStream(taskid: string) {
+      delete this.streams[taskid]
     },
 
-    clearStream(chatid: string) {
-      delete this.streams[chatid]
-    },
-
-    updateStream(chatid: string, idx: number, str: string) {
-      if (!this.streams[chatid]) {
-        this.streams[chatid] = {}
+    updateStream(taskid: string, idx: number, str: string) {
+      if (!this.streams[taskid]) {
+        this.streams[taskid] = {}
       }
-      this.streams[chatid][idx] = str
+      this.streams[taskid][idx] = str
     },
   },
 
@@ -229,14 +230,14 @@ export const useMsgStore = defineStore('msg', {
     getErrMsg: (state) => state.errmsg,
 
     // Get current chat ID
-    getChatId: (state) => state.chatid,
+    getChatId: (state) => state.taskid,
 
     // Get stream data
     getStream: (state) => state.streams,
 
-    // Check if stream data exists for chatid
-    hasStream: (state) => (chatid: string) => {
-      return !!state.streams[chatid] && Object.keys(state.streams[chatid]).length > 0
+    // Check if stream data exists for taskid
+    hasStream: (state) => (taskid: string) => {
+      return !!state.streams[taskid] && Object.keys(state.streams[taskid]).length > 0
     }
   }
 })

@@ -299,7 +299,11 @@ func (m *Manager) GetExecutor(task *MyTask, worker *Worker) *Executor {
 	case AGENT_DEBUG, AGENT_BASIC:
 	case AGENT_LEADER, AGENT_WORKER:
 	default:
-		worker.Type = AGENT_WORKER
+		if worker.Leader != "" {
+			worker.Type = AGENT_WORKER
+		} else {
+			worker.Type = AGENT_LEADER
+		}
 	}
 	context.useMemory = m.GetMemory(worker)
 	context.usePrompt = m.GetPrompt(worker)
@@ -356,7 +360,7 @@ func (m *Manager) GetPrompt(worker *Worker) string {
 	)
 	prompt = strings.ReplaceAll(
 		prompt, "${{SUBAGENTS}}",
-		m.getSubAgentsInfo(),
+		m.getSubAgents(worker),
 	)
 	return m.getSystemInfo(prompt)
 }
@@ -371,10 +375,6 @@ func (m *Manager) UsePrompt(worker *Worker) string {
 	prompt = strings.ReplaceAll(
 		prompt, "${{MCP_TOOLS}}", mcpTools,
 	)
-	if mcpTools == "error:server-no-tools" {
-		return ""
-	}
-
 	return prompt
 }
 func (m *Manager) getSystemInfo(prompt string) string {
@@ -385,10 +385,10 @@ func (m *Manager) getSystemInfo(prompt string) string {
 	return strings.ReplaceAll(prompt, "${{TOOL_RESULT_TAG}}", tag)
 }
 
-func (m *Manager) getSubAgentsInfo() string {
+func (m *Manager) getSubAgents(leader *Worker) string {
 	var result strings.Builder
 	for _, worker := range m.workers {
-		if worker.Type == AGENT_LEADER {
+		if worker.Leader != leader.UUID {
 			continue
 		}
 		result.WriteString(fmt.Sprintf(

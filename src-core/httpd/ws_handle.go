@@ -13,10 +13,10 @@ import (
 )
 
 type socketInput struct {
+	TaskID string `json:"taskid"`
 	Method string `json:"method"`
 	Action string `json:"action"`
 	Detail any    `json:"detail"`
-	ChatID string `json:"chatid"`
 }
 
 type WebSocketHandler struct {
@@ -68,19 +68,19 @@ func (m *WebSocketHandler) OnMessage(msg *socketInput) *socketInput {
 
 	var task *agent.MyTask
 	if yes, _ := detail["newTask"].(string); yes == "yes" {
-		task, err = m.manager.InitTask(input.Content, msg.ChatID)
-	} else if strings.HasPrefix(msg.ChatID, "#debug#") {
+		task, err = m.manager.InitTask(input.Content, msg.TaskID)
+	} else if strings.HasPrefix(msg.TaskID, "#debug#") {
 		worker = convertor.DeepClone(worker)
-		task, err = m.manager.NewMcpTask(msg.ChatID)
+		task, err = m.manager.NewMcpTask(msg.TaskID)
 	} else {
-		task, err = m.manager.QueryTask(msg.ChatID)
+		task, err = m.manager.QueryTask(msg.TaskID)
 	}
 	if task == nil || err != nil {
 		support.Emit("errors", "", "query task error")
 		return msg
 	}
 
-	go m.manager.Handle(input, task, worker)
+	go m.manager.Start(input, task, worker)
 	return msg
 }
 
@@ -97,7 +97,7 @@ func (m *WebSocketHandler) DoRespond(task string, data any) *socketInput {
 			Method: "message",
 			Action: "respond",
 			Detail: resp.ToMap(),
-			ChatID: task,
+			TaskID: task,
 		}
 	}
 }
@@ -107,7 +107,7 @@ func (m *WebSocketHandler) DoStream(task string, state any) *socketInput {
 		Method: "message",
 		Action: "stream",
 		Detail: state,
-		ChatID: task,
+		TaskID: task,
 	}
 }
 
@@ -120,7 +120,7 @@ func (m *WebSocketHandler) DoControl(task string, state any) *socketInput {
 		Method: "message",
 		Action: "control",
 		Detail: state,
-		ChatID: task,
+		TaskID: task,
 	}
 }
 
@@ -129,7 +129,7 @@ func (m *WebSocketHandler) HandleErr(task string, data any) *socketInput {
 		Method: "message",
 		Action: "errors",
 		Detail: data,
-		ChatID: task,
+		TaskID: task,
 	}
 	if err, ok := data.(error); ok {
 		msg.Detail = err.Error()
@@ -143,6 +143,6 @@ func (m *WebSocketHandler) DoChange(task string, data any) *socketInput {
 		Method: "message",
 		Action: "change",
 		Detail: data,
-		ChatID: task,
+		TaskID: task,
 	}
 }

@@ -74,7 +74,7 @@ onMounted(() => {
 
 const onMsg = (msg: SocketMsg) => {
   const {uuid, lines} = stdout.value
-  if (msg.action === 'stream' && msg.chatid == uuid) {
+  if (msg.action === 'stream' && msg.taskid == uuid) {
     lines.push(msg.detail as string)
   }
 }

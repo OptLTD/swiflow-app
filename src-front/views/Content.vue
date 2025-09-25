@@ -44,8 +44,8 @@ const replay = async () => {
     return false
   }
   const uuid = data.msgid
-  const chatid = task.getActive
-  const url = `/replay?uuid=${uuid}&task=${chatid}`
+  const taskid = task.getActive
+  const url = `/replay?uuid=${uuid}&task=${taskid}`
   const resp = await request.post(url) as any
   console.log('replay', uuid, resp)
 }

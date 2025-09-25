@@ -144,7 +144,7 @@ declare type ActionMsg = {
 declare type SocketMsg = {
   action: string
   method: string
-  chatid: string
+  taskid: string
   detail: any
 }
 
