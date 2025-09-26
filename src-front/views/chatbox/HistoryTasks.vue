@@ -24,8 +24,7 @@ const closeHistory = () => {
 
 const doLoadTask = async () => {
   try {
-    const url = `/task?act=load-task`
-    const resp = await request.get(url)
+    const resp = await request.get('/tasks')
     task.setHistory(resp as TaskEntity[])
   } catch (e) {
     console.error('use bot:', e)

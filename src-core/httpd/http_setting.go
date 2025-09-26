@@ -39,7 +39,7 @@ func NewSettingHandle(m *agent.Manager) *SettingHandler {
 func (h *SettingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	tasks := []map[string]any{}
 	store, _ := h.manager.GetStorage()
-	query := "`group`='' || `group`=`uuid`"
+	query := "(`group`='' or `group`=`uuid`)"
 	if list, err := store.LoadTask(query); err == nil {
 		for _, item := range list {
 			tasks = append(tasks, item.ToMap())
@@ -51,7 +51,8 @@ func (h *SettingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 func (h *SettingHandler) GetMsgs(w http.ResponseWriter, r *http.Request) {
 	uuid := r.URL.Query().Get("task")
 	store, _ := h.manager.GetStorage()
-	tasks, _ := store.LoadTask("group", uuid)
+	query := "(`group`='' or `group`= ?)"
+	tasks, _ := store.LoadTask(query, uuid)
 	context := agent.Context{}
 	result := []*action.SuperAction{}
 	for _, task := range tasks {
