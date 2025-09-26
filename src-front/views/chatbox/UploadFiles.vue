@@ -29,8 +29,11 @@ const handleFileClick = (upload: string) => {
 }
 </script>
 <template>
-  <div class="upload-files" v-if="files?.length">
-    <span class="file-count">{{ files.length }}个文件:</span>
+  <div class="empty-files" v-if="!files.length">
+    拖拽文件到此处即可上传文件
+  </div>
+  <div class="upload-files" v-else>
+    <span class="file-count">文件:</span>
     <div class="files-list">
       <span v-for="(upload, i) in files" :key="i" class="file-item">
         <label @click="handleFileClick(upload)">{{ getFileName(upload) }}</label>
@@ -41,10 +44,15 @@ const handleFileClick = (upload: string) => {
 </template>
 
 <style scoped>
+.empty-files,
 .upload-files {
   display: flex;
-  margin-right: 2rem;
+  padding: 5px 12px;
   width: -webkit-fill-available;
+}
+.empty-files{
+  font-size: 13px;
+  color: var(--color-secondary);
 }
 
 .upload-files .file-count {

@@ -440,8 +440,7 @@ button:focus-visible {
    ===================== */
 /* .select-input.formkit-input,
 .dropdown-wrapper */
-.formkit-wrapper [type=select],
-.input-container textarea {
+.formkit-wrapper [type=select]{
   background: var(--bg-main);
   color: var(--text-main);
   border: 1px solid var(--color-tertiary);

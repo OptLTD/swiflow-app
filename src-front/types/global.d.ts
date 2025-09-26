@@ -164,7 +164,6 @@ declare type InputMsg = {
   newTask?: string
   workerId?: string
   homePath?: string
-  placeholder: string
 }
 
 

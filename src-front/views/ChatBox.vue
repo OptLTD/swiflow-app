@@ -268,12 +268,6 @@ onMounted(() => {
     }
   })
 
-  inputMsg.value.placeholder = `
-    输入消息内容，按下回车键发送
-    拖拽文件到此处即可上传文件
-  `.replace(/\n\s+/g, '\n').trim()
-
-  // Load task data when component mounts
   if (task.getActive) {
     loadTaskMsgs(task.getActive)
     loadTaskInfo(task.getActive)
@@ -339,7 +333,7 @@ defineExpose({
     <div class="input-container">
       <ChatInput :running="msg.isRunning"
         v-model:content="inputMsg.content"
-        :placeholder=" inputMsg.placeholder"
+        placeholder="输入消息内容，按下回车键发送"
         @send="handleSend" @stop="handleStop"
       >
         <template #header>

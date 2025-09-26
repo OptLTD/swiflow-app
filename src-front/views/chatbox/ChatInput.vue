@@ -58,13 +58,15 @@ const handleEnter = (e: KeyboardEvent) => {
       <slot name="tools"/>
     </div>
     <div class="btn-main-group">
-      <button class="btn-icon icon-large btn-stop" v-if="canStop" @click="$emit('stop')"/>
-      <button class="btn-icon icon-large btn-start" v-if="!canStop" @click="handleSend"/>
+      <button v-if="canStop" @click="$emit('stop')"
+        class="btn-icon icon-large btn-stop"  
+      />
+      <button v-if="!canStop" @click="handleSend"
+         class="btn-icon icon-large btn-start"
+      />
     </div>
-    <textarea
-      v-model="content"
-      :placeholder="placeholder"
-      @keydown="handleEnter"
+    <textarea v-model="content" class="input-control"
+      @keydown="handleEnter" :placeholder="placeholder" 
       @compositionstart="handleCompositionStart"
       @compositionend="handleCompositionEnd"
     />
