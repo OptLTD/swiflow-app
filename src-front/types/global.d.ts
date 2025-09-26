@@ -162,6 +162,7 @@ declare type InputMsg = {
   content: string
   uploads: string[]
   newTask?: string
+  workerId?: string
   homePath?: string
   placeholder: string
 }

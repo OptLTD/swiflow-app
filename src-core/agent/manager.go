@@ -98,6 +98,11 @@ func (m *Manager) Initial() (err error) {
 	return fmt.Errorf("init worker error: %v", err)
 }
 func (m *Manager) Start(input action.Input, task *MyTask, leader *Worker) {
+	// debug mode, it's worker
+	if leader.Leader != "" {
+		m.Handle(input, task, leader)
+		return
+	}
 	support.Listen("subtask", func(tid string, data any) {
 		// Get subagent instance for the task
 		switch act := data.(type) {

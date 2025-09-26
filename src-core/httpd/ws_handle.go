@@ -60,6 +60,9 @@ func (m *WebSocketHandler) OnMessage(msg *socketInput) *socketInput {
 	}
 
 	uuid := config.GetStr("USE_WORKER", "")
+	if id, _ := detail["workerId"].(string); id != "" {
+		uuid = id
+	}
 	worker, err := m.manager.GetWorker(uuid)
 	if err != nil || worker == nil {
 		support.Emit("errors", "", "get worker error")

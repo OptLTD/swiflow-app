@@ -11,15 +11,15 @@ import { eventEmitter } from '@/stores/msg'
 import { useWebSocket } from '@/hooks/index'
 import { useTaskStore } from '@/stores/task'
 import { useViewStore } from '@/stores/view'
-import { getProviders } from '@/config/models'
 import ChatInput from './chatbox/ChatInput.vue'
 import ChatHeader from './chatbox/ChatHeader.vue'
 import ChatMsgList from './chatbox/ChatMsgList.vue'
 import ShowSelect from './chatbox/ShowSelect.vue'
 import McpToolList from './chatbox/McpToolList.vue'
 import UploadFiles from './chatbox/UploadFiles.vue'
-import { setBotTools, setBotProvider } from '@/logics/chat'
-import { showDisplayAct, autoScrollToEnd } from '@/logics/chat'
+import { setBotTools } from '@/logics/chat'
+import { showDisplayAct } from '@/logics/chat'
+import { autoScrollToEnd } from '@/logics/chat'
 
 const app = useAppStore()
 const msg = useMsgStore()
@@ -30,8 +30,8 @@ const socket = useWebSocket()
 const taskInfo = ref<TaskEntity>()
 const inputMsg = ref({} as InputMsg)
 const messages = ref<ActionMsg[]>([])
+const currWorker = ref<BotEntity>()
 const refMcpTool = ref<typeof McpToolList>()
-const workerMaps = ref<BotEntity>()
 const emit = defineEmits(['new-chat'])
 
 const handleSend = async() => {
@@ -57,6 +57,11 @@ const handleSend = async() => {
     socketMsg.taskid = newChatId
     inputMsg.value.newTask = 'yes'
   }
+  // select worker to debug
+  const { uuid } = currWorker.value || {}
+  if (uuid !== app.getActive?.uuid) {
+    inputMsg.value.workerId = uuid
+  }
 
   if (app.getUploads.length > 0) {
     inputMsg.value.uploads = app.getUploads
@@ -66,12 +71,6 @@ const handleSend = async() => {
   const conn = socket.getConnect()
   conn!.send(JSON.stringify(socketMsg))
   inputMsg.value = {} as InputMsg
-}
-
-const handleRemoveUpload = (index: number) => {
-  const uploads = [...app.getUploads]
-  uploads.splice(index, 1)
-  app.setUploads(uploads)
 }
 
 const handleStop = async() => {
@@ -93,22 +92,13 @@ const handleStop = async() => {
   }
 }
 
-const onProviderChange = async (item: OptMeta) => {
-  if (!workerMaps.value) {
-    return
-  }
-  try {
-    const uuid = unref(workerMaps)?.uuid as string
-    const resp = await setBotProvider(uuid, item.value)
-    if (!resp?.errmsg && workerMaps.value) {
-      workerMaps.value.provider = item.value
-    } else {
-      throw resp.errmsg
-    }
-  } catch (err) {
-    toast.error(err)
-  }
+const onWorkerChange = (item: OptMeta) => {
+  const select = app.getBotList.find(x => {
+    return x.uuid == item.value
+  })
+  currWorker.value = select || currWorker.value 
 }
+
 
 const loadTaskInfo = async (uuid: string) => {
   try {
@@ -181,11 +171,7 @@ const handleCheck = (val: string) => {
   }
   inputMsg.value.content = `${text}\n${val.trim()}`.trim()
 }
-const handleTools = (tools: string[]) => {
-  workerMaps.value!.tools = tools
-  const uuid = unref(workerMaps)?.uuid
-  setBotTools(uuid as string, tools.join())
-}
+
 const handleSwitch = (tid: string) => {
   if (!tid) {
     msg.setTaskId('')
@@ -206,7 +192,6 @@ const handleSwitch = (tid: string) => {
 }
 
 const autoScroll = throttle(autoScrollToEnd, 500)
-
 const startPlayAction = (msg: ActionMsg, force: boolean = false) => {
   if (!msg || !msg.actions?.length) {
     force && app.getContent && app.setContent(false)
@@ -223,6 +208,12 @@ const startPlayAction = (msg: ActionMsg, force: boolean = false) => {
   find && handleDisplay(find)
 }
 
+const handleToolsChange = (tools: string[]) => {
+  currWorker.value!.tools = tools
+  const uuid = unref(currWorker)?.uuid
+  setBotTools(uuid as string, tools.join())
+}
+
 // Handle file click from UploadFiles component
 const handleViewUpload = (filePath: string) => {
   if (filePath) {
@@ -235,10 +226,17 @@ const handleViewUpload = (filePath: string) => {
   }
 }
 
+const handleRemoveUpload = (index: number) => {
+  const uploads = [...app.getUploads]
+  uploads.splice(index, 1)
+  app.setUploads(uploads)
+}
+
 watch(() => task.getActive, (uuid) => {
   handleSwitch(uuid)
 })
 onMounted(() => {
+  currWorker.value = app.getActive
   // Listen to UI-specific events from msg store
   eventEmitter.on('user-input', (socketMsg: SocketMsg) => {
     if (msg.getChatId != socketMsg.taskid) {
@@ -295,6 +293,26 @@ const setMsgContent = (content: string) => {
     inputMsg.value.content = content.trim()
   }
 }
+const getWorkers = (): OptMeta[] => {
+  const leader = app.getActive
+  const result = [] as OptMeta[]
+  result.push({
+    label: leader.name,
+    value: leader.uuid,
+    disabled: false,
+  } as OptMeta)
+  const workers = app.getBotList.filter((worker) => {
+    return worker.leader == leader.uuid
+  })
+  workers.forEach((worker) => {
+    result.push({
+      label: worker.name,
+      value: worker.uuid,
+      disabled: false,
+    } as OptMeta)
+  })
+  return result;
+}
 
 // Expose methods for parent component access
 defineExpose({
@@ -336,15 +354,17 @@ defineExpose({
             class="btn-icon btn-home"
             v-tippy="$t('tips.browserTips')"
           />
-          <McpToolList v-if="app.getLoaded" 
-            ref="refMcpTool" @change="handleTools"
-            :tools="workerMaps?.tools" :enable="!task.getActive">
-            <button class="btn-icon btn-tools"/>
-          </McpToolList>
-          <ShowSelect v-if="app.multi" :items="getProviders()"
-            :active="workerMaps?.provider" @select="onProviderChange">
+          <ShowSelect v-if="app.getUseDebug"
+            @select="onWorkerChange" :items="getWorkers()"
+            :active="currWorker?.uuid" :enable="!task.getActive">
             <button class="btn-icon btn-switch"/>
           </ShowSelect>
+          <McpToolList v-if="app.getLoaded"
+            @change="handleToolsChange" ref="refMcpTool"
+            :tools="currWorker?.tools" :enable="!task.getActive">
+            <button class="btn-icon btn-tools"/>
+          </McpToolList>
+         
         </template>
       </ChatInput>
     </div>

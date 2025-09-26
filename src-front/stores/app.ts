@@ -138,6 +138,7 @@ export const useAppStore = defineStore('app', {
     getVersion: (state) => state.version,
     getRelease: (state) => state.release,
     getAuthGate: (state) => state.authGate,
+    getUseDebug: (state) => state.setup.useDebug,
     getTheme: (state) => {
       if (state.theme && state.theme != 'auto') {
         return state.theme

@@ -4,7 +4,7 @@ import { ref, PropType } from 'vue'
 import { useAppStore } from '@/stores/app'
 
 const app = useAppStore()
-defineProps({
+const props = defineProps({
   items: {
     type: Array as PropType<OptMeta[]>,
     default: () => []
@@ -13,11 +13,18 @@ defineProps({
     type: String as PropType<String>,
     default: () => ''
   },
+  enable: {
+    type: Boolean as PropType<Boolean>,
+    default: () => true
+  },
 })
 
 const tippyRef = ref()
 const emit = defineEmits(['select'])
 const handleClick = (item: OptMeta) => {
+  if (!props.enable) {
+    return;
+  }
   setTimeout(() => {
     tippyRef.value?.hide?.()
   }, 300)
@@ -33,7 +40,10 @@ const handleClick = (item: OptMeta) => {
     <template #content>
       <template v-for="item in items" :key="item.value">
       <div class="opt-item" @click="handleClick(item)">
-        <span :class="{active: active==item.value}">
+        <span :class="{
+          active: active==item.value,
+          disabled: !props.enable
+        }">
           {{ item.label }}
         </span>
       </div>
@@ -66,5 +76,9 @@ const handleClick = (item: OptMeta) => {
 }
 .opt-item .active{
   font-weight: bold;
+}
+.opt-item .disabled{
+  cursor: not-allowed;
+  color: var(--color-tertiary);
 }
 </style>
