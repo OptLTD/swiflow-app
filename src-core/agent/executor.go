@@ -108,14 +108,14 @@ func (r *Executor) Handle() *action.SuperAction {
 			support.Emit("errors", r.UUID, errors.ErrTaskTerminatedByUser)
 			break
 		}
-		msgid, _ := support.UniqueID()
+		currMsgId, _ := support.UniqueID()
 		messages := r.context.GetContext()
 
 		var lastOp, currOp = "", ""
 		var merged, content = "", ""
 		for _, queued := range r.msgsQueue {
 			content, currOp = queued.Input()
-			role := r.context.GetRole(currOp)
+			role := r.context.GetMsgRole(currOp)
 			messages = append(messages, &model.Message{
 				Content: content, Role: role,
 			})
@@ -137,13 +137,13 @@ func (r *Executor) Handle() *action.SuperAction {
 			r.context.WriteMsg(&MyMsg{
 				IsSend: true, Request: merged,
 				OpType: lastOp, TaskId: r.UUID,
-				MsgId: msgid, PreMsg: prevMsgId,
+				UniqId: currMsgId, PrevId: prevMsgId,
 				SendAt: convertor.ToPointer(time.Now()),
 			})
 		}
 
 		// 调用LLM
-		resp := r.CallLLM(messages)
+		resp := r.GetLLMResp(messages, currMsgId)
 		if err := len(resp.Errors); err > 0 {
 			r.currentState = STATE_FAILED
 			log.Println("[EXEC] task", r.UUID, resp.Errors[0])
@@ -156,7 +156,7 @@ func (r *Executor) Handle() *action.SuperAction {
 			r.context.WriteMsg(&MyMsg{
 				IsSend: false, Respond: resp.Origin,
 				OpType: lastOp, TaskId: r.UUID,
-				MsgId: msgid, PreMsg: prevMsgId,
+				UniqId: currMsgId, PrevId: prevMsgId,
 				RecvAt: convertor.ToPointer(time.Now()),
 			})
 		} else if resp != nil && resp.Origin == "" {
@@ -167,11 +167,12 @@ func (r *Executor) Handle() *action.SuperAction {
 		}
 
 		r.currentTurns += 1
+		prevMsgId = currMsgId
 		resp.Payload = r.payload
+		resp.WorkerID = r.context.GetWorkId()
 
 		// 执行动作
-		prevMsgId = msgid
-		toolResult := r.DoPlay(resp)
+		toolResult := r.PlayAction(resp)
 
 		// 触发 respond 事件
 		support.Emit("respond", r.UUID, resp)
@@ -218,7 +219,7 @@ func (r *Executor) Handle() *action.SuperAction {
 	return nil
 }
 
-func (r *Executor) DoPlay(super *action.SuperAction) string {
+func (r *Executor) PlayAction(super *action.SuperAction) string {
 	replyMsgs := []string{}
 	for _, tool := range super.UseTools {
 		switch act := tool.(type) {
@@ -256,7 +257,7 @@ func (r *Executor) DoPlay(super *action.SuperAction) string {
 	return strings.Join(replyMsgs, "\n\n")
 }
 
-func (r *Executor) CallLLM(msgs []*model.Message) *action.SuperAction {
+func (r *Executor) GetLLMResp(msgs []*model.Message, msgid string) *action.SuperAction {
 	var choice = new(model.Choice)
 	var data = make([]model.Message, 0)
 	for _, msg := range msgs {
@@ -273,6 +274,13 @@ func (r *Executor) CallLLM(msgs []*model.Message) *action.SuperAction {
 		var stream struct {
 			Idx uint32 `json:"idx"`
 			Str string `json:"str"`
+		}
+		// first stream of llm response
+		if msgid != "" && stream.Idx == 0 {
+			worker := r.context.GetWorkId()
+			parts := []string{"data", worker, msgid}
+			stream.Str = strings.Join(parts, ":")
+			support.Emit("stream", r.UUID, stream)
 		}
 		err := r.modelClient.Stream(r.UUID, data, func(choices []model.Choice) {
 			choice.Message.Content += choices[0].Message.Content
@@ -319,7 +327,7 @@ func (r *Executor) startFileWatcher() {
 	}
 
 	// Get worker directory path
-	workPath := r.context.worker.Home
+	workPath := r.context.GetWorkHome()
 	if workPath == "" {
 		log.Printf("[EXEC] task Unable to get worker dir path, skipping file monitoring")
 		return

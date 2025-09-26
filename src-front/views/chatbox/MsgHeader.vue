@@ -3,21 +3,26 @@ import dayjs from 'dayjs';
 import { Tippy } from 'vue-tippy';
 import * as emoji from 'node-emoji';
 import { md } from '@/support/index';
+import { useAppStore } from '@/stores/app'
 import { computed, PropType } from 'vue';
 import { showBotInfoForm } from '@/logics/index'
 import { usePreferredDark } from '@vueuse/core';
 import { showContext } from '@/logics/popup'
 
 
+const app = useAppStore()
 const props = defineProps({
   detail: {
     type: Object as PropType<ActionMsg|null>,
     default: null
   },
-  current: {
-    type: Object as PropType<BotEntity|null>,
-    default: null
-  },
+})
+
+const worker = computed(() => {
+  const { workerId } = props.detail || {}
+  return app.getBotList.find((item) => {
+    return item.uuid == workerId
+  })
 })
 
 const timestamp = computed(() => {
@@ -58,7 +63,7 @@ const theTheme = computed(() => {
 })
 
 const showModifyBot = () => {
-  const info = props.current
+  const info = worker.value
   if (!info?.uuid) {
     return
   }
@@ -71,7 +76,7 @@ const showContextModal = () => {
 
 <template>
   <div @click="showModifyBot" class="msg-avatar">
-    {{ emoji.get(current?.emoji || 'man_technologist') }}
+    {{ emoji.get(worker?.emoji || 'man_technologist') }}
   </div>
   
   <ul class="msg-header">

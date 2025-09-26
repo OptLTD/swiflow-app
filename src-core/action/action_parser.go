@@ -50,6 +50,7 @@ type SuperAction struct {
 	Thinking string `json:"thinking"`
 	Datetime string `json:"datetime"`
 	TheMsgId string `json:"theMsgId"`
+	WorkerID string `json:"workerId"`
 
 	Context *Context `json:"context"`
 	Payload *Payload `json:"payload"`
@@ -312,6 +313,7 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 func (act *SuperAction) ToMap() map[string]any {
 	result := map[string]any{
 		"theMsgId": act.TheMsgId,
+		"workerId": act.WorkerID,
 		"thinking": act.Thinking,
 		"datetime": act.Datetime,
 	}

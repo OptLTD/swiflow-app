@@ -136,7 +136,7 @@ func execThisTodo(todo *entity.TodoEntity) {
 		return
 	}
 
-	bot, _ := manager.GetWorker(task.Bots)
+	bot, _ := manager.GetWorker(task.BotId)
 	go manager.Handle(act, task, bot)
 	log.Printf("[%s] finish exec todo", todo.UUID)
 }

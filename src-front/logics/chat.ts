@@ -217,7 +217,7 @@ export const getActHtml = (data: MsgAct) => {
       const trim = args.replace(/(\n\s{4})/ig, '\n').trim()
       parts.push('```json', trim, '```', '---')
     }
-    console.log('log', type, result)
+    // console.log('log', type, result)
     switch (type) {
       case 'html':
         return md.render(parts.join('\n')) + result

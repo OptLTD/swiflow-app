@@ -33,10 +33,9 @@ const doLoadTask = async () => {
 
 // 获取任务对应的bot信息
 const getTaskBot = (item: TaskEntity) => {
-  if (!item.bots) return null
-  const botUuid = item.bots[0]
+  if (!item.botid) return null
   return app.getBotList.find(bot => {
-    return bot.uuid === botUuid
+    return bot.uuid === item.botid
   })
 }
 

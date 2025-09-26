@@ -27,8 +27,8 @@ export class XMLParser {
 
 
 
-  public Parse(data: string): MsgResp {
-    var msg: MsgResp = new MsgResp(data);
+  public Parse(data: string, worker: string, msgid: string): MsgResp {
+    var msg: MsgResp = new MsgResp(data, worker, msgid);
     const tagReg = /<([^/>]+)>/;
     const maxAttempts = 10;
     let [left, curr, attempt] = [data, '', 0];
@@ -85,7 +85,7 @@ export class XMLParser {
     return [newText.trim(), result[0].trim()];
   }
 
-  private parse(text: string): Error|MsgAct|null {
+  private parse(text: string): Error | MsgAct | null {
     if (!text.trim()) return null;
 
     const tagreg = /<([^/>]+)>/;
@@ -126,7 +126,7 @@ export class XMLParser {
         detail.options = (options as any).option as string[]
         return detail as MsgAct
       }
-      case XMLParser.PATH_LIST_FILES: 
+      case XMLParser.PATH_LIST_FILES:
       case XMLParser.FILE_GET_CONTENT:
       case XMLParser.FILE_PUT_CONTENT:
       case XMLParser.FILE_REPLACE_TEXT: {
@@ -161,7 +161,7 @@ export class XMLParser {
       case XMLParser.USE_SELF_TOOL: {
         if (!result['tool']) { return null }
         const detail = new UseSelfTool(
-          result['tool'], 
+          result['tool'],
         )
         detail.title = result['title']
         return detail as MsgAct
@@ -189,7 +189,7 @@ export class XMLParser {
     return matches ? matches[1] : ''
   }
 
-  private parseAction(text: string): Error | MsgAct | null{
+  private parseAction(text: string): Error | MsgAct | null {
     const result = {} as any
     const maxAttempts = 10;
     const tagreg = /<([^/>]+)>/i;
@@ -226,10 +226,14 @@ export class MsgResp {
   actions: MsgAct[] = [];
   thinking?: string;
   datetime?: string;
+  theMsgId?: string;
+  workerId?: string;
 
-  constructor(data: string) {
+  constructor(data: string, worker: string, msgid: string) {
     this.origin = data;
     this.thinking = '';
+    this.theMsgId = msgid
+    this.workerId = worker
   }
 }
 
@@ -268,7 +272,7 @@ class UseMcpTool {
   title?: string;
   tool: string;
   server: string;
-  args?: Record<string,any>;
+  args?: Record<string, any>;
   constructor(a: string, b: string) {
     this.tool = a
     this.server = b
@@ -278,7 +282,7 @@ class UseMcpTool {
 class UseSelfTool {
   tool: string;
   title?: string;
-  args?: Record<string,any>;
+  args?: Record<string, any>;
   constructor(name: string) {
     this.tool = name
   }

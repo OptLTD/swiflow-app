@@ -51,8 +51,10 @@ func (h *SettingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 func (h *SettingHandler) GetMsgs(w http.ResponseWriter, r *http.Request) {
 	uuid := r.URL.Query().Get("task")
 	store, _ := h.manager.GetStorage()
-	query := "(`group`='' or `group`= ?)"
-	tasks, _ := store.LoadTask(query, uuid)
+	tasks, _ := store.LoadTask("group", uuid)
+	if len(tasks) == 0 {
+		tasks, _ = store.LoadTask("uuid", uuid)
+	}
 	context := agent.Context{}
 	result := []*action.SuperAction{}
 	for _, task := range tasks {
@@ -62,7 +64,12 @@ func (h *SettingHandler) GetMsgs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		acts := context.ParseMsgs(msgs)
-		result = append(result, acts...)
+		for _, act := range acts {
+			if act.WorkerID == "" {
+				act.WorkerID = task.BotId
+			}
+			result = append(result, act)
+		}
 	}
 	// Sort by datetime using sort function
 	sort.Slice(result, func(i, j int) bool {
@@ -79,19 +86,27 @@ func (h *SettingHandler) TaskSet(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
 	uuid := r.URL.Query().Get("uuid")
 	task, _ := h.manager.QueryTask(uuid)
-	if act == "get-task" || act == "" {
-		JsonResp(w, task.ToMap())
-		return
-	}
+	store, _ := h.manager.GetStorage()
 	switch act {
+	case "get-task", "":
+		subtasks := []string{}
+		result := task.ToMap()
+		tasks, _ := store.LoadTask("group", uuid)
+		for _, item := range tasks {
+			subtasks = append(subtasks, item.UUID)
+		}
+		result["subtasks"] = subtasks
+		if err := JsonResp(w, result); err != nil {
+			log.Println("resp error", err)
+		}
+		return
 	case "del-task":
 		task.DeletedAt.Time = time.Now()
 	case "set-bot":
-		task.Bots = r.URL.Query().Get("bot")
+		task.BotId = r.URL.Query().Get("bot")
 	case "set-home":
 		task.Home = r.URL.Query().Get("home")
 	}
-	store, _ := h.manager.GetStorage()
 	if err := store.SaveTask(task); err != nil {
 		JsonResp(w, fmt.Errorf("error: %w", err))
 		return

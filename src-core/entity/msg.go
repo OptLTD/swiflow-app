@@ -10,11 +10,11 @@ type MsgEntity struct {
 	ID uint `gorm:"primarykey"`
 
 	IsSend  bool   `gorm:"-:all"`
+	Group   string `gorm:"group;size:36;not null"`
 	OpType  string `gorm:"op_type;size:16;not null"`
-	TaskId  string `gorm:"task_id;size:16;not null"`
-	BotId   string `gorm:"bot_id;size:16;not null"`
-	MsgId   string `gorm:"msg_id;size:36;not null;uniqueIndex"`
-	PreMsg  string `gorm:"pre_msg;size:36;default null"`
+	TaskId  string `gorm:"task_id;size:36;not null"`
+	UniqId  string `gorm:"uniq_id;size:36;uniqueIndex"`
+	PrevId  string `gorm:"prev_id;size:36;default null"`
 	Request string `gorm:"request;"`
 	Respond string `gorm:"respond;"`
 	Context string `gorm:"context;"`

@@ -193,7 +193,7 @@ func (h *HttpHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		JsonResp(w, fmt.Errorf("找不到任务: %v", err))
 		return
 	}
-	bot, err := h.manager.QueryWorker(task.Bots)
+	bot, err := h.manager.QueryWorker(task.BotId)
 	if bot == nil || err != nil {
 		JsonResp(w, fmt.Errorf("找不到Bot: %v", err))
 		return
@@ -226,7 +226,7 @@ func (h *HttpHandler) Execute(w http.ResponseWriter, r *http.Request) {
 			UUID: task.UUID, Time: time.Now(),
 			Home: bot.Home, Path: task.Home,
 		}
-		if val := executor.DoPlay(respAction); val != "" {
+		if val := executor.PlayAction(respAction); val != "" {
 			if err = JsonResp(w, val); err != nil {
 				log.Println("[HTTP] resp error", err)
 			}

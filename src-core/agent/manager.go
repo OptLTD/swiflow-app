@@ -102,19 +102,24 @@ func (m *Manager) Start(input action.Input, task *MyTask, leader *Worker) {
 		// Get subagent instance for the task
 		switch act := data.(type) {
 		case *action.StartSubtask:
+			log.Println("[AGENT] start subtask", tid, act.SubAgent)
 			subagent := m.GetSubAgent(
 				act.SubAgent, leader, task,
 			)
 			subagent.OnStart(act)
+			log.Println("[AGENT] booted subtask", tid, act.SubAgent)
 		case *action.AbortSubtask:
+			log.Println("[AGENT] abort subtask", tid, act.SubAgent)
 			subagent := m.GetSubAgent(
 				act.SubAgent, leader, task,
 			)
 			subagent.OnAbort(act)
+			log.Println("[AGENT] leave subtask", tid, act.SubAgent)
 		}
 	})
 
 	support.Listen("complete", func(tid string, data any) {
+		log.Println("[AGENT] task complete", tid)
 		if act, ok := data.(*action.Complete); ok {
 			var subagent *SubAgent
 			for _, item := range m.subagents {
@@ -130,6 +135,7 @@ func (m *Manager) Start(input action.Input, task *MyTask, leader *Worker) {
 	})
 
 	task.Group = task.UUID
+	m.store.SaveTask(task)
 	go m.Handle(input, task, leader)
 }
 
@@ -187,7 +193,7 @@ func (m *Manager) InitTask(name string, uuid string) (*MyTask, error) {
 		uuid, _ = support.UniqueID()
 	}
 	task := &MyTask{
-		UUID: uuid, Bots: m.CurrentWorker(),
+		UUID: uuid, BotId: m.CurrentWorker(),
 		Name: support.Substring(name, 20),
 	}
 
@@ -200,8 +206,8 @@ func (m *Manager) InitTask(name string, uuid string) (*MyTask, error) {
 func (m *Manager) InitSubtask(worker string, group string) (*MyTask, error) {
 	uuid, _ := support.UniqueID()
 	subtask := &MyTask{
-		UUID: "sub-" + uuid,
-		Bots: worker, Group: group,
+		UUID:  "sub-" + uuid,
+		BotId: worker, Group: group,
 	}
 
 	if err := m.store.InitTask(subtask); err != nil {

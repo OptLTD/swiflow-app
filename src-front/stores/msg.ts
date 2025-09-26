@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
-import { useTaskStore } from './task'
+import { throttle } from 'lodash-es'
 import { useAppStore } from './app'
-import { errors } from '@/support/index'
+import { useTaskStore } from './task'
+import { errors, parser } from '@/support'
 
 // Event emitter for UI-specific actions
 class MsgEventEmitter {
@@ -97,20 +98,14 @@ export const useMsgStore = defineStore('msg', {
       
       delete this.streams[msg.taskid]
       
-      // Emit UI events for adding message
+      // Emit UI events for adding message and trigger processNextMsg
       eventEmitter.emit('respond', msg)
+      this.processNextMsg(this.streams[msg.taskid])
     },
 
     // Handle stream message
     handleStream(msg: SocketMsg) {
-      const task = useTaskStore()
-      
       this.errmsg = ''
-      if (!task.getActive) {
-        this.taskid = msg.taskid
-        task.setActive(msg.taskid)
-      }
-      
       if (!this.streams[msg.taskid]) {
         this.streams[msg.taskid] = {}
       }
@@ -118,8 +113,8 @@ export const useMsgStore = defineStore('msg', {
       const {idx, str} = msg.detail as any
       this.streams[msg.taskid][idx] = str
       
-      // Emit UI event for stream processing
-      eventEmitter.emit('stream', msg)
+      // Process next message with priority handling
+      this.processNextMsg()
     },
 
     // Handle error messages
@@ -217,6 +212,57 @@ export const useMsgStore = defineStore('msg', {
       }
       this.streams[taskid][idx] = str
     },
+
+    setSubtasks(subtasks: string[]) {
+      this.subtasks = subtasks
+    },
+    
+    clearSubtasks() {
+      this.subtasks = []
+    },
+
+    // Process stream data and emit next-msg event with priority handling for subtasks
+    processNextMsg: throttle(function(this: any, stream: any = {}) {
+      if (!this.running) {
+        return
+      }
+      
+      // Determine which taskid to process based on subtasks priority
+      let active = ''
+      if (this.subtasks.length > 0) {
+        // Find the first subtask that has stream data
+        for (const subtaskId of this.subtasks) {
+          if (this.streams[subtaskId] && Object.keys(this.streams[subtaskId]).length > 0) {
+            active = subtaskId
+            break
+          }
+        }
+      }
+      
+      active = active || this.taskid
+      const target = this.streams[active] || stream
+      var data = '', worker = '', msgid = ''
+      for (var i = 1; i < 50000; i++) {
+        if (target.hasOwnProperty(i)) {
+          data += target[i]
+        } else {
+          break
+        }
+      }
+      
+      if (target[0] && target[0].includes('data:')) {
+        [, worker, msgid] = target[0].split(':')
+        console.log('stream data', worker, msgid)
+      }
+      
+      const next = parser.Parse(data, worker, msgid)
+      this.setNextMsg(next as any as ActionMsg)
+      
+      // Emit next-msg event for UI components to handle
+      eventEmitter.emit('next-msg', {
+        taskid: active, nextMsg: next,
+      })
+    }, 180),
   },
 
   getters: {
@@ -225,6 +271,9 @@ export const useMsgStore = defineStore('msg', {
     
     // Get next message
     getNextMsg: (state) => state.nextMsg,
+
+    // Get subtasks array
+    getSubtasks: (state) => state.subtasks,
     
     // Get error message
     getErrMsg: (state) => state.errmsg,

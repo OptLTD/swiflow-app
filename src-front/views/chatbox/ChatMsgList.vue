@@ -1,3 +1,9 @@
+<script setup lang="ts">
+import MsgDetail from './MsgDetail.vue'
+import MsgHeader from './MsgHeader.vue'
+defineProps(['messages', 'errmsg', 'loading'])
+defineEmits(['check', 'replay', 'display'])
+</script>
 <template>
     <div class="error-tips" v-if="errmsg">
       <div class="error-detail">{{ errmsg }}</div>
@@ -12,13 +18,13 @@
         @display="$emit('display', $event)"
       >
         <template #header>
-          <MsgHeader :detail="item" :current="currbot"/>
+          <MsgHeader :detail="item"/>
         </template>
       </MsgDetail>
       <template v-if="loading && loading!.actions">
       <MsgDetail :detail="loading" :loading="true">
         <template #header>
-          <MsgHeader :detail="loading" :current="currbot"/>
+          <MsgHeader :detail="loading"/>
         </template>
       </MsgDetail>
       </template>
@@ -29,12 +35,6 @@
       </div>
     </slot>
 </template>
-<script setup lang="ts">
-import MsgDetail from './MsgDetail.vue'
-import MsgHeader from './MsgHeader.vue'
-defineProps(['messages', 'errmsg', 'loading', 'currbot'])
-defineEmits(['check', 'replay', 'display'])
-</script>
 
 <style scoped>
 .error-tips {

@@ -121,9 +121,9 @@ func (s *SQLiteStorage) SaveTask(task *TaskEntity) error {
 		}
 	}
 	update := map[string]any{
-		"name": task.Name, "home": task.Home, "bots": task.Bots,
-		"state": task.State, "context": task.Context,
-		"command": task.Command, "process": task.Process,
+		"uuid": task.UUID, "name": task.Name, "home": task.Home,
+		"group": task.Group, "botid": task.BotId, "state": task.State,
+		"context": task.Context, "command": task.Command, "process": task.Process,
 	}
 	clauses := clause.OnConflict{
 		Columns:   []clause.Column{{Name: "uuid"}},
@@ -137,7 +137,7 @@ func (s *SQLiteStorage) SaveTask(task *TaskEntity) error {
 	return nil
 }
 func (s *SQLiteStorage) FindMsg(msg *MsgEntity) error {
-	query := s.gormDB.Where("msg_id = ?", msg.MsgId)
+	query := s.gormDB.Where("uniq_id = ?", msg.UniqId)
 	if result := query.First(&msg); result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("failed to load msg: %w", result.Error)
@@ -153,7 +153,8 @@ func (s *SQLiteStorage) SaveMsg(msg *MsgEntity) error {
 	updates := map[string]any{
 		"op_type": msg.OpType,
 		"task_id": msg.TaskId,
-		"pre_msg": msg.PreMsg,
+		"prev_id": msg.PrevId,
+		"group":   msg.Group,
 	}
 
 	if msg.IsSend {
@@ -168,7 +169,7 @@ func (s *SQLiteStorage) SaveMsg(msg *MsgEntity) error {
 	}
 
 	clauses := clause.OnConflict{
-		Columns:   []clause.Column{{Name: "msg_id"}},
+		Columns:   []clause.Column{{Name: "uniq_id"}},
 		DoUpdates: clause.AssignmentColumns(maputil.Keys(updates)),
 	}
 	query := s.gormDB.Model(msg).Clauses(clauses).Assign(updates)

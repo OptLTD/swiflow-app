@@ -103,7 +103,7 @@ func (m *MockStore) LoadTask(query ...any) ([]*TaskEntity, error) {
 
 func (m *MockStore) FindMsg(msg *MsgEntity) error {
 	for _, mmsg := range m.msgs {
-		if mmsg.MsgId == msg.MsgId {
+		if mmsg.UniqId == msg.UniqId {
 			*msg = *mmsg
 			return nil
 		}
@@ -113,7 +113,7 @@ func (m *MockStore) FindMsg(msg *MsgEntity) error {
 
 func (m *MockStore) SaveMsg(msg *MsgEntity) error {
 	for i, mmsg := range m.msgs {
-		if mmsg.MsgId == msg.MsgId {
+		if mmsg.UniqId == msg.UniqId {
 			m.msgs[i] = msg
 			return nil
 		}

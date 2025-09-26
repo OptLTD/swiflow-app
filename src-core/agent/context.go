@@ -29,7 +29,19 @@ func (r *Context) Get() []*model.Message {
 	return r.GetContext()
 }
 
-func (r *Context) GetRole(op string) string {
+func (r *Context) GetGroup() string {
+	return r.mytask.Group
+}
+
+func (r *Context) GetWorkId() string {
+	return r.worker.UUID
+}
+
+func (r *Context) GetWorkHome() string {
+	return r.worker.Home
+}
+
+func (r *Context) GetMsgRole(op string) string {
 	switch op {
 	case "user-input":
 		return "user"
@@ -63,10 +75,10 @@ func (r *Context) ParseMsgs(msgs []*MyMsg) []*action.SuperAction {
 			}
 
 			if item.OpType == "user-input" {
-				resp.TheMsgId = item.MsgId
+				resp.TheMsgId = item.UniqId
 				result = append(result, resp)
 			}
-			if last, ok := resMap[item.PreMsg]; ok {
+			if last, ok := resMap[item.PrevId]; ok {
 				last.Merge(resp)
 			}
 		}
@@ -76,7 +88,7 @@ func (r *Context) ParseMsgs(msgs []*MyMsg) []*action.SuperAction {
 			if recv := item.RecvAt; recv != nil {
 				resp.Datetime = recv.Format(layout)
 			}
-			resp.TheMsgId = item.MsgId
+			resp.TheMsgId = item.UniqId
 			if len(resp.Errors) == 0 {
 				resMap[resp.TheMsgId] = resp
 				result = append(result, resp)
@@ -95,7 +107,7 @@ func (r *Context) GetMsgs(count int) []*model.Message {
 		}
 
 		req := model.Message{Content: msgs[i].Request}
-		req.Role = r.GetRole(msgs[i].OpType)
+		req.Role = r.GetMsgRole(msgs[i].OpType)
 		messages = append(messages, &req)
 		if strings.TrimSpace(msgs[i].Respond) != "" {
 			messages = append(messages, &model.Message{
@@ -212,6 +224,10 @@ func (r *Context) WriteMsg(msg *MyMsg) error {
 	if r.store == nil {
 		log.Println("[EXEC]", msg.TaskId, "log msg fail: store nil")
 		return fmt.Errorf("write msg error: store nil")
+	}
+	// add msg group of task
+	if r.mytask.Group != "" {
+		msg.Group = r.mytask.Group
 	}
 	if err := r.store.SaveMsg(msg); err != nil {
 		log.Println("[EXEC]", msg.TaskId, "log msg fail:", err)

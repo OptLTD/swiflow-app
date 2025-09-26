@@ -517,7 +517,7 @@ func (h *HttpServie) SaveState(task *entity.TaskEntity, state string) error {
 }
 
 func (h *HttpServie) LoadMsg(task *entity.TaskEntity, msgid string) *storage.MsgEntity {
-	msg := &entity.MsgEntity{MsgId: msgid}
+	msg := &entity.MsgEntity{UniqId: msgid}
 	if err := h.store.FindMsg(msg); err == nil {
 		return msg
 	}

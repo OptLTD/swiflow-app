@@ -137,6 +137,7 @@ declare type ActionMsg = {
   actions: MsgAct[]
 
   theMsgId: string
+  workerId: string
   thinking: string
   datetime: string
 }
@@ -170,9 +171,10 @@ declare type TaskEntity = {
   uuid: string
   name: string
   state: string
-  bots: string[]
+  botid: string
   command: string
   process: number
+  subtasks: string[]
   // robot: string
 }
 

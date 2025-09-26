@@ -35,6 +35,7 @@ func (sa *SubAgent) OnStart(act *action.StartSubtask) {
 		// ensure work in same dir
 		worker.Home = sa.leader.Home
 		sa.worker, sa.mytask = worker, subtask
+		log.Println("[SUBTASK] OnStart", worker.UUID)
 		sa.parent.Handle(act, subtask, worker)
 	}
 }
@@ -67,6 +68,7 @@ func (sa *SubAgent) OnComplete(act *action.Complete) {
 		SubAgent: sa.worker.UUID,
 		Result:   act.Content,
 	}
+	log.Println("[SUBTASK] OnComplete", sa.worker.UUID)
 	sa.parent.Handle(subtask, sa.ldtask, sa.worker)
 }
 
@@ -78,5 +80,6 @@ func (sa *SubAgent) OnTimeout(act *action.Complete) {
 		SubAgent: sa.worker.UUID,
 		Result:   act.Content,
 	}
+	log.Println("[SUBTASK] OnTimeout", sa.worker.UUID)
 	sa.parent.Handle(subtask, sa.ldtask, sa.worker)
 }

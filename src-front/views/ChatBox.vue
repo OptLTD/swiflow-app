@@ -4,7 +4,7 @@ import { toast } from 'vue3-toastify'
 import { throttle } from 'lodash-es'
 import { ref, unref, watch } from 'vue'
 import {  onMounted, onUnmounted } from 'vue'
-import { parser, request } from '@/support'
+import { request } from '@/support/index'
 import { useAppStore } from '@/stores/app'
 import { useMsgStore } from '@/stores/msg'
 import { eventEmitter } from '@/stores/msg'
@@ -110,11 +110,6 @@ const onProviderChange = async (item: OptMeta) => {
   }
 }
 
-const queryBot = (uuid: string) => {
-  uuid = uuid || app.getActive?.uuid || '';
-  return app.getBotList.find(x => x.uuid == uuid)
-}
-
 const loadTaskInfo = async (uuid: string) => {
   try {
     const url = `/task?act=get-task&uuid=${uuid}`
@@ -125,6 +120,7 @@ const loadTaskInfo = async (uuid: string) => {
     }
     taskInfo.value = resp as TaskEntity
     msg.setRunning(resp.state == 'running')
+    msg.setSubtasks(taskInfo.value.subtasks)
   } catch (e) {
     console.error('use bot:', e)
   }
@@ -169,7 +165,8 @@ const handleGoHome = () => {
 }
 
 const handleDisplay = (act: MsgAct) => {
-  if (!act.result) {
+  const show = showDisplayAct(act)
+  if (!act.result && show === false) {
     return
   }
   view.setAction(act)
@@ -190,11 +187,11 @@ const handleTools = (tools: string[]) => {
   setBotTools(uuid as string, tools.join())
 }
 const handleSwitch = (tid: string) => {
-  console.log(tid, 'ddddddd')
   if (!tid) {
     msg.setTaskId('')
     msg.setErrMsg('')
     msg.setRunning(false)
+    app.setContent(false)
     view.setAction(null)
     messages.value = []
     return;
@@ -209,23 +206,6 @@ const handleSwitch = (tid: string) => {
 }
 
 const autoScroll = throttle(autoScrollToEnd, 500)
-const setNextMsg = throttle((stream: any  = {}) => {
-  if (!msg.isRunning) {
-    return
-  }
-  var data = ''
-  for (var i=1; i < 50000; i++) {
-    if (stream.hasOwnProperty(i)) {
-      data += stream[i]
-    } else {
-      break
-    }
-  }
-  const next = parser.Parse(data)
-  msg.setNextMsg(next as any as ActionMsg);
-  startPlayAction(next as any as ActionMsg)
-  setTimeout(() => autoScroll(false), 150)
-}, 180)
 
 const startPlayAction = (msg: ActionMsg, force: boolean = false) => {
   if (!msg || !msg.actions?.length) {
@@ -258,15 +238,15 @@ const handleViewUpload = (filePath: string) => {
 watch(() => task.getActive, (uuid) => {
   handleSwitch(uuid)
 })
-watch(() => app.getBotList, () => {
-  workerMaps.value = queryBot('')
-})
-watch(() => app.getActive, () => {
-  workerMaps.value = queryBot('')
-})
 onMounted(() => {
   // Listen to UI-specific events from msg store
   eventEmitter.on('user-input', (socketMsg: SocketMsg) => {
+    if (msg.getChatId != socketMsg.taskid) {
+      return
+    }
+    if (!task.getActive && msg.getChatId) {
+      task.setActive(socketMsg.taskid)
+    }
     // Add user input message to local messages
     messages.value.push({ 
       actions: [{
@@ -281,20 +261,20 @@ onMounted(() => {
     // Add response message to local messages
     messages.value.push(socketMsg.detail)
     startPlayAction(socketMsg.detail)
-    setNextMsg(msg.getStream[socketMsg.taskid])
   })
   
-  eventEmitter.on('stream', (socketMsg: SocketMsg) => {
-    setNextMsg(msg.getStream[socketMsg.taskid])
+  eventEmitter.on('next-msg', (data: any) => {
+    if (data.nextMsg) {
+      startPlayAction(data.nextMsg)
+      setTimeout(() => autoScroll(false), 150)
+    }
   })
 
   inputMsg.value.placeholder = `
     输入消息内容，按下回车键发送
     拖拽文件到此处即可上传文件
   `.replace(/\n\s+/g, '\n').trim()
-  
-  // Set current bot based on active bot
-  workerMaps.value = queryBot('')
+
   // Load task data when component mounts
   if (task.getActive) {
     loadTaskMsgs(task.getActive)
@@ -304,9 +284,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   // Clean up event listeners
-  eventEmitter.off('user-input', () => {})
+  eventEmitter.off('next-msg', () => {})
   eventEmitter.off('respond', () => {})
-  eventEmitter.off('stream', () => {})
+  eventEmitter.off('user-input', () => {})
 })
 
 // Method to set message content from external components
@@ -327,7 +307,6 @@ defineExpose({
   <div class="chat-container">
     <div class="list-container">
       <ChatMsgList
-        :currbot="workerMaps"
         :errmsg="msg.getErrMsg"
         :loading="msg.getNextMsg"
         :messages="messages"
