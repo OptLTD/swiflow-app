@@ -186,6 +186,14 @@ declare type TodoEntity = {
   task: string
 }
 
+declare type ToolEntity = {
+  uuid: string
+  name: string
+  desc: string
+  type: string
+  data: any
+}
+
 declare type BotEntity = {
   uuid: string
   name: string

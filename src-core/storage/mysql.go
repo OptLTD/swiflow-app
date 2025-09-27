@@ -410,7 +410,6 @@ func (s *MySQLStorage) SaveTool(tool *ToolEntity) error {
 	updates := map[string]any{
 		"uuid": tool.UUID, "type": tool.Type,
 		"name": tool.Name, "desc": tool.Desc,
-		"code": tool.Code, "deps": tool.Deps,
 	}
 
 	clauses := clause.OnConflict{

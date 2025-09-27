@@ -5,7 +5,7 @@ import (
 	"strings"
 	"swiflow/entity"
 	"swiflow/model"
-	"swiflow/storage"
+	"swiflow/support"
 
 	"github.com/duke-git/lancet/v2/maputil"
 )
@@ -16,9 +16,7 @@ type BuiltinTool interface {
 }
 
 type BuiltinManager struct {
-	tools []BuiltinTool
-
-	config []*entity.CfgEntity
+	tools []*entity.ToolEntity
 }
 
 var manager *BuiltinManager
@@ -26,101 +24,117 @@ var manager *BuiltinManager
 func GetManager() *BuiltinManager {
 	if manager == nil {
 		manager = &BuiltinManager{}
-		manager.tools = make([]BuiltinTool, 0)
+		manager.tools = make([]*entity.ToolEntity, 0)
 	}
 	return manager
 }
 
-func (a *BuiltinManager) Init(store storage.MyStore) *BuiltinManager {
-	// Reset tools to avoid duplicates when re-initializing.
-	// Intent: make InitTools idempotent across repeated calls.
-	a.tools = make([]BuiltinTool, 0)
-	query := []string{"type", entity.KEY_CFG_DATA}
-	if pools, err := store.LoadCfg(query); err == nil {
-		a.config = pools
-	}
-	a.Append(&CommandTool{})
-	a.Append(&Python3Tool{})
-	if client := a.buildClient("image-ocr"); client != nil {
-		a.Append(&ImageOCRTool{client: client})
-	}
-	if client := a.buildClient("chat2llm"); client != nil {
-		a.Append(&Chat2LLMTool{client: client})
-	}
-	// Load stored tools and wrap as alias tools
-	if list, err := store.LoadTool(); err == nil {
-		for _, t := range list {
-			base := strings.TrimSpace(t.Code)
-			if base == "" {
-				base = strings.TrimSpace(t.Name)
+func (a *BuiltinManager) Init(tools []*entity.ToolEntity) *BuiltinManager {
+	src := support.Or(tools, []*entity.ToolEntity{})
+	findBy := func(name string) (int, *entity.ToolEntity) {
+		for i, t := range src {
+			if strings.EqualFold(t.UUID, name) {
+				return i, t
 			}
-			if base == "" {
-				continue
-			}
-			a.Append(&CmdAliasTool{UUID: t.UUID, Name: base})
 		}
+		return -1, nil
 	}
+
+	// Ensure builtins at head in required order
+	used := make(map[int]bool)
+	head := make([]*entity.ToolEntity, 0, 4)
+	ensure := func(uuidType string, desc string) {
+		if idx, t := findBy(uuidType); t != nil {
+			head = append(head, t)
+			used[idx] = true
+			return
+		}
+		head = append(head, &entity.ToolEntity{
+			UUID: uuidType, Type: uuidType,
+			Name: uuidType, Desc: desc,
+		})
+	}
+	ensure("command", "command tool")
+	ensure("python3", "python3 tool")
+	ensure("chat2llm", "chat2llm tool")
+	ensure("image_ocr", "image_ocr tool")
+
+	// Append remaining tools preserving order
+	tail := make([]*entity.ToolEntity, 0, len(src))
+	for i, t := range src {
+		if used[i] {
+			continue
+		}
+		tail = append(tail, t)
+	}
+
+	a.tools = append(head, tail...)
 	return a
 }
 
-func (a *BuiltinManager) GetPrompt(tools []string) string {
-	var builder strings.Builder
-	for _, tool := range a.tools {
-		builder.WriteString(tool.Prompt())
-	}
-	return strings.TrimSpace(builder.String())
-}
-
-func (a *BuiltinManager) Append(tools ...BuiltinTool) {
-	a.tools = append(a.tools, tools...)
+func (a *BuiltinManager) List() []*entity.ToolEntity {
+	return a.tools
 }
 
 func (a *BuiltinManager) Query(name string) (BuiltinTool, error) {
-	for _, tool := range a.tools {
-		switch tool := tool.(type) {
-		case *Chat2LLMTool:
-			if name == "chat2llm" {
-				return tool, nil
-			}
-		case *ImageOCRTool:
-			if name == "image_ocr" {
-				return tool, nil
-			}
-		case *CommandTool:
-			if name == "command" {
-				return tool, nil
-			}
-		case *Python3Tool:
-			if name == "python3" {
-				return tool, nil
-			}
-		case *CmdAliasTool:
-			if name == tool.UUID {
-				return tool, nil
-			}
-		}
+	if strings.EqualFold(name, "command") {
+		return &CommandTool{}, nil
+	}
+	if strings.EqualFold(name, "python3") {
+		return &Python3Tool{}, nil
+	}
+
+	if strings.EqualFold(name, "chat2llm") {
+		client, prompt := a.getLLMClient("chat2llm")
+		return &Chat2LLMTool{client: client, prompt: prompt}, nil
+	}
+
+	if strings.EqualFold(name, "image_ocr") {
+		client, prompt := a.getLLMClient("image_ocr")
+		return &ImageOCRTool{client: client, prompt: prompt}, nil
 	}
 	return nil, fmt.Errorf("no tool found")
 }
 
-// buildClient constructs an LLM client from storage cfg-data; falls back to env vars.
-func (a *BuiltinManager) buildClient(name string) model.LLMClient {
-	var cfg model.LLMConfig
-	var find *entity.CfgEntity
-	for _, item := range a.config {
-		if item.Name == name {
-			find = item
-			break
+// GetPrompt builds prompt text for builtin tools and user aliases.
+// Intent: keep behavior consistent while manager.tools holds entities.
+func (a *BuiltinManager) GetPrompt(_ []string) string {
+	var b strings.Builder
+	// Builtin prompts (static)
+	b.WriteString((&CommandTool{}).Prompt())
+	b.WriteString((&Python3Tool{}).Prompt())
+	b.WriteString((&Chat2LLMTool{}).Prompt())
+	b.WriteString((&ImageOCRTool{}).Prompt())
+	// Alias prompts derived from tool entities
+	for _, ent := range a.tools {
+		if strings.EqualFold(ent.Type, "command") || strings.EqualFold(ent.Type, "python3") || strings.EqualFold(ent.Type, "chat2llm") || strings.EqualFold(ent.Type, "image_ocr") {
+			continue
+		}
+		alias := &CmdAliasTool{UUID: ent.UUID, Name: ent.Name, Desc: ent.Desc}
+		b.WriteString(alias.Prompt())
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (a *BuiltinManager) findTool(name string) *entity.ToolEntity {
+	for _, t := range a.tools {
+		if strings.EqualFold(t.UUID, name) {
+			return t
 		}
 	}
-	if find == nil {
-		return nil
+	return nil
+}
+
+func (a *BuiltinManager) getLLMClient(name string) (model.LLMClient, string) {
+	cfg := model.LLMConfig{}
+	tool := a.findTool(name)
+	if tool != nil && tool.Data != nil {
+		_ = maputil.MapTo(tool.Data, &cfg)
 	}
-	if m := find.Data; len(m) != 0 {
-		_ = maputil.MapTo(m, &cfg)
+	// Build client only when provider is set.
+	var client model.LLMClient
+	if strings.TrimSpace(cfg.Provider) != "" {
+		client = model.GetClient(&cfg)
 	}
-	if cfg.Provider == "" || cfg.ApiKey == "" {
-		return nil
-	}
-	return model.GetClient(&cfg)
+	return client, tool.Desc
 }

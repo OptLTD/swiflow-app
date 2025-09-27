@@ -1,4 +1,14 @@
 export default {
+  builtin: {
+    chat2llmName: 'Chat2LLM',
+    chat2llmDesc: 'Call the model for Q&A and reasoning',
+    image_ocrName: 'Image OCR',
+    image_ocrDesc: 'Extract text from images',
+    commandName: 'Command Executor',
+    commandDesc: 'Execute system commands in controlled environment',
+    python3Name: 'Python3 Runtime',
+    python3Desc: 'Run Python scripts and code snippets',
+  },
   login: {
     login: 'Login',
     register: 'Register',
@@ -12,6 +22,7 @@ export default {
     botSet: 'Bot Setting',
     mcpSet: 'Mcp Setting',
     todoSet: 'Todo Setting',
+    toolSet: 'Tool Setting',
   },
   tips: {
     delMemTip: 'Delete Memory',
@@ -37,6 +48,8 @@ export default {
     delete: 'Delete',
     result: 'Result',
     addNew: 'Add New',
+    builtin: 'Builtin',
+    custom: 'Custom',
 
     complete: 'Complete',
     usetool: 'Use Tool',

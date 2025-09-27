@@ -1,4 +1,14 @@
 export default {
+  builtin: {
+    chat2llmName: 'Chat2LLM 对话工具',
+    chat2llmDesc: '直接调用模型进行问答与推理',
+    image_ocrName: '图像 OCR 识别',
+    image_ocrDesc: '提取图片中的文字内容',
+    commandName: '系统命令执行',
+    commandDesc: '在受控环境中执行命令',
+    python3Name: 'Python3 运行环境',
+    python3Desc: '运行 Python 脚本与代码片段',
+  },
   login: {
     login: '登陆',
     register: '注册',
@@ -12,7 +22,8 @@ export default {
     botSet: 'Bot 设置',
     mcpSet: 'Mcp 设置',
     memSet: '记忆设置',
-    todoSet: '待办设置'
+    todoSet: '待办设置',
+    toolSet: '工具设置'
   },
   tips: {
     newVersion: '有版本更新',
@@ -52,6 +63,8 @@ export default {
     viewfile: '查看文件',
     writefile: '写入文件',
     complete: '完成任务',
+    builtin: '内置',
+    custom: '自定义',
 
     noMem: '暂无记忆',
     addMem: '添加记忆',

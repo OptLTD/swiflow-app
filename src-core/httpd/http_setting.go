@@ -13,6 +13,7 @@ import (
 	"swiflow/action"
 	"swiflow/agent"
 	"swiflow/amcp"
+	"swiflow/builtin"
 	"swiflow/config"
 	"swiflow/entity"
 	"swiflow/model"
@@ -439,6 +440,47 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 		JsonResp(w, fmt.Errorf("undefined act"))
 	}
 }
+
+// ToolSet handles tool-related operations under setting.
+// Purpose: list builtin tools and manage user-defined tool aliases.
+func (h *SettingHandler) ToolSet(w http.ResponseWriter, r *http.Request) {
+	act := r.URL.Query().Get("act")
+	store, _ := h.manager.GetStorage()
+	var tools, _ = store.LoadTool()
+	var manager = builtin.GetManager().Init(tools)
+	switch act {
+	case "get-tools", "":
+		JsonResp(w, manager.List())
+		return
+	case "set-tool":
+		// Save or update a user-defined tool alias
+		tool := new(entity.ToolEntity)
+		if err := h.service.ReadTo(r.Body, tool); err != nil {
+			_ = JsonResp(w, err)
+			return
+		}
+		// Default type to alias; generate UUID if missing
+		if strings.TrimSpace(tool.Type) == "" {
+			tool.Type = "cmd_alias"
+		}
+		if strings.TrimSpace(tool.UUID) == "" {
+			tool.UUID, _ = support.UniqueID(12)
+		}
+		if err := store.SaveTool(tool); err != nil {
+			_ = JsonResp(w, err)
+			return
+		}
+		if items, err := store.LoadTool(); err == nil {
+			builtin.GetManager().Init(items)
+		}
+		_ = JsonResp(w, tool.ToMap())
+		return
+	default:
+		_ = JsonResp(w, "undefined command")
+		return
+	}
+}
+
 func (h *SettingHandler) MemSet(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
 	if act == "get-mem" {

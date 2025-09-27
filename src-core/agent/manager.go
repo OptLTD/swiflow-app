@@ -398,7 +398,8 @@ func (m *Manager) UsePrompt(worker *Worker) string {
 		prompt, "${{USER_PROMPT}}", worker.UsePrompt,
 	)
 
-	manager := builtin.GetManager().Init(m.store)
+	var tools, _ = m.store.LoadTool()
+	var manager = builtin.GetManager().Init(tools)
 	inbuilt := manager.GetPrompt(worker.Tools)
 	prompt = strings.ReplaceAll(
 		prompt, "${{BUILTIN_TOOLS}}", inbuilt,

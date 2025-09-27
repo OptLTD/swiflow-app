@@ -14,6 +14,7 @@ import SetBot from '@/views/SetBot.vue'
 import SetMem from '@/views/SetMem.vue'
 import SetMcp from '@/views/SetMcp.vue'
 import SetTodo from '@/views/SetTodo.vue'
+import SetTool from '@/views/SetTool.vue'
 import NavBar from '@/views/NavBar.vue'
 import ChatBox from '@/views/ChatBox.vue'
 import Content from '@/views/Content.vue'
@@ -295,6 +296,7 @@ const handleFilesUploaded = (uploads: string[]) => {
       <SetMcp v-if="app.getAction == 'set-mcp'" />
       <SetMem v-if="app.getAction == 'set-mem'" />
       <SetTodo v-if="app.getAction == 'set-todo'" />
+      <SetTool v-if="app.getAction == 'set-tool'" />
     </template>
   </Default>
   <ModalsContainer />

@@ -61,7 +61,7 @@ const doSaveUseModel = async (data: any) => {
     errmsg.value = err as string
   } finally {
     if (errmsg.value=='success') {
-      alert('SUCCESS')
+      // alert('SUCCESS')
       emit('submit')
     }
   }
@@ -77,7 +77,7 @@ const doSaveProvider = async (data: any) => {
   } finally {
     if (errmsg.value=='success') {
       emit('submit', data)
-      alert('SUCCESS')
+      // alert('SUCCESS')
     }
   }
 }

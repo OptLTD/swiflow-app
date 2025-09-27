@@ -16,6 +16,7 @@ const items = [
   { uuid: 'set-mcp', icon: 'btn-tools', name: t('menu.mcpSet') },
   { uuid: 'set-mem', icon: 'btn-memory', name: t('menu.memSet') },
   { uuid: 'set-todo', icon: 'btn-clock', name: t('menu.todoSet') },
+  { uuid: 'set-tool', icon: 'btn-tools', name: t('menu.toolSet') },
   { uuid: 'set-model', icon: 'btn-switch', name: t('menu.modelSet') },
   { uuid: 'setting', icon: 'btn-gear', name: t('menu.basicSet') },
 ]
@@ -58,6 +59,13 @@ const onSwitchSet = (item: any) => {
       app.setChatBar(false)
       app.setAction('set-todo')
       document.title = 'Set Todo'
+      break
+    }
+    case 'set-tool': {
+      app.setContent(true)
+      app.setChatBar(false)
+      app.setAction('set-tool')
+      document.title = 'Set Tool'
       break
     }
   }
