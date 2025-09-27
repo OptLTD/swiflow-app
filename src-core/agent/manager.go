@@ -7,6 +7,7 @@ import (
 	"swiflow/ability"
 	"swiflow/action"
 	"swiflow/amcp"
+	"swiflow/builtin"
 	"swiflow/config"
 	"swiflow/entity"
 	"swiflow/initial"
@@ -379,6 +380,7 @@ func (m *Manager) GetMemory(worker *Worker) string {
 	return memory.String()
 }
 func (m *Manager) GetPrompt(worker *Worker) string {
+
 	prompt := m.UsePrompt(worker)
 	prompt = strings.ReplaceAll(
 		prompt, "${{WORK_PATH}}", worker.Home,
@@ -396,7 +398,14 @@ func (m *Manager) UsePrompt(worker *Worker) string {
 		prompt, "${{USER_PROMPT}}", worker.UsePrompt,
 	)
 
-	mcpTools := m.getMcpToolsInfo(worker)
+	manager := builtin.GetManager().Init(m.store)
+	inbuilt := manager.GetPrompt(worker.Tools)
+	prompt = strings.ReplaceAll(
+		prompt, "${{BUILTIN_TOOLS}}", inbuilt,
+	)
+
+	mcpServ := amcp.GetMcpService(m.store)
+	mcpTools := mcpServ.GetPrompt(worker)
 	prompt = strings.ReplaceAll(
 		prompt, "${{MCP_TOOLS}}", mcpTools,
 	)
@@ -423,50 +432,14 @@ func (m *Manager) getSubAgents(leader *Worker) string {
 	}
 
 	if result.Len() == 0 {
-		return "none"
+		return "empty list"
 	}
 
 	return result.String()
 }
 
 // getMcpToolsInfo 构建MCP工具列表
-func (m *Manager) getMcpToolsInfo(worker *Worker) string {
-	var prompt strings.Builder
-	mcpServ := amcp.GetMcpService(m.store)
-	servers := mcpServ.ListServers()
-	for _, server := range servers {
-		checked := server.Checked(worker)
-		if len(checked) == 0 {
-			continue
-		}
-		prompt.WriteString("## " + server.UUID + "\n")
-		for _, tool := range checked {
-			prompt.WriteString(fmt.Sprintf("### **%s**\n", tool.Name))
-			prompt.WriteString(fmt.Sprintf("- 描述： %s\n", tool.Description))
-			if input := tool.InputSchema; input == nil {
-				continue
-			} else if data, err := input.MarshalJSON(); err == nil {
-				prompt.WriteString("- 入参：\n")
-				prompt.WriteString("```json\n")
-				prompt.WriteString(string(data))
-				prompt.WriteString("\n```\n\n\n")
-			}
-		}
-	}
-	if prompt.Len() == 0 {
-		return "none"
-	}
-	for _, server := range servers {
-		enable := server.Status.Enable
-		tools := server.Status.McpTools
-		if enable && len(tools) == 0 {
-			prompt.Reset()
-			prompt.WriteString("error:server-no-tools")
-			break
-		}
-	}
-	return prompt.String()
-}
+// getMcpToolsInfo moved to amcp.McpService.BuildToolsPrompt
 
 func (m *Manager) ResetWorker(worker *Worker) {
 	var found bool
@@ -540,7 +513,7 @@ func (m *Manager) GetStorage() (Store, error) {
 }
 
 func (m *Manager) InitConfig() error {
-	list, err := m.store.LoadCfg() // Call without parameters to maintain existing behavior
+	list, err := m.store.LoadCfg()
 	if err != nil {
 		return err
 	}

@@ -23,7 +23,7 @@ export class XMLParser {
 
 
   private static readonly USE_MCP_TOOL = 'use-mcp-tool';
-  private static readonly USE_SELF_TOOL = 'use-self-tool';
+  private static readonly USE_BUILTIN_TOOL = 'use-builtin-tool';
 
 
 
@@ -155,15 +155,15 @@ export class XMLParser {
         const detail = new UseMcpTool(
           result['tool'], result['server']
         )
-        detail.title = result['title']
+        detail.desc = result['desc']
         return detail as MsgAct
       }
-      case XMLParser.USE_SELF_TOOL: {
+      case XMLParser.USE_BUILTIN_TOOL: {
         if (!result['tool']) { return null }
-        const detail = new UseSelfTool(
+        const detail = new UseBuiltinTool(
           result['tool'],
         )
-        detail.title = result['title']
+        detail.desc = result['title']
         return detail as MsgAct
       }
       case XMLParser.START_ASYNC_CMD:
@@ -269,20 +269,20 @@ class BotReply {
 
 
 class UseMcpTool {
-  title?: string;
+  desc?: string;
   tool: string;
-  server: string;
+  name: string;
   args?: Record<string, any>;
   constructor(a: string, b: string) {
     this.tool = a
-    this.server = b
+    this.name = b
   }
 }
 
-class UseSelfTool {
+class UseBuiltinTool {
   tool: string;
-  title?: string;
-  args?: Record<string, any>;
+  desc?: string;
+  args?: any;
   constructor(name: string) {
     this.tool = name
   }

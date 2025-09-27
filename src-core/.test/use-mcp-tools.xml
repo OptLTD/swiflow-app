@@ -1,7 +1,8 @@
 <use-mcp-tool>
-  <server-name>weather-server</server-name>
-  <tool-name>get-forecast</tool-name>
-  <arguments>
+  <desc>query forecast of today</desc>
+  <name>weather-server</name>
+  <tool>get-forecast</tool>
+  <args>
     {
       "city": "San Francisco",
       "days": 5

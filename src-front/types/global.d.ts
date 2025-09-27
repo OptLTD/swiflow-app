@@ -94,15 +94,15 @@ declare type AbortSubtask = {
 }
 
 declare type UseMcpTool = {
-  title?: string;
+  desc?: string;
   args?: Record;
   tool: string;
-  server: string;
+  name: string;
   more: boolean // 详细展示
 }
 
-declare type UseSelfTool = {
-  title?: string;
+declare type UseBuiltinTool = {
+  desc?: string;
   args?: Record;
   tool: string;
   more: boolean // 详细展示

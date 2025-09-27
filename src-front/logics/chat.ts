@@ -192,7 +192,7 @@ export const getActDesc = (item: MsgAct): string => {
     }
     case "use-mcp-tool": {
       const act = (item as UseMcpTool)
-      return `Use Tool: ${act.title}`
+      return `Use Tool: ${act.desc}`
     }
   }
   return `undefined ${item.type}`
@@ -208,7 +208,7 @@ export const getActHtml = (data: MsgAct) => {
     return md.render(content.replace('{{ERRMSG}}', errmsg))
   }
   // mcp tool result
-  const tools = ['use-mcp-tool', 'use-self-tool']
+  const tools = ['use-mcp-tool', 'use-builtin-tool']
   if (tools.includes(data.type) && !isEmpty(result)) {
     const parts = [] as string[]
     const type = textType(result)
@@ -258,7 +258,7 @@ export const getActHtml = (data: MsgAct) => {
       if (!isEmpty(result)) {
         return md.render(result)
       }
-      return md.render('none result')
+      return md.render('empty result')
     }
     case 'file-replace-text': {
       const act = (data as FileReplaceText)

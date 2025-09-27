@@ -3,6 +3,7 @@ package amcp
 import (
 	"fmt"
 	"log"
+	"strings"
 	"swiflow/entity"
 	"swiflow/storage"
 	"sync"
@@ -101,6 +102,43 @@ func (m *McpService) ListTools() []*McpTool {
 		}
 	}
 	return allTools
+}
+
+func (m *McpService) GetPrompt(worker *entity.BotEntity) string {
+	var prompt strings.Builder
+	servers := m.ListServers()
+	for _, server := range servers {
+		checked := server.Checked(worker)
+		if len(checked) == 0 {
+			continue
+		}
+		prompt.WriteString("### " + server.UUID + "\n")
+		for _, tool := range checked {
+			prompt.WriteString(fmt.Sprintf("#### **%s**\n", tool.Name))
+			prompt.WriteString(fmt.Sprintf("- 描述： %s\n", tool.Description))
+			if input := tool.InputSchema; input == nil {
+				continue
+			} else if data, err := input.MarshalJSON(); err == nil {
+				prompt.WriteString("- 入参：\n")
+				prompt.WriteString("```json\n")
+				prompt.WriteString(string(data))
+				prompt.WriteString("\n```\n\n\n")
+			}
+		}
+	}
+	if prompt.Len() == 0 {
+		return "empty list"
+	}
+	for _, server := range servers {
+		enable := server.Status.Enable
+		tools := server.Status.McpTools
+		if enable && len(tools) == 0 {
+			prompt.Reset()
+			prompt.WriteString("error:server-no-tools")
+			break
+		}
+	}
+	return prompt.String()
 }
 
 func (m *McpService) GetMockStore() *storage.MockStore {

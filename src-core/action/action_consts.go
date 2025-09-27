@@ -35,6 +35,8 @@ const (
 
 	// MCP工具
 	USE_MCP_TOOL = "use-mcp-tool"
+	// builtin
+	USE_BUILTIN_TOOL = "use-builtin-tool"
 )
 
 const TOOL_RESULT_TAG = "<!-- [tool-result] -->"

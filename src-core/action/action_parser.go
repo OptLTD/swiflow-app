@@ -227,10 +227,13 @@ func (act *SuperAction) Hash() []string {
 			identifier = act.XMLName.Local + ":" + act.SubAgent
 		case *AbortSubtask:
 			identifier = act.XMLName.Local + ":" + act.SubAgent
-		// MCP工具
+			// MCP工具
 		case *UseMcpTool:
-			identifier = act.XMLName.Local + ":" + act.Server + ":" + act.Tool
-			identifier += act.Title + ":" + cryptor.Sha1(act.Args)
+			identifier = act.XMLName.Local + ":" + act.Desc + ":" + act.Tool
+			identifier += act.Desc + ":" + cryptor.Sha1(act.Args)
+		case *UseBuiltinTool:
+			identifier = act.XMLName.Local + ":" + act.Desc + ":" + act.Tool
+			identifier += act.Desc + ":" + cryptor.Sha1(act.Args)
 		default:
 			log.Println("[PARSE] undefined action to hash", act)
 			result = append(result, fmt.Sprint("tool", idx))
@@ -271,7 +274,7 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 		case *AbortSubtask:
 			result[hash] = res.Result
 		// MCP工具
-		case *UseMcpTool:
+		case *UseBuiltinTool:
 			result[hash] = res.Result
 		}
 	}
@@ -304,7 +307,7 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 		case *AbortSubtask:
 			res.Result, _ = result[hash]
 		// MCP工具
-		case *UseMcpTool:
+		case *UseBuiltinTool:
 			res.Result, _ = result[hash]
 		}
 	}
@@ -411,6 +414,8 @@ func parse(text string) any {
 	// MCP工具
 	case USE_MCP_TOOL:
 		detail = new(UseMcpTool)
+	case USE_BUILTIN_TOOL:
+		detail = new(UseBuiltinTool)
 	default:
 		return fmt.Errorf("unexpected type: %s", matches[1])
 	}

@@ -61,7 +61,12 @@ func (m *CommonModel) Stream(group string, msgs []Message, handle Handle) error 
 	defer m.Cancel(reqID)
 
 	stream, err := m.client().CreateChatCompletionStream(
-		ctx, Request{Model: m.cfg.UseModel, Messages: msgs},
+		ctx, Request{
+			Model: m.cfg.UseModel, Messages: msgs,
+			StreamOptions: &openai.StreamOptions{
+				IncludeUsage: true,
+			}, Stream: true,
+		},
 	)
 	if err != nil {
 		m.logInfo()

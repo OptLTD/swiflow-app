@@ -17,30 +17,31 @@ import (
 var fs embed.FS
 
 var basic = []string{
-	"basic-tools",
-	"file-system",
-	"use-command",
+	"use-basic-tools",
+	"use-file-system",
+	"builtin-module",
 }
 
 // leader 拥有交互能力
 // 还有支配其他 bot 能力
 var leader = []string{
-	"basic-tools",
-	"file-system",
-	"use-subagent",
+	"use-basic-tools",
+	"use-file-system",
+	"subagent-module",
 }
 
 // worker 拥有实战能力
 var worker = []string{
-	"basic-tools",
-	"file-system",
-	"use-command",
-	"use-mcp-tools",
+	"use-basic-tools",
+	"use-file-system",
+
+	"builtin-module",
+	"mcp-tool-module",
 }
 
 // debug 拥有mcp能力
 var debug = []string{
-	"use-mcp-tools",
+	"mcp-tool-module",
 }
 
 type object = map[string]any
@@ -140,18 +141,40 @@ func UsePrompt(kind string) string {
 		if !slices.Contains(ability, name) {
 			continue
 		}
+		if strings.HasSuffix(name, "-module") {
+			continue
+		}
 
 		dir := "tools/" + item.Name()
 		data, _ := fs.ReadFile(dir)
 		tools.WriteString(string(data))
 	}
 
+	var prompt strings.Builder
 	path := fmt.Sprintf("tools/0.%s-prompt.md", kind)
 	if data, _ := fs.ReadFile(path); len(data) != 0 {
-		return strings.ReplaceAll(string(data), "${{BASE_TOOLS}}", tools.String())
+		prompt.WriteString(strings.ReplaceAll(
+			string(data), "${{BASE_TOOLS}}", tools.String(),
+		))
 	}
 
-	return ""
+	// write module data to prompt tail
+	for _, item := range list {
+		name := toolName(item.Name())
+		if !slices.Contains(ability, name) {
+			continue
+		}
+		if !strings.HasSuffix(name, "-module") {
+			continue
+		}
+
+		dir := "tools/" + item.Name()
+		data, _ := fs.ReadFile(dir)
+		prompt.WriteString(string(data))
+		prompt.WriteString("\n\n----\n\n")
+	}
+
+	return prompt.String()
 }
 
 func toolName(name string) string {

@@ -109,6 +109,7 @@ const handleDisplayDirect = (act: MsgAct) => {
 
 const toolsName = [
   'use-mcp-tool',
+  'use-builtin-tool',
   'execute-command',
   'path-list-files',
   'file-put-content',
@@ -123,6 +124,7 @@ const toolsName = [
 ]
 const hasMoreArgs = [
   'use-mcp-tool',
+  'use-builtin-tool',
 ]
 </script>
 

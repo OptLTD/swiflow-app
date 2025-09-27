@@ -40,13 +40,16 @@ const title = computed(() => {
       const act = (props.item as FilePutContent)
       return `${t('common.writefile')}: ${act.path || ''}`
     }
-    case "use-mcp-tool":
-    case "use-self-tool": {
+    case "use-mcp-tool": {
       const act = (props.item as UseMcpTool)
-      return `${t('common.usetool')}Use Tool: ${act.title}`
+      return `${t('common.usemcp')}: ${act.desc}`
+    }
+    case "use-builtin-tool": {
+      const act = (props.item as UseBuiltinTool)
+      return `${t('common.usetool')}: ${act.desc}`
     }
   }
-}) 
+})
 </script>
 
 <template>

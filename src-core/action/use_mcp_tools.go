@@ -10,17 +10,18 @@ import (
 // UseMcpTool 用于调用MCP服务器提供的工具
 type UseMcpTool struct {
 	XMLName xml.Name `xml:"use-mcp-tool"`
-	Title   string   `xml:"title" json:"title"`
-	Server  string   `xml:"server" json:"server"`
-	Tool    string   `xml:"tool" json:"tool"`
-	Args    string   `xml:"args" json:"args"`
+
+	Desc string `xml:"desc" json:"desc"`
+	Name string `xml:"name" json:"name"`
+	Tool string `xml:"tool" json:"tool"`
+	Args string `xml:"args" json:"args"`
 
 	Result any `xml:"result" json:"result"`
 }
 
 func (act *UseMcpTool) Handle(super *SuperAction) any {
 	var client *amcp.McpClient
-	var server = &amcp.McpServer{UUID: act.Server}
+	var server = &amcp.McpServer{UUID: act.Name}
 	if client = amcp.NewMcpClient(server); client == nil {
 		act.Result = fmt.Errorf("server unservice")
 		return act.Result

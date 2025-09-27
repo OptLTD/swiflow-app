@@ -45,6 +45,7 @@ export default {
     checkit: '检测',
     saveCfg: '保存配置',
     testCfg: '测试配置',
+    usemcp: '使用MCP',
     usetool: '使用工具',
     execute: '执行命令',
     listpath: '列取目录',
