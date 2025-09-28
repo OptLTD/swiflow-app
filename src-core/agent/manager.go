@@ -101,6 +101,9 @@ func (m *Manager) Initial() (err error) {
 func (m *Manager) Start(input action.Input, task *MyTask, leader *Worker) {
 	// debug mode, it's worker
 	if leader.Leader != "" {
+		home := config.GetWorkPath(leader.Leader)
+		leader.Home, task.Home = home, home
+		config.Set("CURRENT_HOME", home)
 		m.Handle(input, task, leader)
 		return
 	}

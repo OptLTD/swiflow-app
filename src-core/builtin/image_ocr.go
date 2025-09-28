@@ -1,10 +1,15 @@
 package builtin
 
 import (
+	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"swiflow/config"
 	"swiflow/model"
+
+	openai "github.com/sashabaranov/go-openai"
 )
 
 type ImageOCRTool struct {
@@ -38,26 +43,43 @@ func (a *ImageOCRTool) Handle(args string) (string, error) {
 	if a.client == nil {
 		return "", fmt.Errorf("no LLM client provided")
 	}
-
-	// Determine working directory
-	home := config.CurrentHome()
-	if strings.TrimSpace(home) == "" {
-		home = config.GetWorkHome()
+	if !filepath.IsAbs(img) {
+		img = filepath.Join(config.CurrentHome(), img)
 	}
 
-	// image -> base64
-	base64, prompt := "", ""
+	// Build OCR instruction as system prompt
+	var payload, prompt = "", ""
 	if prompt = strings.TrimSpace(a.prompt); prompt == "" {
 		prompt = `
-			You are an OCR post-processor. 
-			Clean up and normalize the text. 
+			You are an OCR post-processor.
+			Clean up and normalize the text.
 			Return plain text only without extra commentary.
 		`
 	}
-	msgs := []model.Message{
-		{Role: "system", Content: prompt},
-		{Role: "user", Content: base64},
+
+	// Read image bytes from local filesystem
+	if buf, err := os.ReadFile(img); err != nil {
+		return "", fmt.Errorf("failed to read image: %v", err)
+	} else {
+		payload = base64.StdEncoding.EncodeToString(buf)
 	}
+	// Encode image bytes to base64 and format as a data URL
+	userMsg := model.Message{
+		Role: "user", MultiContent: []openai.ChatMessagePart{
+			{
+				Type: "image_url",
+				ImageURL: &openai.ChatMessageImageURL{
+					URL: payload, Detail: openai.ImageURLDetailAuto,
+				},
+			},
+			{
+				Type: "text",
+				Text: prompt,
+			},
+		},
+	}
+
+	msgs := []model.Message{userMsg}
 	choices, err := a.client.Respond("image_ocr", msgs)
 	if err == nil && len(choices) > 0 {
 		resp := choices[0].Message.Content

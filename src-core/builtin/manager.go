@@ -8,6 +8,7 @@ import (
 	"swiflow/support"
 
 	"github.com/duke-git/lancet/v2/maputil"
+	"github.com/duke-git/lancet/v2/slice"
 )
 
 type BuiltinTool interface {
@@ -96,22 +97,42 @@ func (a *BuiltinManager) Query(name string) (BuiltinTool, error) {
 	return nil, fmt.Errorf("no tool found")
 }
 
-// GetPrompt builds prompt text for builtin tools and user aliases.
-// Intent: keep behavior consistent while manager.tools holds entities.
-func (a *BuiltinManager) GetPrompt(_ []string) string {
+func (a *BuiltinManager) GetPrompt(checked []string) string {
 	var b strings.Builder
-	// Builtin prompts (static)
-	b.WriteString((&CommandTool{}).Prompt())
-	b.WriteString((&Python3Tool{}).Prompt())
-	b.WriteString((&Chat2LLMTool{}).Prompt())
-	b.WriteString((&ImageOCRTool{}).Prompt())
+	buildin := []string{
+		"command", "python3",
+		"chat2llm", "image_ocr",
+	}
+	// checked builtin:*, includes all
+	if slice.Contain(checked, "builtin:*") {
+		checked = append(checked, buildin...)
+	}
+	if slice.Contain(checked, "command") {
+		b.WriteString((&CommandTool{}).Prompt())
+	}
+	if slice.Contain(checked, "python3") {
+		b.WriteString((&Python3Tool{}).Prompt())
+	}
+	if slice.Contain(checked, "chat2llm") {
+		b.WriteString((&Chat2LLMTool{}).Prompt())
+	}
+	if slice.Contain(checked, "image_ocr") {
+		b.WriteString((&ImageOCRTool{}).Prompt())
+	}
 	// Alias prompts derived from tool entities
+	allChecked := slice.Contain(checked, "builtin:*")
 	for _, ent := range a.tools {
-		if strings.EqualFold(ent.Type, "command") || strings.EqualFold(ent.Type, "python3") || strings.EqualFold(ent.Type, "chat2llm") || strings.EqualFold(ent.Type, "image_ocr") {
+		if slice.Contain(buildin, ent.Type) {
 			continue
 		}
-		alias := &CmdAliasTool{UUID: ent.UUID, Name: ent.Name, Desc: ent.Desc}
-		b.WriteString(alias.Prompt())
+		selfChecked := slice.Contain(checked, ent.UUID)
+		if allChecked || selfChecked {
+			alias := &CmdAliasTool{
+				UUID: ent.UUID, Name: ent.Name,
+				Desc: ent.Desc, Args: "",
+			}
+			b.WriteString(alias.Prompt())
+		}
 	}
 	return strings.TrimSpace(b.String())
 }

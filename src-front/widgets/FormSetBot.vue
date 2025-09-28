@@ -71,7 +71,7 @@ const mcpTools = computed(() => {
     if (!tools && checked) {
       return checked.map(x => {
         return {
-          group: item.name,label:x,
+          group: item.uuid,label:x,
           value:`${item.uuid}:${x}`,
           disabled: !enable,
         }
@@ -79,7 +79,7 @@ const mcpTools = computed(() => {
     }
     const list = tools!.map(x => {
       return {
-        group: item.name, label: x.name, 
+        group: item.uuid, label: x.name,
         value:`${item.uuid}:${x.name}`,
         disabled: !enable,
       }

@@ -207,7 +207,7 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 		} else {
 			bot.Type = agent.AGENT_LEADER
 		}
-		JsonResp(w, h.manager.UsePrompt(bot))
+		w.Write([]byte(h.manager.UsePrompt(bot)))
 		return
 	case "set-home":
 		bot.Home = r.URL.Query().Get("home")
