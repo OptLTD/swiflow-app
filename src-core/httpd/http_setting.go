@@ -312,6 +312,22 @@ func (h *SettingHandler) GetMcp(w http.ResponseWriter, r *http.Request) {
 		store, _ := h.manager.GetStorage()
 		service := amcp.GetMcpService(store)
 		mcpList := service.ListServers()
+		var tools, _ = store.LoadTool()
+		var manager = builtin.GetManager().Init(tools)
+		var builtinServer = &amcp.McpServer{
+			Name: "Builtin Tools", UUID: "builtin",
+		}
+		var mcpTools = builtinServer.Status.McpTools
+		var prependList = []*amcp.McpServer{builtinServer}
+		for _, item := range manager.List() {
+			mcpTools = append(mcpTools, &amcp.McpTool{
+				Name: item.UUID, Title: item.Name,
+			})
+		}
+		builtinServer.Status.Enable = true
+		builtinServer.Status.Active = true
+		builtinServer.Status.McpTools = mcpTools
+		mcpList = append(prependList, mcpList...)
 		if err := JsonResp(w, mcpList); err != nil {
 			log.Println("resp error", err)
 		}

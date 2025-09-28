@@ -79,7 +79,10 @@ const doLoad = async () => {
   try {
     const url = `/mcp?act=get-mcp`
     const resp = await request.post(url)
-    items.value = (resp as McpServer[]).map((item) => {
+    items.value = (resp as McpServer[]).filter((item) => {
+      return item.uuid !== 'builtin'
+    })
+    items.value = items.value.map((item) => {
       if (!item.status) {
         item.status = {} as McpStatus
       }

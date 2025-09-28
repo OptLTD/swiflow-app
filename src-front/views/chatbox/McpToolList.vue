@@ -145,6 +145,9 @@ const startMcpEnv = async () => {
     if (!item.status?.enable) {
       continue
     }
+    if (item.uuid === 'builtin') {
+      continue
+    }
     // @ts-ignore
     if (!app.getMcpEnv[item.command]) {
       loss.push(item.command)
@@ -181,14 +184,14 @@ const getGroupChecked = () => {
     const values = checked.value.filter(x => {
       return items.includes(x)
     })
-    result[server.name] = values.length === items.length
+    result[server.uuid] = values.length === items.length
   })
   return result
 }
 
 const toggleCheck = (item: any, server: McpServer) => {
   if (!props.enable || !server.status.enable) return
-  const groupKey = `${server.name}:*`
+  const groupKey = `${server.uuid}:*`
   const tools = server.status.tools || []
   const toolNames = tools.map((x: any) => x.name)
   let newChecked = [...checked.value]
@@ -225,7 +228,7 @@ const toggleCheck = (item: any, server: McpServer) => {
 
 const toggleGroup = (server: McpServer) => {
   if (!props.enable || !server.status.enable) return
-  const groupKey = `${server.name}:*`
+  const groupKey = `${server.uuid}:*`
   const tools = server.status.tools || []
   const toolNames = tools.map((x: any) => x.name)
   let newChecked = checked.value.filter(x => x !== groupKey && !toolNames.includes(x))
@@ -238,10 +241,10 @@ const toggleGroup = (server: McpServer) => {
 }
 
 const isGroupChecked = (server: McpServer) => {
-  return checked.value.includes(`${server.name}:*`)
+  return checked.value.includes(`${server.uuid}:*`)
 }
 const isToolChecked = (tool: any, server: McpServer) => {
-  const groupKey = `${server.name}:*`
+  const groupKey = `${server.uuid}:*`
   if (checked.value.includes(groupKey)) return true
   return checked.value.includes(tool.name)
 }
@@ -302,6 +305,13 @@ const onSwitchServer = async (server: McpServer, enable: boolean) => {
   }
 }
 
+const isBuiltin = (server: McpServer) => {
+  return server.type === 'builtin'
+}
+const isDisabled = (server: McpServer): boolean => {
+  return !server.status.enable || !props.enable
+}
+
 // Expose methods to parent component
 defineExpose({
   getMcpReady,
@@ -318,19 +328,20 @@ defineExpose({
     <template #content>
       <div class="tools-panel">
         <template v-for="(server, i) in servers" :key="i">
-          <div class="dropdown-item" :class="{'disabled': !server.status.enable || !enable}"
-            @click.stop="toggleGroup(server)">
-            <input type="checkbox" :disabled="!server.status.enable || !enable" :checked="isGroupChecked(server)"
-              @mouseup.prevent @mousedown.prevent />
+          <div  :class="{'disabled': isDisabled(server)}" 
+            class="dropdown-item" @click.stop="toggleGroup(server)">
+            <input type="checkbox" :checked="isGroupChecked(server)" 
+              :disabled="isDisabled(server)" @mouseup.prevent @mousedown.prevent />
             <span class="dropdown-group flex-stretch">{{ server.name }}</span>
-            <SwitchInput v-if="!server.loading" :id="`switch-server-${server.name}`" size="small" :disabled="!enable"
-              :modelValue="!!server.status.enable" @change="(val) => onSwitchServer(server, val)"
-              style="margin-left:8px;" />
+            <SwitchInput v-if="!server.loading" :id="`switch-server-${server.uuid}`" 
+              :disabled="!enable || isBuiltin(server)" :modelValue="!!server.status.enable" 
+              @change="(val) => onSwitchServer(server, val)" size="small"  style="margin-left:8px;" 
+            />
             <button v-else class="btn-icon btn-loading" />
           </div>
-          <div v-for="tool in server.status.tools" @click.stop="toggleCheck(tool, server)" :key="tool.value"
-            class="dropdown-item" :class="{'disabled': !server.status.enable || !enable}">
-            <input type="checkbox" :id="getCheckboxId(tool.name)" :disabled="!server.status.enable || !enable"
+          <div v-for="tool in server.status.tools" @click.stop="toggleCheck(tool, server)" 
+            :key="tool.value" class="dropdown-item" :class="{'disabled': isDisabled(server)}">
+            <input type="checkbox" :id="getCheckboxId(tool.name)" :disabled="isDisabled(server)"
               :checked="isToolChecked(tool, server)" @mouseup.prevent @mousedown.prevent />
             <span class="dropdown-label">{{ tool.name }}</span>
           </div>
