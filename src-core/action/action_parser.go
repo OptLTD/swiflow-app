@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"swiflow/errors"
 	"swiflow/support"
 	"time"
 
@@ -27,7 +28,7 @@ type Input interface {
 type Payload struct {
 	UUID string `json:"uuid"`
 	Home string `json:"home"`
-	Path string `json:"path"`
+	// Path string `json:"path"`
 
 	Time time.Time `json:"time"`
 }
@@ -43,8 +44,8 @@ func (ctx *Payload) InitHome() error {
 }
 
 type SuperAction struct {
-	Origin string  `json:"origin"`
-	Errors []error `json:"errors"`
+	Origin string `json:"origin"`
+	ErrMsg error  `json:"errmsg"`
 
 	UseTools []any  `json:"useTools"`
 	Thinking string `json:"thinking"`
@@ -56,8 +57,8 @@ type SuperAction struct {
 	Payload *Payload `json:"payload"`
 }
 
-func Errors(errors ...error) *SuperAction {
-	return &SuperAction{Errors: errors}
+func Errors(err error) *SuperAction {
+	return &SuperAction{ErrMsg: err}
 }
 
 func Load(data string) []*SuperAction {
@@ -113,8 +114,10 @@ func Load(data string) []*SuperAction {
 				} else if response == nil {
 					response = r
 				} else {
-					response.Errors = append(response.Errors, r.Errors...)
-					response.UseTools = append(response.UseTools, r.UseTools...)
+					response.ErrMsg = r.ErrMsg
+					response.UseTools = append(
+						response.UseTools, r.UseTools...,
+					)
 				}
 			}
 		}
@@ -181,7 +184,8 @@ func Parse(data string) *SuperAction {
 		case *Thinking:
 			msg.Thinking = act.Content
 		case error:
-			msg.Errors = append(msg.Errors, act)
+			msg.ErrMsg = act
+			return msg
 		default:
 			msg.UseTools = append(msg.UseTools, act)
 		}
@@ -323,8 +327,8 @@ func (act *SuperAction) ToMap() map[string]any {
 	if act.Context != nil {
 		result["context"] = support.ToMap(act.Context)
 	}
-	if len(act.Errors) > 0 {
-		result["errors"] = act.Errors
+	if act.ErrMsg != nil {
+		result["errmsg"] = act.ErrMsg.Error()
 	}
 	actions, hash := []any{}, act.Hash()
 	for idx, tool := range act.UseTools {
@@ -417,7 +421,7 @@ func parse(text string) any {
 	case USE_BUILTIN_TOOL:
 		detail = new(UseBuiltinTool)
 	default:
-		return fmt.Errorf("unexpected type: %s", matches[1])
+		return fmt.Errorf("%w: %s", errors.ErrUnexpectedTool, matches[1])
 	}
 
 	if err := parseAction(text, detail); err != nil {

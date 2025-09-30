@@ -7,13 +7,12 @@ import (
 	"swiflow/ability"
 	"swiflow/action"
 	"swiflow/amcp"
-	"swiflow/builtin"
 	"swiflow/config"
 	"swiflow/entity"
-	"swiflow/initial"
 	"swiflow/model"
 	"swiflow/storage"
 	"swiflow/support"
+	"sync"
 	"time"
 
 	"github.com/duke-git/lancet/v2/maputil"
@@ -33,6 +32,8 @@ type Manager struct {
 
 	executors map[string]*Executor
 	subagents map[string]*SubAgent
+	// ensure event listeners registered only once
+	initOnce sync.Once
 }
 
 func FromAgents(agents []*Worker) (*Manager, error) {
@@ -98,49 +99,75 @@ func (m *Manager) Initial() (err error) {
 	log.Println("[AGENT] init worker error", err)
 	return fmt.Errorf("init worker error: %v", err)
 }
+
+// onSubtask handles "subtask" events
+func (m *Manager) onSubtask(tid string, data any) {
+	if tid == "" {
+		return
+	}
+	executor, _ := m.FindExecutor(tid)
+	if executor == nil {
+		return
+	}
+
+	// find from executor
+	task := executor.context.mytask
+	leader := executor.context.worker
+	switch act := data.(type) {
+	case *action.StartSubtask:
+		log.Println("[AGENT] start subtask", tid, act.SubAgent)
+		subagent := m.GetSubAgent(act.SubAgent, leader, task)
+		if subagent.target != nil && subagent.target.UUID != tid {
+			return
+		}
+		subagent.OnStart(act)
+		log.Println("[AGENT] booted subtask", tid, act.SubAgent)
+	case *action.AbortSubtask:
+		log.Println("[AGENT] abort subtask", tid, act.SubAgent)
+		subagent := m.GetSubAgent(act.SubAgent, leader, task)
+		if subagent.target != nil && subagent.target.UUID != tid {
+			return
+		}
+		subagent.OnAbort(act)
+		log.Println("[AGENT] leave subtask", tid, act.SubAgent)
+	}
+}
+
+// onComplete handles "complete" events
+func (m *Manager) onComplete(tid string, data any) {
+	if tid == "" {
+		return
+	}
+	log.Println("[AGENT] task complete", tid)
+	if act, ok := data.(*action.Complete); ok {
+		var subagent *SubAgent
+		for _, item := range m.subagents {
+			if item.mytask == nil {
+				continue
+			}
+			if item.mytask.UUID == tid {
+				subagent = item
+				break
+			}
+		}
+		if subagent != nil {
+			subagent.OnComplete(act)
+		}
+	}
+}
+
 func (m *Manager) Start(input action.Input, task *MyTask, leader *Worker) {
 	// debug mode, it's worker
 	if leader.Leader != "" {
-		home := config.GetWorkPath(leader.Leader)
-		leader.Home, task.Home = home, home
-		config.Set("CURRENT_HOME", home)
+		task.Home = config.GetWorkPath(leader.Leader)
+		config.Set("CURRENT_HOME", task.Home)
 		m.Handle(input, task, leader)
 		return
 	}
-	support.Listen("subtask", func(tid string, data any) {
-		// Get subagent instance for the task
-		switch act := data.(type) {
-		case *action.StartSubtask:
-			log.Println("[AGENT] start subtask", tid, act.SubAgent)
-			subagent := m.GetSubAgent(
-				act.SubAgent, leader, task,
-			)
-			subagent.OnStart(act)
-			log.Println("[AGENT] booted subtask", tid, act.SubAgent)
-		case *action.AbortSubtask:
-			log.Println("[AGENT] abort subtask", tid, act.SubAgent)
-			subagent := m.GetSubAgent(
-				act.SubAgent, leader, task,
-			)
-			subagent.OnAbort(act)
-			log.Println("[AGENT] leave subtask", tid, act.SubAgent)
-		}
-	})
-
-	support.Listen("complete", func(tid string, data any) {
-		log.Println("[AGENT] task complete", tid)
-		if act, ok := data.(*action.Complete); ok {
-			var subagent *SubAgent
-			for _, item := range m.subagents {
-				if item.mytask.UUID == tid {
-					subagent = item
-				}
-			}
-			// complete
-			if subagent != nil {
-				subagent.OnComplete(act)
-			}
-		}
+	// register event listeners only once with method handlers
+	m.initOnce.Do(func() {
+		support.Once("subtask", m.onSubtask)
+		support.Once("complete", m.onComplete)
 	})
 
 	task.Group = task.UUID
@@ -174,7 +201,6 @@ func (m *Manager) Handle(input action.Input, task *MyTask, worker *Worker) {
 			}
 		}
 
-		executor.context.usePrompt = m.GetPrompt(worker)
 		executor.context.store = mcpServ.GetMockStore()
 		log.Println("[AGENT] worker", worker.UUID, worker.Type)
 		log.Println("[AGENT] prompt", executor.context.usePrompt)
@@ -306,8 +332,9 @@ func (m *Manager) GetExecutor(task *MyTask, worker *Worker) *Executor {
 	baseHome := config.GetWorkPath(worker.UUID)
 	worker.Home = support.Or(worker.Home, baseHome)
 	payload := &Payload{
-		UUID: task.UUID, Time: time.Now(),
-		Home: worker.Home, Path: task.Home,
+		UUID: task.UUID,
+		Time: time.Now(),
+		Home: task.Home,
 	}
 	context := &Context{
 		mytask: task,
@@ -335,9 +362,6 @@ func (m *Manager) GetExecutor(task *MyTask, worker *Worker) *Executor {
 			worker.Type = AGENT_LEADER
 		}
 	}
-	context.useMemory = m.GetMemory(worker)
-	context.usePrompt = m.GetPrompt(worker)
-	log.Println("[AGENT] tools of", worker.Name, worker.Tools)
 
 	return executor
 }
@@ -354,6 +378,14 @@ func (m *Manager) LoadExecutor(task *MyTask, worker *Worker) *Executor {
 	}
 	return nil
 }
+func (m *Manager) FindExecutor(tid string) (*Executor, error) {
+	for key, executor := range m.executors {
+		if strings.HasPrefix(key, tid) {
+			return executor, nil
+		}
+	}
+	return nil, fmt.Errorf("executor not found")
+}
 
 // GetSubAgent creates or retrieves a SubAgent instance for the given task and leader
 func (m *Manager) GetSubAgent(key string, leader *Worker, task *MyTask) *SubAgent {
@@ -363,7 +395,7 @@ func (m *Manager) GetSubAgent(key string, leader *Worker, task *MyTask) *SubAgen
 
 	subagent := &SubAgent{
 		leader: leader,
-		ldtask: task,
+		target: task,
 		parent: m,
 	}
 	m.subagents[key] = subagent
@@ -382,65 +414,6 @@ func (m *Manager) GetMemory(worker *Worker) string {
 		memory.WriteString(support.ToXML(memorize, nil))
 	}
 	return memory.String()
-}
-func (m *Manager) GetPrompt(worker *Worker) string {
-
-	prompt := m.UsePrompt(worker)
-	prompt = strings.ReplaceAll(
-		prompt, "${{WORK_PATH}}", worker.Home,
-	)
-	prompt = strings.ReplaceAll(
-		prompt, "${{SUBAGENTS}}",
-		m.getSubAgents(worker),
-	)
-	return m.getSystemInfo(prompt)
-}
-
-func (m *Manager) UsePrompt(worker *Worker) string {
-	var prompt = initial.UsePrompt(worker.Type)
-	prompt = strings.ReplaceAll(
-		prompt, "${{USER_PROMPT}}", worker.UsePrompt,
-	)
-
-	var tools, _ = m.store.LoadTool()
-	var manager = builtin.GetManager().Init(tools)
-	inbuilt := manager.GetPrompt(worker.Tools)
-	prompt = strings.ReplaceAll(
-		prompt, "${{BUILTIN_TOOLS}}", inbuilt,
-	)
-
-	mcpServ := amcp.GetMcpService(m.store)
-	mcpTools := mcpServ.GetPrompt(worker)
-	prompt = strings.ReplaceAll(
-		prompt, "${{MCP_TOOLS}}", mcpTools,
-	)
-	return prompt
-}
-func (m *Manager) getSystemInfo(prompt string) string {
-	tag := action.TOOL_RESULT_TAG
-	osName, shell := config.GetShellName()
-	prompt = strings.ReplaceAll(prompt, "${{OS_NAME}}", osName)
-	prompt = strings.ReplaceAll(prompt, "${{SHELL_NAME}}", shell)
-	return strings.ReplaceAll(prompt, "${{TOOL_RESULT_TAG}}", tag)
-}
-
-func (m *Manager) getSubAgents(leader *Worker) string {
-	var result strings.Builder
-	for _, worker := range m.workers {
-		if worker.Leader != leader.UUID {
-			continue
-		}
-		result.WriteString(fmt.Sprintf(
-			"- **%s** (id: %s): %s\n",
-			worker.Name, worker.UUID, worker.Desc,
-		))
-	}
-
-	if result.Len() == 0 {
-		return "empty list"
-	}
-
-	return result.String()
 }
 
 // getMcpToolsInfo 构建MCP工具列表

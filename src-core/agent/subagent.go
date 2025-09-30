@@ -12,7 +12,7 @@ type SubAgent struct {
 	worker *Worker // current worker
 	mytask *MyTask // current task
 	leader *Worker // leader worker
-	ldtask *MyTask // leader task
+	target *MyTask // leader task
 }
 
 // OnStart handles the start of a subtask by selecting a worker bot and initializing the subtask
@@ -27,20 +27,20 @@ func (sa *SubAgent) OnStart(act *action.StartSubtask) {
 		input := &action.ToolResult{
 			Content: action.TOOL_RESULT_TAG + "\n" + toolResult,
 		}
-		sa.parent.Handle(input, sa.ldtask, sa.leader)
+		sa.parent.Handle(input, sa.target, sa.leader)
 		return
 	}
 	log.Println("[SUBTASK] bot", worker.UUID)
 	// leader arrange subtask to worker
 	// need push subtask to worker
 	newtask, err := sa.parent.InitSubtask(
-		worker.UUID, sa.ldtask.Group,
+		worker.UUID, sa.target.Group,
 	)
 	if err == nil && newtask != nil {
 		log.Println("[SUBTASK] OnStart", worker.UUID)
 		// ensure work in same dir
-		worker.Home = sa.leader.Home
-		newtask.IsDebug = sa.ldtask.IsDebug
+		newtask.Home = sa.target.Home
+		newtask.IsDebug = sa.target.IsDebug
 		sa.worker, sa.mytask = worker, newtask
 		sa.parent.Handle(act.ToSubtask(), newtask, worker)
 	}
@@ -52,16 +52,16 @@ func (sa *SubAgent) OnAbort(act *action.AbortSubtask) {
 	if sa.worker == nil || sa.worker.UUID != act.SubAgent {
 		result := fmt.Sprintf("agent(%s) not found", act.SubAgent)
 		toolResult.Content = support.ToXML(act, result)
-		sa.parent.Handle(toolResult, sa.ldtask, sa.leader)
+		sa.parent.Handle(toolResult, sa.target, sa.leader)
 		return
 	}
 
 	// terminate subtask
-	executor := sa.parent.LoadExecutor(sa.ldtask, sa.leader)
+	executor := sa.parent.LoadExecutor(sa.target, sa.leader)
 	if executor != nil && executor.IsRunning() {
 		executor.Terminate()
 		toolResult.Content = support.ToXML(act, "success")
-		sa.parent.Handle(toolResult, sa.ldtask, sa.leader)
+		sa.parent.Handle(toolResult, sa.target, sa.leader)
 	} else {
 		toolResult.Content = support.ToXML(act, "no subtask found")
 		sa.parent.Handle(toolResult, sa.mytask, sa.worker)
@@ -78,7 +78,7 @@ func (sa *SubAgent) OnComplete(act *action.Complete) {
 	}
 	toolResult.Content = support.ToXML(subtask, act.Content)
 	log.Println("[SUBTASK] OnComplete", sa.worker.UUID)
-	sa.parent.Handle(toolResult, sa.ldtask, sa.worker)
+	sa.parent.Handle(toolResult, sa.target, sa.worker)
 }
 
 // OnTimeout handles the timeout of a subtask by updating the leader task context
@@ -91,5 +91,5 @@ func (sa *SubAgent) OnTimeout(act *action.Complete) {
 	}
 	toolResult.Content = support.ToXML(subtask, act.Content)
 	log.Println("[SUBTASK] OnTimeout", sa.worker.UUID)
-	sa.parent.Handle(toolResult, sa.ldtask, sa.worker)
+	sa.parent.Handle(toolResult, sa.target, sa.worker)
 }

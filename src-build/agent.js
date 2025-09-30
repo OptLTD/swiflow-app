@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, rmSync } from 'fs';
 import { join, resolve, basename } from 'path';
 import { createWriteStream } from 'fs';
 import archiver from 'archiver';
@@ -80,6 +80,21 @@ function validateDirectory(dir) {
   return { agentDir, taskFile };
 }
 
+// Clean .msgs directory under the target home path
+function cleanMsgsDirectory(homePath) {
+  try {
+    const msgsDir = join(homePath, '.msgs');
+    if (existsSync(msgsDir)) {
+      rmSync(msgsDir, { recursive: true, force: true });
+      log(`Cleaned .msgs directory: ${msgsDir}`, 'success');
+    } else {
+      log(`No .msgs directory found: ${msgsDir}`, 'info');
+    }
+  } catch (error) {
+    log(`Warning: Failed to clean .msgs directory: ${error.message}`, 'warning');
+  }
+}
+
 async function compressAgentDirectory(agentDir, outputPath) {
   return new Promise((resolve, reject) => {
     const output = createWriteStream(outputPath);
@@ -126,7 +141,7 @@ async function importAgent(agentFilePath) {
   } finally {
     // Cleanup: Remove temporary agent file
     try {
-      execSync(`rm -f "${agentFilePath}"`);
+      rmSync(agentFilePath, { force: true });
     } catch (cleanupError) {
       log(`Warning: Failed to cleanup temporary file: ${agentFilePath}`, 'warning');
     }
@@ -190,6 +205,10 @@ async function main() {
       throw new Error('task.md file is empty');
     }
     
+    // Step 4.5: Clean .msgs directory before starting conversation
+    log('Cleaning .msgs directory...');
+    cleanMsgsDirectory(targetDirectory);
+
     // Step 5: Start conversation
     log('Starting conversation...');
     await startConversation(importResult.leaderId, taskContent);

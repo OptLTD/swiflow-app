@@ -91,9 +91,9 @@ func (m *WebSocketHandler) DoRespond(task string, data any) *socketInput {
 	if resp, ok := data.(*action.SuperAction); !ok {
 		log.Println("[WS] resp errors: ", "未知错误")
 		return nil
-	} else if len(resp.Errors) > 0 {
-		err := resp.Errors[0].Error()
-		log.Println("[WS] resp errors:", resp.Errors)
+	} else if resp.ErrMsg != nil {
+		err := resp.ErrMsg.Error()
+		log.Println("[WS] resp errors:", err)
 		return &socketInput{"message", "errors", err, task}
 	} else {
 		return &socketInput{

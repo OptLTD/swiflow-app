@@ -80,23 +80,6 @@ func (r *Executor) Enqueue(input action.Input) {
 	}
 }
 
-func (r *Executor) Respond(toolResult string) {
-	r.queueLock.Lock()
-	defer r.queueLock.Unlock()
-	if r.msgsQueue == nil {
-		r.msgsQueue = make([]action.Input, 0)
-	}
-	r.isTerminated = false
-	input := []action.Input{&action.ToolResult{
-		Content: action.TOOL_RESULT_TAG + "\n" + toolResult,
-	}}
-	r.msgsQueue = append(input, r.msgsQueue...)
-	r.queueLock.Unlock()
-	if !r.IsRunning() {
-		go r.Handle()
-	}
-}
-
 func (r *Executor) Handle() *action.SuperAction {
 	var prevMsgId string
 	if r.isTerminated {
@@ -161,10 +144,10 @@ func (r *Executor) Handle() *action.SuperAction {
 
 		// 调用LLM
 		resp := r.GetLLMResp(messages, currMsgId)
-		if err := len(resp.Errors); err > 0 {
+		if err := resp.ErrMsg; err != nil {
 			r.currentState = STATE_FAILED
-			log.Println("[EXEC] task", r.UUID, resp.Errors[0])
-			support.Emit("errors", r.UUID, resp.Errors[0])
+			log.Println("[EXEC] task", r.UUID, resp.ErrMsg)
+			support.Emit("errors", r.UUID, resp.ErrMsg)
 			continue
 		}
 
@@ -186,7 +169,7 @@ func (r *Executor) Handle() *action.SuperAction {
 		r.currentTurns += 1
 		prevMsgId = currMsgId
 		resp.Payload = r.payload
-		resp.WorkerID = r.context.GetWorkId()
+		resp.WorkerID = r.context.GetWorkerId()
 
 		// 执行动作
 		toolResult := r.PlayAction(resp)
@@ -294,7 +277,7 @@ func (r *Executor) GetLLMResp(msgs []*model.Message, msgid string) *action.Super
 		}
 		// first stream of llm response
 		if msgid != "" && stream.Idx == 0 {
-			worker := r.context.GetWorkId()
+			worker := r.context.GetWorkerId()
 			parts := []string{"data", worker, msgid}
 			stream.Str = strings.Join(parts, ":")
 			support.Emit("stream", r.UUID, stream)
@@ -340,6 +323,9 @@ func (r *Executor) SendNotify(kind string) error {
 // Start file watcher
 func (r *Executor) startFileWatcher() {
 	if r.fileWatcher != nil {
+		return
+	}
+	if r.context.mytask.IsDebug {
 		return
 	}
 

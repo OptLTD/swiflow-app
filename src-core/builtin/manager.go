@@ -134,7 +134,8 @@ func (a *BuiltinManager) GetPrompt(checked []string) string {
 			b.WriteString(alias.Prompt())
 		}
 	}
-	return strings.TrimSpace(b.String())
+	pompt := strings.TrimSpace(b.String())
+	return support.Or(pompt, "empty list")
 }
 
 func (a *BuiltinManager) findTool(name string) *entity.ToolEntity {

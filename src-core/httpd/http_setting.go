@@ -218,12 +218,12 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 		} else {
 			bot.Type = agent.AGENT_LEADER
 		}
-		w.Write([]byte(h.manager.UsePrompt(bot)))
+		store, _ := h.manager.GetStorage()
+		context := agent.NewContext(store, bot)
+		w.Write([]byte(*context.UsePrompt()))
 		return
 	case "set-home":
 		bot.Home = r.URL.Query().Get("home")
-		data := h.manager.UsePrompt(bot)
-		bot.SysPrompt = string(data)
 		if err := h.service.SaveBot(bot); err != nil {
 			JsonResp(w, bot.ToMap())
 			return
@@ -231,8 +231,6 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 	case "set-tools":
 		tools := r.URL.Query().Get("tools")
 		bot.Tools = strings.Split(tools, ",")
-		data := h.manager.UsePrompt(bot)
-		bot.SysPrompt = string(data)
 		if err := h.service.SaveBot(bot); err != nil {
 			JsonResp(w, bot.ToMap())
 			return
@@ -260,10 +258,6 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 		if bot.UUID == "" {
 			uuid, _ := support.UniqueID(8)
 			bot.UUID = "bot-" + uuid
-		}
-		if len(bot.Tools) > 0 {
-			data := h.manager.UsePrompt(bot)
-			bot.SysPrompt = string(data)
 		}
 		if h.service.SaveBot(bot) != nil {
 			JsonResp(w, fmt.Errorf("error save"))

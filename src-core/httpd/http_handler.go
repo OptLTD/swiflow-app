@@ -483,8 +483,9 @@ func (h *HttpHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		}
 		respAction := action.Parse(msg.Request)
 		respAction.Payload = &action.Payload{
-			UUID: task.UUID, Time: time.Now(),
-			Home: bot.Home, Path: task.Home,
+			UUID: task.UUID,
+			Time: time.Now(),
+			Home: task.Home,
 		}
 		if val := executor.PlayAction(respAction); val != "" {
 			if err = JsonResp(w, val); err != nil {
