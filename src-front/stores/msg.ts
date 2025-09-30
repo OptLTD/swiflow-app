@@ -279,7 +279,7 @@ export const useMsgStore = defineStore('msg', {
     getErrMsg: (state) => state.errmsg,
 
     // Get current chat ID
-    getChatId: (state) => state.taskid,
+    getTaskId: (state) => state.taskid,
 
     // Get stream data
     getStream: (state) => state.streams,

@@ -68,6 +68,246 @@ func (h *HttpHandler) Static(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.FS(subfs)).ServeHTTP(w, r)
 }
 
+// Start chat handle
+func (h *HttpHandler) Start(w http.ResponseWriter, r *http.Request) {
+	// Parse request body to get input data
+	var request struct {
+		Content  string   `json:"content"`
+		Uploads  []string `json:"uploads"`
+		StartNew string   `json:"startNew"`
+		TaskUUID string   `json:"taskUUID"`
+		WorkerId string   `json:"workerId"`
+		HomePath string   `json:"homePath"`
+	}
+	if err := h.service.ReadTo(r.Body, &request); err != nil {
+		JsonResp(w, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	// Create UserInput from request data
+	input := &action.UserInput{
+		Content: strings.TrimSpace(request.Content),
+		Uploads: request.Uploads,
+	}
+
+	// Get worker UUID from request data or config
+	uuid := config.GetStr("USE_WORKER", "")
+	if request.WorkerId != "" {
+		uuid = request.WorkerId
+	}
+	worker, err := h.manager.GetWorker(uuid)
+	if err != nil || worker == nil {
+		JsonResp(w, fmt.Errorf("get worker error: %w", err))
+		return
+	}
+
+	// Handle task creation/retrieval logic
+	var task *agent.MyTask
+	if request.StartNew == "yes" {
+		task, err = h.manager.InitTask(input.Content, request.TaskUUID)
+	} else if strings.HasPrefix(request.TaskUUID, "#debug#") {
+		worker = convertor.DeepClone(worker)
+		task, err = h.manager.NewMcpTask(request.TaskUUID)
+	} else {
+		task, err = h.manager.QueryTask(request.TaskUUID)
+	}
+	if task == nil || err != nil {
+		JsonResp(w, fmt.Errorf("query task error: %w", err))
+		return
+	}
+
+	// Set home path if provided
+	if request.HomePath != "" {
+		task.Home = request.HomePath
+		worker.Home = request.HomePath
+	}
+
+	// Start the task asynchronously
+	go h.manager.Start(input, task, worker)
+	response := map[string]any{
+		"success": true, "taskUUID": task.UUID,
+		"message": "Task started successfully",
+	}
+	JsonResp(w, response)
+}
+
+// Global info handle
+func (h *HttpHandler) Global(w http.ResponseWriter, r *http.Request) {
+	if bots := h.service.LoadBot(); len(bots) == 0 {
+		if len(h.service.InitBot()) == 0 {
+			JsonResp(w, fmt.Errorf("init bot fail"))
+			return
+		}
+		if err := h.manager.Initial(); err != nil {
+			JsonResp(w, fmt.Errorf("init bot: %w", err))
+			return
+		}
+	}
+
+	result := h.service.LoadGlobal()
+	if err := JsonResp(w, result); err != nil {
+		log.Println("[HTTP] resp error", err)
+	}
+}
+
+func (h *HttpHandler) Upload(w http.ResponseWriter, r *http.Request) {
+	// 限制上传文件大小 (例如10MB)
+	r.ParseMultipartForm(32 << 20)
+	uuid := r.URL.Query().Get("uuid")
+	if r.MultipartForm == nil || r.MultipartForm.File == nil {
+		JsonResp(w, fmt.Errorf("error upload data"))
+		return
+	}
+	bot, err := h.manager.QueryWorker(uuid)
+	if bot == nil || err != nil {
+		err = fmt.Errorf("找不到 Bot: %v", err)
+		if err = JsonResp(w, err); err != nil {
+			log.Println("[HTTP] resp error", err)
+		}
+		return
+	}
+	files := r.MultipartForm.File["files"]
+	baseHome := config.GetWorkPath(bot.UUID)
+	bot.Home = support.Or(bot.Home, baseHome)
+	err = h.service.DoUpload(bot.Home, files)
+	if err != nil {
+		JsonResp(w, err)
+		return
+	}
+
+	var result = map[string]string{}
+	for _, hd := range files {
+		name := hd.Filename
+		result[name] = name
+	}
+	JsonResp(w, result)
+}
+
+// Import handles .agent file imports by extracting zip files and processing agent definitions
+func (h *HttpHandler) Import(w http.ResponseWriter, r *http.Request) {
+	// Parse multipart form with size limit (32MB)
+	r.ParseMultipartForm(32 << 20)
+
+	if r.MultipartForm == nil || r.MultipartForm.File == nil {
+		JsonResp(w, fmt.Errorf("no files uploaded"))
+		return
+	}
+
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
+		JsonResp(w, fmt.Errorf("no files found"))
+		return
+	}
+
+	// Process .agent files through service layer
+	importedBots, err := h.service.DoImport(files)
+	if err != nil {
+		JsonResp(w, err)
+		return
+	}
+
+	// Return results in consistent format
+	var result = map[string]interface{}{
+		"imported": importedBots,
+	}
+	JsonResp(w, result)
+}
+
+func (h *HttpHandler) Setting(w http.ResponseWriter, r *http.Request) {
+	act := r.URL.Query().Get("act")
+	switch act {
+	case "get-model":
+		result := h.service.LoadModelCfg()
+		if err := JsonResp(w, result); err != nil {
+			log.Println("resp error", err)
+		}
+	case "set-model":
+		cfg := &entity.CfgEntity{}
+		var data = h.service.ReadMap(r.Body)
+		cfg.Data, _ = data.(map[string]any)
+		if err := h.service.SaveUseModel(cfg); err == nil {
+			h.service.SaveProvider(cfg)
+			h.manager.InitConfig()
+			JsonResp(w, cfg.ToMap())
+		} else {
+			JsonResp(w, err)
+		}
+	case "set-provider":
+		cfg := &entity.CfgEntity{}
+		var data = h.service.ReadMap(r.Body)
+		cfg.Data, _ = data.(map[string]any)
+		if err := h.service.SaveProvider(cfg); err == nil {
+			h.manager.InitConfig()
+			JsonResp(w, cfg.ToMap())
+		} else {
+			JsonResp(w, err)
+		}
+		return
+	case "get-setup":
+		result := h.service.LoadSetupCfg()
+		if err := JsonResp(w, result); err != nil {
+			log.Println("resp error", err)
+		}
+	case "put-setup":
+		cfg := &entity.CfgEntity{}
+		var data = h.service.ReadMap(r.Body)
+		cfg.Data, _ = data.(map[string]any)
+		err := h.service.SaveSetupCfg(cfg)
+		if err == nil {
+			h.manager.UpdateEnv(cfg)
+			JsonResp(w, cfg.ToMap())
+		} else {
+			JsonResp(w, err)
+		}
+	}
+}
+
+func (h *HttpHandler) SignOut(w http.ResponseWriter, r *http.Request) {
+	if err := h.service.ClearProfile(); err != nil {
+		JsonResp(w, fmt.Errorf("clear-profile failed: %v", err))
+	}
+	JsonResp(w, "success")
+}
+
+// 调用auth.swiflow.cc验证token
+func (h *HttpHandler) SignIn(w http.ResponseWriter, r *http.Request) {
+	var apiKey string
+	var body = h.service.ReadMap(r.Body)
+	if info, err := h.service.VerifyToken(body); err != nil {
+		JsonResp(w, err)
+		return
+	} else if key, _ := info["apiKey"].(string); key == "" {
+		JsonResp(w, fmt.Errorf("extract apiKey failed"))
+		return
+	} else {
+		apiKey = key
+	}
+
+	var llmCfg = &model.LLMConfig{}
+	var cfgData = &entity.CfgEntity{}
+	var userData = &entity.UserEntity{}
+	if info, err := h.service.GetProfile(apiKey); err != nil {
+		JsonResp(w, err)
+	} else if err := h.service.SaveProfile(info); err != nil {
+		JsonResp(w, err)
+	} else if err := userData.FromMap(info); err != nil {
+		JsonResp(w, err)
+	} else if userData.APIKey != "" {
+		llmCfg.ApiKey, llmCfg.Provider = userData.APIKey, "swiflow"
+		llmCfg.ApiUrl, llmCfg.UseModel = config.GetAuthGate()+"/v1", ""
+		cfgData.Data, _ = convertor.StructToMap(llmCfg)
+		if err := h.service.SaveProvider(cfgData); err != nil {
+			log.Println("[SIGN] save provider: ", err.Error())
+		}
+		if err := h.service.SaveUseModel(cfgData); err != nil {
+			log.Println("[SIGN] save llm cfg: ", err.Error())
+		}
+		JsonResp(w, "success")
+	} else {
+		JsonResp(w, "success")
+	}
+}
+
 func (h *HttpHandler) Program(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
 	uuid := r.URL.Query().Get("uuid")
@@ -241,182 +481,5 @@ func (h *HttpHandler) Execute(w http.ResponseWriter, r *http.Request) {
 
 	if err = JsonResp(w, err); err != nil {
 		log.Println("[HTTP] resp error", err)
-	}
-}
-
-// Global info handle
-func (h *HttpHandler) Global(w http.ResponseWriter, r *http.Request) {
-	if bots := h.service.LoadBot(); len(bots) == 0 {
-		if len(h.service.InitBot()) == 0 {
-			JsonResp(w, fmt.Errorf("init bot fail"))
-			return
-		}
-		if err := h.manager.Initial(); err != nil {
-			JsonResp(w, fmt.Errorf("init bot: %w", err))
-			return
-		}
-	}
-
-	result := h.service.LoadGlobal()
-	if err := JsonResp(w, result); err != nil {
-		log.Println("[HTTP] resp error", err)
-	}
-}
-
-func (h *HttpHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	// 限制上传文件大小 (例如10MB)
-	r.ParseMultipartForm(32 << 20)
-	uuid := r.URL.Query().Get("uuid")
-	if r.MultipartForm == nil || r.MultipartForm.File == nil {
-		JsonResp(w, fmt.Errorf("error upload data"))
-		return
-	}
-	bot, err := h.manager.QueryWorker(uuid)
-	if bot == nil || err != nil {
-		err = fmt.Errorf("找不到 Bot: %v", err)
-		if err = JsonResp(w, err); err != nil {
-			log.Println("[HTTP] resp error", err)
-		}
-		return
-	}
-	files := r.MultipartForm.File["files"]
-	baseHome := config.GetWorkPath(bot.UUID)
-	bot.Home = support.Or(bot.Home, baseHome)
-	err = h.service.DoUpload(bot.Home, files)
-	if err != nil {
-		JsonResp(w, err)
-		return
-	}
-
-	var result = map[string]string{}
-	for _, hd := range files {
-		name := hd.Filename
-		result[name] = name
-	}
-	JsonResp(w, result)
-}
-
-// Import handles .agent file imports by extracting zip files and processing agent definitions
-func (h *HttpHandler) Import(w http.ResponseWriter, r *http.Request) {
-	// Parse multipart form with size limit (32MB)
-	r.ParseMultipartForm(32 << 20)
-	
-	if r.MultipartForm == nil || r.MultipartForm.File == nil {
-		JsonResp(w, fmt.Errorf("no files uploaded"))
-		return
-	}
-
-	files := r.MultipartForm.File["files"]
-	if len(files) == 0 {
-		JsonResp(w, fmt.Errorf("no files found"))
-		return
-	}
-
-	// Process .agent files through service layer
-	importedBots, err := h.service.DoImport(files)
-	if err != nil {
-		JsonResp(w, err)
-		return
-	}
-
-	// Return results in consistent format
-	var result = map[string]interface{}{
-		"imported": importedBots,
-	}
-	JsonResp(w, result)
-}
-
-func (h *HttpHandler) Setting(w http.ResponseWriter, r *http.Request) {
-	act := r.URL.Query().Get("act")
-	switch act {
-	case "get-model":
-		result := h.service.LoadModelCfg()
-		if err := JsonResp(w, result); err != nil {
-			log.Println("resp error", err)
-		}
-	case "set-model":
-		cfg := &entity.CfgEntity{}
-		var data = h.service.ReadMap(r.Body)
-		cfg.Data, _ = data.(map[string]any)
-		if err := h.service.SaveUseModel(cfg); err == nil {
-			h.service.SaveProvider(cfg)
-			h.manager.InitConfig()
-			JsonResp(w, cfg.ToMap())
-		} else {
-			JsonResp(w, err)
-		}
-	case "set-provider":
-		cfg := &entity.CfgEntity{}
-		var data = h.service.ReadMap(r.Body)
-		cfg.Data, _ = data.(map[string]any)
-		if err := h.service.SaveProvider(cfg); err == nil {
-			h.manager.InitConfig()
-			JsonResp(w, cfg.ToMap())
-		} else {
-			JsonResp(w, err)
-		}
-		return
-	case "get-setup":
-		result := h.service.LoadSetupCfg()
-		if err := JsonResp(w, result); err != nil {
-			log.Println("resp error", err)
-		}
-	case "put-setup":
-		cfg := &entity.CfgEntity{}
-		var data = h.service.ReadMap(r.Body)
-		cfg.Data, _ = data.(map[string]any)
-		err := h.service.SaveSetupCfg(cfg)
-		if err == nil {
-			h.manager.UpdateEnv(cfg)
-			JsonResp(w, cfg.ToMap())
-		} else {
-			JsonResp(w, err)
-		}
-	}
-}
-
-func (h *HttpHandler) SignOut(w http.ResponseWriter, r *http.Request) {
-	if err := h.service.ClearProfile(); err != nil {
-		JsonResp(w, fmt.Errorf("clear-profile failed: %v", err))
-	}
-	JsonResp(w, "success")
-}
-
-// 调用auth.swiflow.cc验证token
-func (h *HttpHandler) SignIn(w http.ResponseWriter, r *http.Request) {
-	var apiKey string
-	var body = h.service.ReadMap(r.Body)
-	if info, err := h.service.VerifyToken(body); err != nil {
-		JsonResp(w, err)
-		return
-	} else if key, _ := info["apiKey"].(string); key == "" {
-		JsonResp(w, fmt.Errorf("extract apiKey failed"))
-		return
-	} else {
-		apiKey = key
-	}
-
-	var llmCfg = &model.LLMConfig{}
-	var cfgData = &entity.CfgEntity{}
-	var userData = &entity.UserEntity{}
-	if info, err := h.service.GetProfile(apiKey); err != nil {
-		JsonResp(w, err)
-	} else if err := h.service.SaveProfile(info); err != nil {
-		JsonResp(w, err)
-	} else if err := userData.FromMap(info); err != nil {
-		JsonResp(w, err)
-	} else if userData.APIKey != "" {
-		llmCfg.ApiKey, llmCfg.Provider = userData.APIKey, "swiflow"
-		llmCfg.ApiUrl, llmCfg.UseModel = config.GetAuthGate()+"/v1", ""
-		cfgData.Data, _ = convertor.StructToMap(llmCfg)
-		if err := h.service.SaveProvider(cfgData); err != nil {
-			log.Println("[SIGN] save provider: ", err.Error())
-		}
-		if err := h.service.SaveUseModel(cfgData); err != nil {
-			log.Println("[SIGN] save llm cfg: ", err.Error())
-		}
-		JsonResp(w, "success")
-	} else {
-		JsonResp(w, "success")
 	}
 }

@@ -161,7 +161,8 @@ declare type ChangeMsg = {
 declare type InputMsg = {
   content: string
   uploads: string[]
-  newTask?: string
+  startNew?: string
+  taskUUID?: string
   workerId?: string
   homePath?: string
 }

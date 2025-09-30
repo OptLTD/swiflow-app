@@ -8,7 +8,6 @@ import { request } from '@/support/index'
 import { useAppStore } from '@/stores/app'
 import { useMsgStore } from '@/stores/msg'
 import { eventEmitter } from '@/stores/msg'
-import { useWebSocket } from '@/hooks/index'
 import { useTaskStore } from '@/stores/task'
 import { useViewStore } from '@/stores/view'
 import ChatInput from './chatbox/ChatInput.vue'
@@ -26,7 +25,6 @@ const msg = useMsgStore()
 const task = useTaskStore()
 const view = useViewStore()
 
-const socket = useWebSocket()
 const taskInfo = ref<TaskEntity>()
 const inputMsg = ref({} as InputMsg)
 const messages = ref<ActionMsg[]>([])
@@ -45,17 +43,15 @@ const handleSend = async() => {
     tool.shakeElement()
     return;
   }
-  const socketMsg: SocketMsg = {
-    method: "message", 
-    action: "user-input",
-    taskid: msg.getChatId,
-    detail: inputMsg.value
-  }
-  if (msg.getChatId == '') {
-    const newChatId = nanoid(12)
-    msg.setTaskId(newChatId)
-    socketMsg.taskid = newChatId
-    inputMsg.value.newTask = 'yes'
+
+  if (task.getActive == '') {
+    const newTaskId = nanoid(12)
+    inputMsg.value.startNew = 'yes'
+    inputMsg.value.taskUUID = newTaskId
+    msg.setTaskId(newTaskId)
+    task.setActive(newTaskId)
+  } else {
+    inputMsg.value.taskUUID = task.getActive
   }
   // select worker to debug
   const { uuid } = currWorker.value || {}
@@ -68,9 +64,27 @@ const handleSend = async() => {
     app.setUploads([])
   }
 
-  const conn = socket.getConnect()
-  conn!.send(JSON.stringify(socketMsg))
-  inputMsg.value = {} as InputMsg
+  // http method: post
+  request.post('/start', inputMsg.value).then((resp: any) => {
+    if (resp?.errmsg) {
+      return toast.error(resp.errmsg)
+    }
+    // Add user input message to local messages
+    const action = { type: 'user-input', ...inputMsg.value }
+    messages.value.push({ actions: [action] } as ActionMsg)
+    setTimeout(() => autoScroll(true), 150)
+    inputMsg.value = {} as InputMsg
+  })
+
+  // const socketMsg: SocketMsg = {
+  //   method: "message",
+  //   action: "user-input",
+  //   taskid: msg.getChatId,
+  //   detail: inputMsg.value
+  // }
+  // const conn = socket.getConnect()
+  // conn!.send(JSON.stringify(socketMsg))
+  // inputMsg.value = {} as InputMsg
 }
 
 const handleStop = async() => {
@@ -78,7 +92,7 @@ const handleStop = async() => {
     return
   }
   try {
-    const url = `/execute?act=stop&uuid=${msg.getChatId}`
+    const url = `/execute?act=stop&uuid=${msg.getTaskId}`
     const resp = await request.post(url) as any
     if (resp?.errmsg) {
       console.log("cancel error", resp)
@@ -86,7 +100,7 @@ const handleStop = async() => {
     }
     msg.setNextMsg(null)
     msg.setRunning(false)
-    msg.clearStream(msg.getChatId)
+    msg.clearStream(msg.getTaskId)
   } catch (err) {
     console.error('use bot:', err)
   }
@@ -182,7 +196,7 @@ const handleSwitch = (tid: string) => {
     messages.value = []
     return;
   }
-  if (tid != msg.getChatId) {
+  if (tid != msg.getTaskId) {
     msg.setErrMsg('')
     msg.setNextMsg(null)
     msg.setRunning(false)
@@ -237,24 +251,6 @@ watch(() => task.getActive, (uuid) => {
 })
 onMounted(() => {
   currWorker.value = app.getActive
-  // Listen to UI-specific events from msg store
-  eventEmitter.on('user-input', (socketMsg: SocketMsg) => {
-    if (msg.getChatId != socketMsg.taskid) {
-      return
-    }
-    if (!task.getActive && msg.getChatId) {
-      task.setActive(socketMsg.taskid)
-    }
-    // Add user input message to local messages
-    messages.value.push({ 
-      actions: [{
-        type: 'user-input', 
-        ...socketMsg.detail
-      }]
-    } as ActionMsg)
-    setTimeout(() => autoScroll(true), 150)
-  })
-  
   eventEmitter.on('respond', (socketMsg: SocketMsg) => {
     // Add response message to local messages
     messages.value.push(socketMsg.detail)
@@ -276,9 +272,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   // Clean up event listeners
-  eventEmitter.off('next-msg', () => {})
   eventEmitter.off('respond', () => {})
-  eventEmitter.off('user-input', () => {})
+  eventEmitter.off('next-msg', () => {})
 })
 
 // Method to set message content from external components
