@@ -28,8 +28,8 @@ The following cases may use the source code for commercial purposes free of char
 以下情形需获取商业许可：  
 The following cases require obtaining a commercial license:  
 
-1. 若通过本产品处理的业务收入 **≥ 10,000,000 人民币且 < 50,000,000 人民币**，需一次性支付 **¥10,000 商业许可费**。  
-   If business revenue processed through this product is **≥ 10,000,000 RMB and < 50,000,000 RMB**, a **one-time commercial license fee of ¥10,000** must be paid.  
+1. 若通过本产品处理的业务收入 **≥ 10,000,000 人民币且 < 50,000,000 人民币**，需一次性支付 **¥100,000 商业许可费**。  
+   If business revenue processed through this product is **≥ 10,000,000 RMB and < 50,000,000 RMB**, a **one-time commercial license fee of ¥100,000** must be paid.  
 
 2. 若通过本产品处理的业务收入 **≥ 50,000,000 人民币**，须联系 OptLTD 获取 **特殊商业许可**。  
    If business revenue processed through this product is **≥ 50,000,000 RMB**, a **special commercial license** must be obtained from OptLTD.  
