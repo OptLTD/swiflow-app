@@ -6,7 +6,7 @@
         "mcp-pdf-reader"
       ],
       "env": {
-        "PDF_DIR": "$SWIFLOW_HOME"
+        "PDF_DIR": "$CURRENT_HOME"
       }
     },
     "excel-server": {

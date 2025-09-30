@@ -9,9 +9,9 @@ import (
 
 type SubAgent struct {
 	parent *Manager
-	worker *Worker // worker
-	mytask *MyTask // mytask
-	leader *Worker // leader
+	worker *Worker // current worker
+	mytask *MyTask // current task
+	leader *Worker // leader worker
 	ldtask *MyTask // leader task
 }
 
