@@ -310,8 +310,9 @@ func (m *Manager) GetExecutor(task *MyTask, worker *Worker) *Executor {
 		Home: worker.Home, Path: task.Home,
 	}
 	context := &Context{
-		worker: worker, mytask: task,
-		store: m.store,
+		mytask: task,
+		worker: worker,
+		store:  m.store,
 	}
 	executor := &Executor{
 		UUID:    task.UUID,

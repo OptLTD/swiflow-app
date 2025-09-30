@@ -20,6 +20,8 @@ type TaskEntity struct {
 	Process int32  `json:"process" gorm:"column:process"`
 	Command string `json:"command" gorm:"column:command"`
 
+	IsDebug bool `gorm:"-:all"`
+
 	gorm.Model `json:"-"`
 }
 

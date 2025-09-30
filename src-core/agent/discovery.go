@@ -55,28 +55,30 @@ func DiscoverWorkers(scanDir string) ([]*Worker, error) {
 
 		jsonPath := strings.Replace(agentPath, ".md", ".json", 1)
 		if data, err := os.ReadFile(jsonPath); err == nil {
-			var value = map[string]any{}
-			json.Unmarshal(data, &value)
-			for key, val := range value {
-				switch key {
-				case "name":
-					entity.Name, _ = val.(string)
-				case "desc":
-					entity.Desc, _ = val.(string)
-				case "mcp", "servers", "mcpServers":
-					// If there are mcps, Tools format is [uuid:*]
-					if mcps, _ := val.(map[string]any); len(mcps) > 0 {
-						tools := make([]string, 0, len(mcps))
-						for uuid := range mcps {
-							tools = append(tools, uuid+":*")
-						}
-						entity.Tools = tools
-						entity.McpServers = mcps
-					}
+			var scan = &Worker{}
+			json.Unmarshal(data, scan)
+			if scan.Name != "" {
+				entity.Name = scan.Name
+			}
+			if scan.UUID != "" {
+				entity.UUID = scan.UUID
+			}
+			if scan.Desc != "" {
+				entity.Desc = scan.Desc
+			}
+			if scan.Emoji != "" {
+				entity.Emoji = scan.Emoji
+			}
+			if len(scan.Tools) > 0 {
+				entity.Tools = scan.Tools
+			}
+			if len(scan.McpServers) > 0 {
+				entity.McpServers = scan.McpServers
+				for uuid := range scan.McpServers {
+					entity.Tools = append(entity.Tools, uuid+":*")
 				}
 			}
 		}
-
 		if entity.Type == AGENT_LEADER {
 			leaderId = entity.UUID
 		}

@@ -29,7 +29,7 @@ type BotEntity struct {
 	Memories []MemEntity `json:"-" gorm:"foreignKey:Bot;references:UUID"`
 
 	// Use Mcp Servers
-	McpServers map[string]any `json:"-" gorm:"-"`
+	McpServers map[string]any `json:"mcpServers" gorm:"-"`
 
 	gorm.Model `json:"-"`
 }

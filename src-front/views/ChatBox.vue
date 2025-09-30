@@ -252,6 +252,7 @@ watch(() => task.getActive, (uuid) => {
 onMounted(() => {
   currWorker.value = app.getActive
   eventEmitter.on('respond', (socketMsg: SocketMsg) => {
+    console.log('Received respond message:', socketMsg)
     // Add response message to local messages
     messages.value.push(socketMsg.detail)
     startPlayAction(socketMsg.detail)
@@ -259,6 +260,7 @@ onMounted(() => {
   
   eventEmitter.on('next-msg', (data: any) => {
     if (data.nextMsg) {
+      console.log('Received next-msg message:', data)
       startPlayAction(data.nextMsg)
       setTimeout(() => autoScroll(false), 150)
     }

@@ -80,6 +80,23 @@ func (r *Executor) Enqueue(input action.Input) {
 	}
 }
 
+func (r *Executor) Respond(toolResult string) {
+	r.queueLock.Lock()
+	defer r.queueLock.Unlock()
+	if r.msgsQueue == nil {
+		r.msgsQueue = make([]action.Input, 0)
+	}
+	r.isTerminated = false
+	input := []action.Input{&action.ToolResult{
+		Content: action.TOOL_RESULT_TAG + "\n" + toolResult,
+	}}
+	r.msgsQueue = append(input, r.msgsQueue...)
+	r.queueLock.Unlock()
+	if !r.IsRunning() {
+		go r.Handle()
+	}
+}
+
 func (r *Executor) Handle() *action.SuperAction {
 	var prevMsgId string
 	if r.isTerminated {

@@ -68,6 +68,11 @@ func (h *HttpHandler) Static(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.FS(subfs)).ServeHTTP(w, r)
 }
 
+func (h *HttpHandler) Clean(w http.ResponseWriter, r *http.Request) {
+	uuid := r.URL.Query().Get("uuid")
+	JsonResp(w, "clean success"+uuid)
+}
+
 // Start chat handle
 func (h *HttpHandler) Start(w http.ResponseWriter, r *http.Request) {
 	// Parse request body to get input data
@@ -118,8 +123,13 @@ func (h *HttpHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 	// Set home path if provided
 	if request.HomePath != "" {
+		task.IsDebug = true
 		task.Home = request.HomePath
 		worker.Home = request.HomePath
+	}
+
+	if config.Get("DEBUG_MODE") == "yes" {
+		task.IsDebug = true
 	}
 
 	// Start the task asynchronously
@@ -200,15 +210,25 @@ func (h *HttpHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process .agent files through service layer
-	importedBots, err := h.service.DoImport(files)
+	allWorkers, err := h.service.DoImport(files)
 	if err != nil {
 		JsonResp(w, err)
 		return
 	}
 
+	var leaderId string
+	var imported = []string{}
+	for _, worker := range allWorkers {
+		imported = append(imported, worker.Name)
+		if worker.Type == agent.AGENT_LEADER {
+			leaderId = worker.UUID
+		}
+	}
+
 	// Return results in consistent format
-	var result = map[string]interface{}{
-		"imported": importedBots,
+	var result = map[string]any{
+		"leaderId": leaderId,
+		"imported": imported,
 	}
 	JsonResp(w, result)
 }

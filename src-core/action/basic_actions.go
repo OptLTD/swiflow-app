@@ -26,6 +26,18 @@ func (action *UserInput) Input() (string, string) {
 	return support.ToXML(action, nil), "user-input"
 }
 
+type Subtask struct {
+	XMLName xml.Name `xml:"subtask" json:"-"`
+
+	TaskDesc string `xml:"task-desc" json:"task-desc"`
+	Context  string `xml:"context" json:"context"`
+	Require  string `xml:"require" json:"require"`
+}
+
+func (action *Subtask) Input() (string, string) {
+	return support.ToXML(action, nil), "subtask"
+}
+
 // wait todo somthing
 type WaitTodo struct {
 	XMLName xml.Name `xml:"wait-todo"`

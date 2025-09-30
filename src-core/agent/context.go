@@ -49,11 +49,7 @@ func (r *Context) GetMsgRole(op string) string {
 		return "assistant"
 	case "tool-result":
 		return "user"
-	case "start-subtask":
-		return "user"
-	case "query-subtask":
-		return "user"
-	case "abort-subtask":
+	case "subtask":
 		return "user"
 	default:
 		return "system"
@@ -143,7 +139,7 @@ func (r *Context) GetSubject() string {
 
 func (r *Context) DebugCall(op string, msgs []*model.Message) {
 	log.Println("[EXEC]", r.worker.Name, r.mytask.UUID, op)
-	if config.GetStr("DEBUG_MODE", "no") != "yes" {
+	if r.mytask.IsDebug == false {
 		return
 	}
 
@@ -155,11 +151,14 @@ func (r *Context) DebugCall(op string, msgs []*model.Message) {
 		s.WriteString("<--- " + msg.Role + " --->")
 		s.WriteString("\n" + msg.Content + "\n\n")
 	}
-	path := config.GetStr("DEBUG_PATH", config.GetWorkHome())
-	history := filepath.Join(path, r.worker.UUID+".xml")
-	fileutil.WriteStringToFile(history, s.String(), false)
+	path := support.Or(r.mytask.Home, config.GetWorkHome())
+	if fileutil.CreateDir(filepath.Join(path, ".msgs")) != nil {
+		return
+	}
 
-	prompt := filepath.Join(path, r.worker.UUID+".md")
+	history := filepath.Join(path, ".msgs", r.worker.UUID+".xml")
+	fileutil.WriteStringToFile(history, s.String(), false)
+	prompt := filepath.Join(path, ".msgs", r.worker.UUID+".md")
 	fileutil.WriteStringToFile(prompt, r.usePrompt, false)
 }
 

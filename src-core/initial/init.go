@@ -27,6 +27,7 @@ var basic = []string{
 var leader = []string{
 	"use-basic-tools",
 	"use-file-system",
+
 	"subagent-module",
 }
 

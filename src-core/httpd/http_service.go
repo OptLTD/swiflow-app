@@ -742,8 +742,7 @@ func (h *HttpServie) extractZipFile(zipPath, destDir string) error {
 }
 
 // ImportWorkers saves discovered workers to database and loads MCP servers
-func (h *HttpServie) ImportWorkers(workers []*entity.BotEntity) ([]string, error) {
-	var workNames []string
+func (h *HttpServie) ImportWorkers(workers []*entity.BotEntity) error {
 	service := amcp.GetMcpService(h.store)
 	for _, worker := range workers {
 		// If worker has MCP servers
@@ -758,22 +757,20 @@ func (h *HttpServie) ImportWorkers(workers []*entity.BotEntity) ([]string, error
 
 		if err := h.store.SaveBot(worker); err != nil {
 			log.Printf("[IMPORT] Failed to save bot %s: %v", worker.Name, err)
-			continue
+			return err
 		}
 
 		// Load MCP servers if available
 		if len(worker.McpServers) > 0 {
 			go service.LoadMcpServer(worker.McpServers)
 		}
-
-		workNames = append(workNames, worker.Name)
 	}
 
-	return workNames, nil
+	return nil
 }
 
-// DoImport processes uploaded .agent files and returns imported bot names
-func (h *HttpServie) DoImport(files []*multipart.FileHeader) ([]string, error) {
+// DoImport processes uploaded .agent files and returns all imported bot
+func (h *HttpServie) DoImport(files []*multipart.FileHeader) ([]*entity.BotEntity, error) {
 	// Filter only .agent files
 	var agentFiles []*multipart.FileHeader
 	for _, header := range files {
@@ -800,7 +797,7 @@ func (h *HttpServie) DoImport(files []*multipart.FileHeader) ([]string, error) {
 		return nil, fmt.Errorf("failed to upload files: %v", err)
 	}
 
-	var allWorkNames []string
+	var allWorkers []*entity.BotEntity
 	for _, header := range agentFiles {
 		agentFilePath := filepath.Join(importDir, header.Filename)
 		targetDir := config.GetWorkPath("agents", header.Filename)
@@ -824,17 +821,16 @@ func (h *HttpServie) DoImport(files []*multipart.FileHeader) ([]string, error) {
 		}
 
 		// Save discovered workers to database
-		workNames, err := h.ImportWorkers(workers)
-		if err != nil {
+		if err := h.ImportWorkers(workers); err != nil {
 			log.Printf("[IMPORT] Failed to save workers: %v", err)
 			continue
 		}
 
-		allWorkNames = append(allWorkNames, workNames...)
+		allWorkers = append(allWorkers, workers...)
 	}
 
-	if len(allWorkNames) == 0 {
+	if len(allWorkers) == 0 {
 		return nil, fmt.Errorf("no valid .agent files were imported")
 	}
-	return allWorkNames, nil
+	return allWorkers, nil
 }
