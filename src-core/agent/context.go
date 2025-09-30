@@ -123,14 +123,14 @@ func (c *Context) GetMsgs(count int) []*model.Message {
 
 func (c *Context) GetContext() []*model.Message {
 	messages := make([]*model.Message, 0)
-	if prompt := c.UsePrompt(); *prompt != "" {
+	if prompt := c.GetPrompt(); prompt != "" {
 		messages = append(messages, &model.Message{
-			Role: "system", Content: *prompt,
+			Role: "system", Content: prompt,
 		})
 	}
-	if memory := c.UseMemory(); *memory != "" {
+	if memory := c.GetMemory(); memory != "" {
 		messages = append(messages, &model.Message{
-			Role: "user", Content: *memory,
+			Role: "user", Content: memory,
 		})
 	}
 	size := config.GetInt("CTX_MSG_SIZE", 100)
@@ -151,8 +151,10 @@ func (c *Context) DebugCall(op string, msgs []*model.Message) {
 	}
 
 	var s strings.Builder
+	var sysPrompt string
 	for i, msg := range msgs {
 		if i == 0 {
+			sysPrompt = msg.Content
 			continue
 		}
 		s.WriteString("<--- " + msg.Role + " --->")
@@ -166,7 +168,7 @@ func (c *Context) DebugCall(op string, msgs []*model.Message) {
 	history := filepath.Join(path, ".msgs", c.worker.UUID+".xml")
 	fileutil.WriteStringToFile(history, s.String(), false)
 	prompt := filepath.Join(path, ".msgs", c.worker.UUID+".md")
-	fileutil.WriteStringToFile(prompt, c.usePrompt, false)
+	fileutil.WriteStringToFile(prompt, sysPrompt, false)
 }
 
 func (c *Context) Memorize(act *action.Memorize) error {
@@ -242,9 +244,9 @@ func (c *Context) WriteMsg(msg *MyMsg) error {
 	return nil
 }
 
-func (c *Context) UseMemory() *string {
+func (c *Context) GetMemory() string {
 	if c.useMemory != "" {
-		return &c.useMemory
+		return c.useMemory
 	}
 	var memory strings.Builder
 	for _, mem := range c.worker.Memories {
@@ -257,7 +259,7 @@ func (c *Context) UseMemory() *string {
 		memory.WriteString(support.ToXML(memorize, nil))
 	}
 	c.useMemory = memory.String()
-	return &c.useMemory
+	return c.useMemory
 }
 
 func (c *Context) GetPrompt() string {
