@@ -42,6 +42,9 @@ func (h *SettingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	store, _ := h.manager.GetStorage()
 	query := "(`group`='' or `group`=`uuid`)"
 	if list, err := store.LoadTask(query); err == nil {
+		if len(list) == 0 {
+			list, _ = store.LoadTask()
+		}
 		for _, item := range list {
 			tasks = append(tasks, item.ToMap())
 		}
@@ -175,6 +178,14 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 		if err := JsonResp(w, bot); err != nil {
 			log.Println("resp error", err)
 		}
+		return
+	case "get-bots":
+		bots := h.service.LoadBot()
+		data := []map[string]any{}
+		for _, bot := range bots {
+			data = append(data, bot.ToMap())
+		}
+		JsonResp(w, data)
 		return
 	case "init-bot":
 		bots := h.service.InitBot()

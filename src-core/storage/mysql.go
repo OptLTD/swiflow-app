@@ -53,8 +53,15 @@ func NewMySQLStorage(config map[string]any) (*MySQLStorage, error) {
 }
 
 func (s *MySQLStorage) AutoMigrate() error {
-	// 自动迁移表结构
-	task, bot, msg := new(TaskEntity), new(BotEntity), new(MsgEntity)
+	var msg = new(MsgEntity)
+	var migrator = s.gormDB.Migrator()
+	if migrator.HasColumn(msg, "msg_id") {
+		migrator.RenameColumn(msg, "msg_id", "uniq_id")
+	}
+	if migrator.HasColumn(msg, "pre_msg") {
+		migrator.RenameColumn(msg, "pre_msg", "prev_id")
+	}
+	task, bot := new(TaskEntity), new(BotEntity)
 	if err := s.gormDB.AutoMigrate(task, bot, msg); err != nil {
 		log.Printf("[MYSQL]failed to migrate tables: %v", err)
 		return fmt.Errorf("failed to migrate tables: %w", err)

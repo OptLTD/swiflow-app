@@ -1,21 +1,26 @@
 <script setup lang="ts">
 import { toast } from 'vue3-toastify'
-import { doUploadFiles } from '@/logics/chat'
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDropZone } from '@vueuse/core'
+import { doUploadFiles } from '@/logics/chat'
+import { doImportFiles } from '@/logics/chat'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   bot?: BotEntity
 }>()
 
 const emit = defineEmits<{
-  filesUploaded: [uploads: string[]]
   filesDropped: [files: File[]]
+  filesUploaded: [uploads: string[]]
+  agentImported: [imported: string[]]
 }>()
 
 const appContainer = ref<HTMLElement>()
 
-// 使用useDropZone处理拖拽，使用#app作为容器
+// Use useDropZone to handle drag and drop, using #app as container
 const { isOverDropZone } = useDropZone(appContainer, (files: File[] | null): void => {
   if (files && files.length > 0) {
     handleFilesDropped(files as File[])
@@ -24,49 +29,105 @@ const { isOverDropZone } = useDropZone(appContainer, (files: File[] | null): voi
 
 const handleFilesDropped = async (files: File[]) => {
   emit('filesDropped', files)
-  
+
   try {
-    // 使用传入的bot对象
-    if (!props.bot?.uuid) {
-      toast.error('请先选择一个bot')
+    const { agentFiles, regularFiles } = separateFiles(files)
+    // If there are .agent files, prioritize them and discard regular files
+    if (agentFiles.length > 0) {
+      await handleAgentFiles(agentFiles, regularFiles)
       return
     }
-    
-    const resp = await doUploadFiles(props.bot.uuid, files)
-    
-    if (resp.errmsg) {
-      toast.error(`文件上传失败: ${resp.errmsg}`)
-      return
+
+    // Handle regular files only if no .agent files are present
+    if (regularFiles.length > 0) {
+      await handleRegularFiles(regularFiles)
     }
-    
-    const uploads: string[] = []
-    for (const key in resp) {
-      uploads.push(`[${key}](${resp[key]})`)
-    }
-    
-    emit('filesUploaded', uploads)
-    toast.success(`成功上传 ${files.length} 个文件到 ${props.bot.name || 'bot'} 目录`)
   } catch (error) {
-    console.error('文件上传错误:', error)
-    toast.error('文件上传失败')
+    console.error(t('dropzone.fileProcessError'), error)
+    toast.error(t('dropzone.fileProcessFailed'))
   }
 }
 
-// 设置app容器引用
+// Separate .agent files from regular files
+const separateFiles = (files: File[]): { agentFiles: File[], regularFiles: File[] } => {
+  const agentFiles: File[] = []
+  const regularFiles: File[] = []
+
+  files.forEach(file => {
+    if (file.name.endsWith('.agent')) {
+      agentFiles.push(file)
+    } else {
+      regularFiles.push(file)
+    }
+  })
+
+  return { agentFiles, regularFiles }
+}
+
+// Handle agent files import
+const handleAgentFiles = async (agentFiles: File[], regularFiles: File[]) => {
+  if (regularFiles.length > 0) {
+    toast.info(t('dropzone.agentFilesDetected', {
+      count: agentFiles.length,
+    }))
+  }
+
+  const resp = await doImportFiles(agentFiles)
+  if (resp.errmsg) {
+    toast.error(t('dropzone.agentImportFailed', {
+      error: resp.errmsg,
+    }))
+  } else {
+    toast.success(t('dropzone.agentImportSuccess', {
+      count: resp.count,
+      names: resp.imported.join(', ')
+    }))
+    emit('agentImported', resp.imported)
+  }
+}
+
+// Handle regular files upload
+const handleRegularFiles = async (regularFiles: File[]) => {
+  // Use the passed bot object
+  if (!props.bot?.uuid) {
+    toast.error(t('dropzone.selectBotFirst'))
+    return
+  }
+
+  const resp = await doUploadFiles(props.bot.uuid, regularFiles)
+
+  if (resp.errmsg) {
+    toast.error(t('dropzone.fileUploadFailed', {
+      error: resp.errmsg,
+    }))
+    return
+  }
+
+  const uploads: string[] = []
+  for (const key in resp) {
+    uploads.push(`[${key}](${resp[key]})`)
+  }
+
+  emit('filesUploaded', uploads)
+  toast.success(t('dropzone.fileUploadSuccess', {
+    count: regularFiles.length,
+    path: props.bot.name || 'bot'
+  }))
+}
+
+// Set app container reference
 onMounted(() => {
   appContainer.value = document.querySelector('#app') as HTMLElement
 })
 </script>
 
 <template>
-  <div 
-    v-if="isOverDropZone" 
-    id="file-container"
-    class="file-drop-zone"
-  >
+  <div v-if="isOverDropZone" id="file-container" class="file-drop-zone">
     <div class="drop-content">
       <div class="drop-icon">📁</div>
-      <div class="drop-text">拖拽文件到此处上传</div>
+      <div class="drop-text">
+        {{ t('dropzone.dropFilesHere') }}
+      </div>
     </div>
   </div>
 </template>
@@ -118,4 +179,4 @@ onMounted(() => {
 [data-theme="dark"] .drop-text {
   color: #fff;
 }
-</style> 
+</style>

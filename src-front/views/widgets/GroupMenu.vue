@@ -18,10 +18,6 @@ const props = defineProps({
   active: {
     type: Object as PropType<MenuMeta>,
     default: () => null
-  },
-  divide: {
-    type: Boolean as PropType<Boolean>,
-    default: () => true
   }
 })
 
@@ -66,19 +62,6 @@ const onClick = (item: MenuMeta) => {
   emit('click', item)
 }
 
-const onDelGroup = (groupId: string) => {
-  const item = props.group.find(g => {
-    return g.value === groupId
-  })
-  emit('remove', item)
-}
-
-const onViewGroup = (groupId: string) => {
-  const item = props.group.find(g => {
-    return g.value === groupId
-  })
-  emit('click', item)
-}
 const onAddSub = (groupId: string) => {
   emit('create', groupId)
 }
@@ -133,16 +116,8 @@ onMounted(() => {
           <span class="group-title">
             {{ getGroupName(groupId) }}
           </span>
-          <button v-if="!divide" class="btn-view"
-            @click.stop="onViewGroup(groupId)">
-            <span class="icon">查看</span>
-          </button>
         </div>
         <div class="group-header-right">
-          <button v-if="!divide" class="btn-del" 
-            @click.stop="onDelGroup(groupId)">
-            <span class="icon">x</span>
-          </button>
           <button class="btn-add" 
             @click.stop="onAddSub(groupId)" 
             :title="$t('common.addMem')">
@@ -223,7 +198,7 @@ onMounted(() => {
   cursor: pointer;
 }
 
-.btn-add,.btn-del,.btn-view {
+.btn-add,.btn-del {
   background: none;
   border: none;
   cursor: pointer;
@@ -235,11 +210,7 @@ onMounted(() => {
   color: var(--color-secondary);
   transition: background-color 0.2s;
 }
-.btn-view{
-  font-size: 13px;
-}
 
-.btn-view:hover,
 .btn-del:hover,
 .btn-add:hover {
   color: var(--color-primary);

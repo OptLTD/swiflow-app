@@ -278,6 +278,22 @@ const handleFilesUploaded = (uploads: string[]) => {
   globalUploads.value = uploads
   app.setUploads(uploads)
 }
+
+// Handle agent import and navigate to Bot Set page
+const handleAgentImported = async (imported: string[]) => {
+  if (!imported.length) {
+    return
+  }
+  const url = '/bot?act=get-bots'
+  const resp = await request.get(url)
+  const bots = resp as BotEntity[]
+  if (bots && bots.length) {
+    app.setBotList(bots)
+    app.setContent(true)
+    app.setChatBar(false)
+    app.setAction('set-bot')
+  }
+}
 </script>
 
 <template>
@@ -300,6 +316,12 @@ const handleFilesUploaded = (uploads: string[]) => {
     </template>
   </Default>
   <ModalsContainer />
-  <Fireworks v-if="app.display.showEpigraph" @close="app.setShowEpigraph(false)" />
-  <DropZone :bot="app.getActive" @files-dropped="handleFilesDropped" @files-uploaded="handleFilesUploaded" />
+  <Fireworks v-if="app.display.showEpigraph" 
+    @close="app.setShowEpigraph(false)" 
+  />
+  <DropZone :bot="app.getActive"
+    @files-dropped="handleFilesDropped" 
+    @files-uploaded="handleFilesUploaded" 
+    @agent-imported="handleAgentImported" 
+  />
 </template>

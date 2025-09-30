@@ -296,6 +296,36 @@ func (h *HttpHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	JsonResp(w, result)
 }
 
+// Import handles .agent file imports by extracting zip files and processing agent definitions
+func (h *HttpHandler) Import(w http.ResponseWriter, r *http.Request) {
+	// Parse multipart form with size limit (32MB)
+	r.ParseMultipartForm(32 << 20)
+	
+	if r.MultipartForm == nil || r.MultipartForm.File == nil {
+		JsonResp(w, fmt.Errorf("no files uploaded"))
+		return
+	}
+
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
+		JsonResp(w, fmt.Errorf("no files found"))
+		return
+	}
+
+	// Process .agent files through service layer
+	importedBots, err := h.service.DoImport(files)
+	if err != nil {
+		JsonResp(w, err)
+		return
+	}
+
+	// Return results in consistent format
+	var result = map[string]interface{}{
+		"imported": importedBots,
+	}
+	JsonResp(w, result)
+}
+
 func (h *HttpHandler) Setting(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
 	switch act {

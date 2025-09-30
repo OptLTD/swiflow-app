@@ -10,7 +10,7 @@ type MsgEntity struct {
 	ID uint `gorm:"primarykey"`
 
 	IsSend  bool   `gorm:"-:all"`
-	Group   string `gorm:"group;size:36;not null"`
+	Group   string `gorm:"group;size:36;default ''"`
 	OpType  string `gorm:"op_type;size:16;not null"`
 	TaskId  string `gorm:"task_id;size:36;not null"`
 	UniqId  string `gorm:"uniq_id;size:36;uniqueIndex"`

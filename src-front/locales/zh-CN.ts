@@ -83,7 +83,7 @@ export default {
 
     botNoDesc: '无描述',
     editDescTitle: '修改描述',
-    editDescTips: '描述信息用于介绍此Bot的能力，Head Bot会根据此描述进行不同的任务分配',
+    editDescTips: '描述信息用于介绍此Bot的能力，Bot\'s Leader会根据此描述进行不同的任务分配',
     
     // 用户配置相关
     login: '登录',
@@ -101,6 +101,17 @@ export default {
     emptyFile: '文件内容为空',
     loadFileListFailed: '加载文件列表失败',
     loadFileContentFailed: '加载文件内容失败',
+  },
+  dropzone: {
+    fileProcessError: '文件处理错误:',
+    fileProcessFailed: '文件处理失败',
+    agentFilesDetected: '检测到 {count} 个Agent文件，将忽略其他普通文件',
+    agentImportFailed: 'Agent文件导入失败: {error}',
+    agentImportSuccess: '成功导入 {count} 个Agent: {names}',
+    selectBotFirst: '请先选择一个bot',
+    fileUploadFailed: '文件上传失败: {error}',
+    fileUploadSuccess: '成功上传 {count} 个文件到 {path} 目录',
+    dropFilesHere: '拖拽文件到此处上传'
   },
   setting: {
     otherSet: '其他设置',

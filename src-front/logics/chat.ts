@@ -69,6 +69,22 @@ export const doUploadFiles = async (uuid: string, files: File[]): Promise<any> =
   })
 }
 
+// Import .agent files to create new bots
+export const doImportFiles = async (files: File[]): Promise<any> => {
+  const url = `/import`
+  const data = new FormData()
+  for (const file of files) {
+    data.append('files', file, file.name)
+  }
+  const options = {headers: {},method: 'POST',body: data}
+  return request.fetch(url, options).then((resp) => {
+    return resp.json()
+  }).catch(err => {
+    console.log('error', err)
+    return {errmsg: err}
+  })
+}
+
 export const setHomePath = async (uuid: string, path: string) => {
   if (uuid == "") {
     return

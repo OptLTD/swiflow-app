@@ -80,13 +80,24 @@ export default {
 
     botNoDesc: 'No description, please complete',
     editDescTitle: 'Edit Description',
-    editDescTips: 'Description is used to introduce the capabilities of this Bot, Head Bot will assign different tasks based on this description',
+    editDescTips: 'Description is used to introduce the capabilities of this Bot, Bot\'s Leader will assign different tasks based on this description',
 
     // User profile related
     login: 'Login',
     logout: 'Logout',
     pleaseLogin: 'Please Login',
     loginRecommend: 'Login to enjoy more features',
+  },
+  dropzone: {
+    fileProcessError: 'File processing error:',
+    fileProcessFailed: 'File processing failed',
+    agentFilesDetected: 'Detected {count} Agent files, will ignore other regular files',
+    agentImportFailed: 'Agent file import failed: {error}',
+    agentImportSuccess: 'Successfully imported {count} Agents: {names}',
+    selectBotFirst: 'Please select a bot first',
+    fileUploadFailed: 'File upload failed: {error}',
+    fileUploadSuccess: 'Successfully uploaded {count} files to {path} directory',
+    dropFilesHere: 'Drop files here to upload'
   },
   setting: {
     otherSet: 'Other Set',

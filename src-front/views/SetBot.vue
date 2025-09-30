@@ -20,15 +20,19 @@ const groupedBots = computed(() => {
   const workers: BotEntity[] = []
   
   app.getBotList.forEach(bot => {
-    if (bot.leader === '' || !bot.leader) {
-      // This is a leader bot
+    if (!bot.leader) {
       leaders.push(bot)
-    } else {
-      // This is a worker bot
+      workers.push({
+        ...bot, leader: bot.uuid,
+        desc: 'this is bot leader',
+      })
+    }
+  })
+  app.getBotList.forEach(bot => {
+    if (bot.leader) {
       workers.push(bot)
     }
   })
-  
   return { leaders, workers }
 })
 

@@ -96,7 +96,7 @@ const doActiveMcp = async (server: McpServer) => {
   try {
     server.loading = true
     install.value.result = ""
-    install.value.message = `Installing ${server.name}`
+    install.value.message = `Start run ${server.name}`
     const url = `/mcp?act=active&uuid=${server.uuid}`
     const resp = await request.post(url) as McpStatus
     const data = (resp as any)
@@ -111,8 +111,8 @@ const doActiveMcp = async (server: McpServer) => {
       const active = server.status?.active
       install.value.result = active ? 'success' : 'error'
       install.value.message = active
-        ? `${server.name} installed successfully`
-        : `${server.name} installation failed`
+        ? `Start run ${server.name} success`
+        : `Start run ${server.name} failed`
     }
     return resp
   } catch (err) {
@@ -166,7 +166,7 @@ const startMcpEnv = async () => {
     install.value.message = errors.join('\n')
   } else {
     install.value.result = 'success'
-    install.value.message = 'all mcp install successfully'
+    install.value.message = 'All mcp run success'
     setTimeout(() => {
       install.value.result = ''
       install.value.message = ''

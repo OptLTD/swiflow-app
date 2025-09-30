@@ -1,15 +1,19 @@
 package httpd
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"swiflow/ability"
+	"swiflow/agent"
 	"swiflow/amcp"
 	"swiflow/config"
 	"swiflow/entity"
@@ -686,4 +690,151 @@ func (h *HttpServie) checkMcpEnvPeriodically(name string) {
 			return
 		}
 	}
+}
+
+// extractZipFile extracts a zip file to the specified destination directory
+func (h *HttpServie) extractZipFile(zipPath, destDir string) error {
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	for _, file := range reader.File {
+		// Create the full file path
+		path := filepath.Join(destDir, file.Name)
+
+		// Ensure the file path is within the destination directory (security check)
+		if !strings.HasPrefix(path, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid file path: %s", file.Name)
+		}
+
+		if file.FileInfo().IsDir() {
+			// Create directory
+			os.MkdirAll(path, file.FileInfo().Mode())
+			continue
+		}
+
+		// Create parent directories if they don't exist
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+
+		// Extract file
+		fileReader, err := file.Open()
+		if err != nil {
+			return err
+		}
+		defer fileReader.Close()
+
+		targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.FileInfo().Mode())
+		if err != nil {
+			return err
+		}
+		defer targetFile.Close()
+
+		_, err = io.Copy(targetFile, fileReader)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ImportWorkers saves discovered workers to database and loads MCP servers
+func (h *HttpServie) ImportWorkers(workers []*entity.BotEntity) ([]string, error) {
+	var workNames []string
+	service := amcp.GetMcpService(h.store)
+	for _, worker := range workers {
+		// If worker has MCP servers
+		// set tools in [uuid:*] format
+		if len(worker.McpServers) > 0 {
+			tools := make([]string, 0, len(worker.McpServers))
+			for uuid := range worker.McpServers {
+				tools = append(tools, uuid+":*")
+			}
+			worker.Tools = tools
+		}
+
+		if err := h.store.SaveBot(worker); err != nil {
+			log.Printf("[IMPORT] Failed to save bot %s: %v", worker.Name, err)
+			continue
+		}
+
+		// Load MCP servers if available
+		if len(worker.McpServers) > 0 {
+			go service.LoadMcpServer(worker.McpServers)
+		}
+
+		workNames = append(workNames, worker.Name)
+	}
+
+	return workNames, nil
+}
+
+// DoImport processes uploaded .agent files and returns imported bot names
+func (h *HttpServie) DoImport(files []*multipart.FileHeader) ([]string, error) {
+	// Filter only .agent files
+	var agentFiles []*multipart.FileHeader
+	for _, header := range files {
+		if strings.HasSuffix(header.Filename, ".agent") {
+			agentFiles = append(agentFiles, header)
+		} else {
+			log.Printf("[IMPORT] Skipping non-.agent file: %s", header.Filename)
+		}
+	}
+
+	if len(agentFiles) == 0 {
+		return nil, fmt.Errorf("no valid .agent files found")
+	}
+
+	// Create temp directory for uploaded files
+	importDir := filepath.Join(os.TempDir(), "swiflow-import")
+	if err := os.MkdirAll(importDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create temp upload dir: %v", err)
+	}
+	defer os.RemoveAll(importDir)
+
+	// Use DoUpload to handle file uploading
+	if err := h.DoUpload(importDir, agentFiles); err != nil {
+		return nil, fmt.Errorf("failed to upload files: %v", err)
+	}
+
+	var allWorkNames []string
+	for _, header := range agentFiles {
+		agentFilePath := filepath.Join(importDir, header.Filename)
+		targetDir := config.GetWorkPath("agents", header.Filename)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			log.Printf("[IMPORT] Failed to create extract dir for %s: %v", header.Filename, err)
+			continue
+		}
+		defer os.RemoveAll(targetDir)
+
+		// Extract zip file to target directory
+		if err := h.extractZipFile(agentFilePath, targetDir); err != nil {
+			log.Printf("[IMPORT] Failed to extract %s: %v", header.Filename, err)
+			continue
+		}
+
+		// Discover and import agents from extracted directory
+		workers, err := agent.DiscoverWorkers(targetDir)
+		if err != nil {
+			log.Printf("[IMPORT] Failed to discover workers in %s: %v", targetDir, err)
+			continue
+		}
+
+		// Save discovered workers to database
+		workNames, err := h.ImportWorkers(workers)
+		if err != nil {
+			log.Printf("[IMPORT] Failed to save workers: %v", err)
+			continue
+		}
+
+		allWorkNames = append(allWorkNames, workNames...)
+	}
+
+	if len(allWorkNames) == 0 {
+		return nil, fmt.Errorf("no valid .agent files were imported")
+	}
+	return allWorkNames, nil
 }
