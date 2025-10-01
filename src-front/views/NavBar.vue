@@ -54,7 +54,8 @@ const getRunning = computed(() => {
 
 const leaders = computed(() => {
   return app.getBotList.filter((bot) => {
-    return !bot.leader
+    const isLeader = bot.leader == ''
+    return app.useSubAgent ? isLeader : !isLeader
   })
 })
 

@@ -119,13 +119,6 @@ func (r *Executor) Handle() *action.SuperAction {
 			messages = append(messages, &model.Message{
 				Content: content, Role: role,
 			})
-			// taskContext := r.context.TaskContext()
-			// isToolResult := currOp == action.TOOL_RESULT
-			// if taskContext != "" && isToolResult { // 强制继续推理
-			// 	messages = append(messages, &model.Message{
-			// 		Content: taskContext, Role: "user",
-			// 	})
-			// }
 			if merged != "" {
 				merged += "\n"
 			}
@@ -144,14 +137,7 @@ func (r *Executor) Handle() *action.SuperAction {
 
 		// 调用LLM
 		resp := r.GetLLMResp(messages, currMsgId)
-		if err := resp.ErrMsg; err != nil {
-			r.currentState = STATE_FAILED
-			log.Println("[EXEC] task", r.UUID, resp.ErrMsg)
-			support.Emit("errors", r.UUID, resp.ErrMsg)
-			continue
-		}
-
-		// 保存LLM响应内容
+		// step 1. save response message
 		if resp != nil && resp.Origin != "" {
 			r.context.WriteMsg(&MyMsg{
 				IsSend: false, Respond: resp.Origin,
@@ -159,7 +145,17 @@ func (r *Executor) Handle() *action.SuperAction {
 				UniqId: currMsgId, PrevId: prevMsgId,
 				RecvAt: convertor.ToPointer(time.Now()),
 			})
-		} else if resp != nil && resp.Origin == "" {
+		}
+
+		// step 2. handle error response
+		if resp != nil && resp.ErrMsg != nil {
+			r.currentState = STATE_FAILED
+			log.Println("[EXEC] task", r.UUID, resp.ErrMsg)
+			support.Emit("errors", r.UUID, resp.ErrMsg)
+			continue
+		}
+		// step 3. handle empty response
+		if resp != nil && resp.Origin == "" {
 			r.currentState = STATE_FAILED
 			log.Println("[EXEC] task", r.UUID, errors.ErrEmptyLlmResponse)
 			support.Emit("errors", r.UUID, errors.ErrEmptyLlmResponse)
@@ -171,10 +167,10 @@ func (r *Executor) Handle() *action.SuperAction {
 		resp.Payload = r.payload
 		resp.WorkerID = r.context.GetWorkerId()
 
-		// 执行动作
+		// step 4. execute actions
 		toolResult := r.PlayAction(resp)
 
-		// 触发 respond 事件
+		// step 5. emit respond event
 		support.Emit("respond", r.UUID, resp)
 		if r.isTerminated {
 			r.currentState = STATE_CANCELED
@@ -183,7 +179,7 @@ func (r *Executor) Handle() *action.SuperAction {
 			break
 		}
 
-		// handle complete state
+		// step 6. handle complete state
 		for _, tool := range resp.UseTools {
 			switch tool.(type) {
 			case *action.Complete:
@@ -193,6 +189,7 @@ func (r *Executor) Handle() *action.SuperAction {
 			}
 		}
 
+		// step 7. handle waiting state
 		if strings.TrimSpace(toolResult) != "" {
 			r.currentState = STATE_WAITING
 			r.queueLock.Lock() // tool call has result
@@ -202,12 +199,18 @@ func (r *Executor) Handle() *action.SuperAction {
 			r.msgsQueue = append(input, r.msgsQueue...)
 			r.queueLock.Unlock()
 			continue
-		} else if resp.Context != nil {
-			// @todo 需要判断是否任务结束了
-			// r.queueLock.Lock() // maybe update context
-			// input := []action.Input{&action.ToolResult{}}
-			// r.msgsQueue = append(input, r.msgsQueue...)
-			// r.queueLock.Unlock()
+		}
+		// step 8. handle waiting state
+		if r.currentState != STATE_COMPLETED {
+			if resp.Context == nil || resp.Origin == "" {
+				continue
+			}
+			r.queueLock.Lock() // @todo 需要强制继续
+			input := []action.Input{&action.UserInput{
+				Content: r.context.TaskContext(),
+			}}
+			r.msgsQueue = append(input, r.msgsQueue...)
+			r.queueLock.Unlock()
 			continue
 		} else {
 			log.Println("[EXEC] task", r.UUID, STATE_COMPLETED)

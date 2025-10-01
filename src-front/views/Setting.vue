@@ -8,22 +8,22 @@ import { request } from '@/support/index';
 import { FormKit } from '@formkit/vue';
 import SetHeader from './widgets/SetHeader.vue';
 
-const app =  useAppStore()
+const app = useAppStore()
 const counter = ref<number>(0)
 const formModel = ref<SetupMeta>({
-  theme: 'auto',
-  language: 'zh',
-  dataPath: '',
-  sandbox: false,
-  notification: false,
+  useTheme: 'auto',
+  useLanguage: 'zh',
 
-  proxyUrl: '',
-  authGate: '',
+  useWorkPath: '',
+  useProxyUrl: '',
+  authGateway: '',
   ctxMsgSize: "100",
   maxCallTurns: "25",
-  useCopy: 'source',
-  useMulti: false,
-  useDebug: false,
+  useCopyMode: 'source',
+  useIsolated: false,
+  useSubAgent: false,
+  useDebugMode: false,
+  useSandbox: false,
   sendNotifyOn: [],
 })
 const { t, locale } = useI18n({
@@ -45,7 +45,7 @@ watch(() => formModel.value, debounce(async (data: any) => {
   await saveSetting(data)
   // Show toast only after the final change when user stops modifying
   toast.success('Settings saved successfully!')
-}, 1000), {deep: true})
+}, 1000), { deep: true })
 
 const loadSetting = async () => {
   try {
@@ -93,102 +93,85 @@ const appearanceOptions = () => {
     { label: t('setting.themeDark'), value: 'dark' },
     { label: t('setting.themeLight'), value: 'light' }
   ]
-} 
+}
 
 </script>
 
 <template>
-  <SetHeader :title="$t('menu.basicSet')"/>
+  <SetHeader :title="$t('menu.basicSet')" />
   <div id="base-setting" class="set-view">
     <div id="base-panel" ref="basePanel" class="set-main">
       <div class="form-model" id="basic-setting">
         <FormKit type="form" :actions="false">
           <h3>{{ $t('menu.basicSet') }}</h3>
-          
-          <FormKit
-            type="radio" name="theme"
-            v-model="formModel.theme"
+
+          <FormKit type="radio" name="useTheme" 
+            v-model="formModel.useTheme" 
             :options="appearanceOptions()"
-            :label="$t('setting.appearance')"
+            :label="$t('setting.appearance')" 
           />
 
-          <FormKit
-            type="radio"
-            name="language"
-            :options="langOptions"
-            v-model="formModel.language"
-            :label="$t('setting.language')"
+          <FormKit type="radio" name="useLanguage" 
+            :options="langOptions" 
+            v-model="formModel.useLanguage"
+            :label="$t('setting.language')" 
           />
-          
-          <FormKit
-            type="text"
-            name="datapath"
-            label="数据存放位置"
-            placeholder="请输入或选择数据存放路径"
-            v-model="formModel.dataPath"
+
+          <FormKit type="text" 
+            name="useWorkPath" label="工作目录" 
+            placeholder="请输入 Bot 工作目录"
+            v-model="formModel.useWorkPath" 
           />
-  
+
           <h3>{{ $t('setting.taskSet') }}</h3>
-          <FormKit
-            type="number"
-            min="0" max="100"
-            name="ctxMsgSize"
-            label="上下文消息数"
+          <FormKit type="number" min="0" max="100" 
             v-model="formModel.ctxMsgSize"
-            help="调用 LLM 携带历史消息数量"
+            name="ctxMsgSize" label="上下文消息数" 
+            help="调用 LLM 携带历史消息数量" 
           />
-          <FormKit
-            type="number"
-            min="0" max="100"
-            name="maxCallTurns"
-            label="最大调用轮次"
-            v-model="formModel.maxCallTurns"
+          <FormKit type="number" min="0" max="100" 
+            name="maxCallTurns" label="最大调用轮次"
+            v-model="formModel.maxCallTurns" 
           />
 
-          <FormKit
-            type="checkbox"
-            name="sendNotifyOn"
-            label="当*时发送通知"
+          <FormKit type="checkbox" 
+            name="sendNotifyOn" label="当*时发送通知" 
             :options="sendNotifyOptions"
-            v-model="formModel.sendNotifyOn"
+            v-model="formModel.sendNotifyOn" 
           />
-          <FormKit
-            type="radio"
-            name="useCopy"
-            :options="copyOptions"
-            v-model="formModel.useCopy"
-            :label="$t('setting.useCopy')"
+          <FormKit type="radio" 
+            name="useCopyMode" :label="$t('setting.useCopy')" 
+            v-model="formModel.useCopyMode" :options="copyOptions" 
           />
 
           <h3>{{ $t('setting.otherSet') }}</h3>
           <div class="row">
-            <FormKit
-              type="checkbox"
-              name="useMulti"
-              label="多供应商"
-              v-model="formModel.useMulti"
+            <FormKit type="checkbox" 
+              v-model="formModel.useIsolated" 
+              name="useIsolated" label="独立供应商" 
             />
-           
-            <FormKit
-              type="checkbox"
-              name="useDebug"
-              label="Debug Mode"
-              v-model="formModel.useDebug"
+            <FormKit type="checkbox" 
+              v-model="formModel.useSubAgent" 
+              name="useSubAgent" label="子智能体" 
+            />
+            <!-- <FormKit type="checkbox" 
+              v-model="formModel.useSandbox" 
+              name="useSandbox" label="沙箱模式" 
+            /> -->
+            <FormKit type="checkbox" 
+              v-model="formModel.useDebugMode" 
+              name="useDebugMode" label="开发者模式" 
             />
           </div>
-          <FormKit
-            type="text"
-            name="authGate"
-            label="认证网关"
-            v-model="formModel.authGate"
-            placeholder="如 http://auth.swiflow.cc"
+          <FormKit type="text" 
+            v-model="formModel.authGateway" 
+            name="authGateway" label="认证网关"
+            placeholder="如 http://auth.swiflow.cc" 
           />
-          <FormKit
-            type="text"
-            name="proxyUrl"
-            label="代理地址 (PROXY_URL)"
-            placeholder="如 http://user:pass@host:port 或 socks5://host:port"
-            v-model="formModel.proxyUrl"
+          <FormKit type="text" 
+            v-model="formModel.useProxyUrl" 
+            name="useProxyUrl" label="代理地址 (PROXY_URL)"
+            placeholder="如 http://user:pass@host:port 或 socks5://host:port" 
           />
         </FormKit>
       </div>
@@ -200,10 +183,11 @@ const appearanceOptions = () => {
 <style scoped>
 @import url('@/styles/form.css');
 
-#base-panel{
+#base-panel {
   margin: 0 auto;
   max-width: 720px;
 }
+
 #basic-setting {
   flex: 1;
   padding: 0 5px;
@@ -220,15 +204,18 @@ const appearanceOptions = () => {
   margin-top: 25px;
   margin-bottom: 12px;
 }
+
 .form-model .row {
   display: flex;
   gap: 1rem;
 }
+
 .form-model :deep(.formkit-wrapper),
 .form-model :deep(.formkit-fieldset) {
   margin: 0 auto;
 }
-.form-model>form{
+
+.form-model>form {
   width: 25rem;
   margin: 0 auto;
 }

@@ -500,7 +500,6 @@ func (h *HttpServie) UseBot(bot *entity.BotEntity) error {
 		Data: bot.ToMap(),
 	}
 	config.Set("USE_WORKER", bot.UUID)
-	config.Set("CURRENT_HOME", bot.Home)
 	return h.store.SaveCfg(cfg)
 }
 

@@ -121,19 +121,26 @@ func (h *HttpHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if worker.Home == "" {
+		task.Home = config.CurrentHome()
+	}
+
 	// Set home path if provided
 	if request.HomePath != "" {
 		task.IsDebug = true
 		task.Home = request.HomePath
-		worker.Home = request.HomePath
 	}
 
 	if config.Get("DEBUG_MODE") == "yes" {
 		task.IsDebug = true
 	}
 
-	// Start the task asynchronously
-	go h.manager.Start(input, task, worker)
+	if config.Get("USE_SUBAGENT") != "yes" {
+		go h.manager.Handle(input, task, worker)
+	} else {
+		go h.manager.Start(input, task, worker)
+	}
+
 	response := map[string]any{
 		"success": true, "taskUUID": task.UUID,
 		"message": "Task started successfully",
@@ -163,11 +170,11 @@ func (h *HttpHandler) Global(w http.ResponseWriter, r *http.Request) {
 func (h *HttpHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// 限制上传文件大小 (例如10MB)
 	r.ParseMultipartForm(32 << 20)
-	uuid := r.URL.Query().Get("uuid")
 	if r.MultipartForm == nil || r.MultipartForm.File == nil {
 		JsonResp(w, fmt.Errorf("error upload data"))
 		return
 	}
+	uuid := r.URL.Query().Get("uuid")
 	bot, err := h.manager.QueryWorker(uuid)
 	if bot == nil || err != nil {
 		err = fmt.Errorf("找不到 Bot: %v", err)
@@ -176,10 +183,11 @@ func (h *HttpHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	home := config.CurrentHome()
+	home = support.Or(bot.Home, home)
 	files := r.MultipartForm.File["files"]
-	baseHome := config.GetWorkPath(bot.UUID)
-	bot.Home = support.Or(bot.Home, baseHome)
-	err = h.service.DoUpload(bot.Home, files)
+	err = h.service.DoUpload(home, files)
 	if err != nil {
 		JsonResp(w, err)
 		return
@@ -374,7 +382,7 @@ func (h *HttpHandler) Launch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := r.URL.Query().Get("path")
-	baseHome := config.GetWorkPath(bot.UUID)
+	baseHome := config.CurrentHome()
 	bot.Home = support.Or(bot.Home, baseHome)
 	// Construct the full path to open
 	var targetPath string
@@ -403,6 +411,8 @@ func (h *HttpHandler) Browser(w http.ResponseWriter, r *http.Request) {
 		JsonResp(w, err)
 		return
 	}
+	baseHome := config.CurrentHome()
+	bot.Home = support.Or(bot.Home, baseHome)
 	path := r.URL.Query().Get("path")
 	file := ability.FileSystemAbility{
 		Path: path, Base: bot.Home,

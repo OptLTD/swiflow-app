@@ -15,8 +15,6 @@ export const useAppStore = defineStore('app', {
     content: false,
     refresh: false,
     model: '' as string,
-    multi: false as boolean,
-    authGate: '' as string,
     login: {} as LoginMeta,
     setup: {} as SetupMeta,
     mcpEnv: {} as McpEnvMeta,
@@ -29,6 +27,7 @@ export const useAppStore = defineStore('app', {
       showEpigraph: false
     },
     uploads: [] as string[],
+    gateway: '' as string
   }),
   actions: {
     toggleMenuBar() {
@@ -75,24 +74,18 @@ export const useAppStore = defineStore('app', {
     },
     setSetup(data: SetupMeta) {
       this.setup = data
-      this.useTheme(data.theme)
-      this.useMulti(data.useMulti)
-      if (data.version) {
-        this.version = data.version
-      }
-      if (data.authGate) {
-        this.authGate = data.authGate
+      this.useTheme(data.useTheme)
+      if (data.authGateway) {
+        this.setAuthGate(data.authGateway)
       }
     },
     setRelease(data: any) {
       this.release = data
     },
     setAuthGate(text: string) {
-      this.authGate = text
+      this.gateway = text
     },
-    useMulti(ok: boolean) {
-      this.multi = ok
-    },
+
     useModel(name: string) {
       this.model = name
     },
@@ -133,12 +126,13 @@ export const useAppStore = defineStore('app', {
     getDisplay: (state) => state.display,
     getBotList: (state) => state.botList,
     getMcpList: (state) => state.mcpList,
-    getIsMulti: (state) => state.multi,
     getUseModel: (state) => state.model,
     getVersion: (state) => state.version,
     getRelease: (state) => state.release,
-    getAuthGate: (state) => state.authGate,
-    getUseDebug: (state) => state.setup.useDebug,
+    authGateway: (state) => state.gateway,
+    useIsolated: (state) => state.setup.useIsolated,
+    useSubAgent: (state) => state.setup.useSubAgent,
+    useDebugMode: (state) => state.setup.useDebugMode,
     getTheme: (state) => {
       if (state.theme && state.theme != 'auto') {
         return state.theme

@@ -169,7 +169,9 @@ func (m *DevCommonAbility) cmdWithSandbox(ctx context.Context, cmd string, args 
 
 func (m *DevCommonAbility) cmd(command string, args ...string) *exec.Cmd {
 	cmd := m.cmdWithSandbox(context.Background(), command, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	m.ensureLocalBinInPath(cmd)
+	cmd.Dir = m.home
 	return cmd
 }
 
@@ -188,9 +190,9 @@ func (m *DevCommonAbility) exec(command string, timeout time.Duration) ([]byte, 
 	defer cancel()
 
 	cmd := m.cmdWithSandbox(ctx, "sh", "-c", command)
-	cmd.Dir = m.home
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	m.ensureLocalBinInPath(cmd)
+	cmd.Dir = m.home
 
 	// 获取输出管道
 	stdout, err := cmd.StdoutPipe()
@@ -246,7 +248,9 @@ func (m *DevCommonAbility) start(command string, logFile ...string) error {
 
 	ctx := context.Background()
 	cmd := m.cmdWithSandbox(ctx, "sh", "-c", command)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	m.ensureLocalBinInPath(cmd)
+	cmd.Dir = m.home
 
 	var stdout, stderr bytes.Buffer
 	var logFileHandle *os.File

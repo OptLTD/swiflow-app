@@ -267,20 +267,19 @@ declare type LoginMeta = {
 }
 
 declare type SetupMeta = {
-  theme: string
-  version?: string
-  sandbox: boolean
-  dataPath: string
-  language: "en" | "zh"
-  notification: boolean
+  useTheme: string
   ctxMsgSize: string
+  useSandbox: boolean
+  useWorkPath: string
   maxCallTurns: string
-  useCopy: string
-  useDebug: boolean
-  useMulti: boolean
-  proxyUrl: string
-  authGate: string
+  useCopyMode: string
+  authGateway: string
+  useProxyUrl: string
+  useIsolated: boolean
+  useSubAgent: boolean
+  useDebugMode: boolean
   sendNotifyOn: string[]
+  useLanguage: "en" | "zh"
 }
 
 declare type McpEnvMeta = {

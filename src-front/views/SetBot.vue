@@ -319,7 +319,7 @@ const doUpdateBotDesc = async (bot: BotEntity) => {
     <div id="bot-panel" class="set-main">
       <FormSetBot 
         :servers="app.getMcpList"
-        :is-multi="app.getIsMulti"
+        :is-multi="app.useIsolated"
         ref="theForm" :model="current"
         from="setting" @submit="doSaveBot"
       />

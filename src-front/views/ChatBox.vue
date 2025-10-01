@@ -76,16 +76,6 @@ const handleSend = async() => {
     setTimeout(() => autoScroll(true), 150)
     inputMsg.value = {} as InputMsg
   })
-
-  // const socketMsg: SocketMsg = {
-  //   method: "message",
-  //   action: "user-input",
-  //   taskid: msg.getChatId,
-  //   detail: inputMsg.value
-  // }
-  // const conn = socket.getConnect()
-  // conn!.send(JSON.stringify(socketMsg))
-  // inputMsg.value = {} as InputMsg
 }
 
 const handleStop = async() => {
@@ -295,6 +285,9 @@ const setMsgContent = (content: string) => {
   }
 }
 const getWorkers = (): OptMeta[] => {
+  if (!app.useSubAgent) {
+    return []
+  }
   const leader = app.getActive
   const result = [] as OptMeta[]
   result.push({
@@ -355,7 +348,8 @@ defineExpose({
             class="btn-icon btn-home"
             v-tippy="$t('tips.browserTips')"
           />
-          <ShowSelect :active="currWorker?.uuid"
+          <ShowSelect 
+            v-if="app.useSubAgent" :active="currWorker?.uuid"
             @select="onWorkerChange" :items="getWorkers()">
             <button class="btn-icon btn-switch"/>
           </ShowSelect>

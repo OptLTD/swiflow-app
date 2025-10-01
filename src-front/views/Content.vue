@@ -55,7 +55,7 @@ const copyContent = async () => {
   if (!view.getAction) return
 
   // 根据 app.setup.useCopy 配置决定复制格式
-  const useCopy = app.getSetup?.useCopy || 'display'
+  const useCopy = app.getSetup?.useCopyMode || 'display'
 
   if (useCopy === 'source') {
     const data = view.getAction

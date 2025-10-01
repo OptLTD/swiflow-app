@@ -123,7 +123,7 @@ const loadRelease = async () => {
 const showDialog = async () => {
   const welcome = localStorage.getItem('welcome')
   if (welcome === 'login-success') {
-    showWelcomeModal(app.getAuthGate, {
+    showWelcomeModal(app.authGateway, {
       currentStep: 2,
       login: app.getLogin,
       selectedMode: 'trial',
@@ -132,7 +132,7 @@ const showDialog = async () => {
       localStorage.removeItem('welcome')
     }, 1000)
   } else if (welcome === 'python-install') {
-    showWelcomeModal(app.getAuthGate, {
+    showWelcomeModal(app.authGateway, {
       currentStep: 3,
       pyInstalling: true,
     })
@@ -140,7 +140,7 @@ const showDialog = async () => {
       localStorage.removeItem('welcome')
     }, 1000)
   } else if (!app.getUseModel) {
-    showWelcomeModal(app.getAuthGate, {})
+    showWelcomeModal(app.authGateway, {})
   }
 }
 

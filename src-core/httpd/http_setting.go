@@ -41,6 +41,10 @@ func (h *SettingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	tasks := []map[string]any{}
 	store, _ := h.manager.GetStorage()
 	query := "(`group`='' or `group`=`uuid`)"
+	if config.Get("USE_SUBAGENT") != "yes" {
+		// filter task not by leader
+		query = "(`group`='' or `group`!=`uuid`)"
+	}
 	if list, err := store.LoadTask(query); err == nil {
 		if len(list) == 0 {
 			list, _ = store.LoadTask()
@@ -56,7 +60,8 @@ func (h *SettingHandler) GetMsgs(w http.ResponseWriter, r *http.Request) {
 	uuid := r.URL.Query().Get("task")
 	store, _ := h.manager.GetStorage()
 	tasks, _ := store.LoadTask("group", uuid)
-	if len(tasks) == 0 {
+	useSubagent := config.Get("USE_SUBAGENT")
+	if len(tasks) == 0 || useSubagent != "yes" {
 		tasks, _ = store.LoadTask("uuid", uuid)
 	}
 	context := agent.Context{}
@@ -417,6 +422,11 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "active":
+		service.QueryServer(found)
+		if len(found.Status.McpTools) > 0 {
+			JsonResp(w, found.Status)
+			return
+		}
 		if err := found.Preload(); err != nil {
 			err = JsonResp(w, err)
 			return

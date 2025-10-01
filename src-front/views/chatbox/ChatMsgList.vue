@@ -23,8 +23,8 @@ defineEmits(['check', 'replay', 'display'])
       </MsgDetail>
       <template v-if="loading && loading!.actions">
       <MsgDetail :detail="loading" :loading="true">
-        <template #header>
-          <!-- <MsgHeader :detail="loading"/> -->
+        <template #header v-if="messages.length == 1">
+          <MsgHeader :detail="loading"/>
         </template>
       </MsgDetail>
       </template>

@@ -1,15 +1,9 @@
 package httpd
 
 import (
-	"fmt"
 	"log"
-	"strings"
 	"swiflow/action"
 	"swiflow/agent"
-	"swiflow/config"
-	"swiflow/support"
-
-	"github.com/duke-git/lancet/v2/convertor"
 )
 
 type socketInput struct {
@@ -47,43 +41,6 @@ func (m *WebSocketHandler) OnControl(msg *socketInput) *socketInput {
 }
 
 func (m *WebSocketHandler) OnMessage(msg *socketInput) *socketInput {
-	input := &action.UserInput{}
-	detail, _ := msg.Detail.(map[string]any)
-	if content, ok := detail["content"].(string); ok {
-		input.Content = strings.TrimSpace(content)
-	}
-	if uploads, ok := detail["uploads"].([]any); ok {
-		input.Uploads = []string{}
-		for _, item := range uploads {
-			input.Uploads = append(input.Uploads, fmt.Sprint(item))
-		}
-	}
-
-	uuid := config.GetStr("USE_WORKER", "")
-	if id, _ := detail["workerId"].(string); id != "" {
-		uuid = id
-	}
-	worker, err := m.manager.GetWorker(uuid)
-	if err != nil || worker == nil {
-		support.Emit("errors", "", "get worker error")
-		return msg
-	}
-
-	var task *agent.MyTask
-	if yes, _ := detail["newTask"].(string); yes == "yes" {
-		task, err = m.manager.InitTask(input.Content, msg.TaskID)
-	} else if strings.HasPrefix(msg.TaskID, "#debug#") {
-		worker = convertor.DeepClone(worker)
-		task, err = m.manager.NewMcpTask(msg.TaskID)
-	} else {
-		task, err = m.manager.QueryTask(msg.TaskID)
-	}
-	if task == nil || err != nil {
-		support.Emit("errors", "", "query task error")
-		return msg
-	}
-
-	go m.manager.Start(input, task, worker)
 	return msg
 }
 

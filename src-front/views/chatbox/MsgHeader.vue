@@ -80,6 +80,7 @@ const showContextModal = () => {
   </div>
   
   <ul class="msg-header">
+    <li class="name">{{ worker?.name }}</li>
     <li class="time">{{ timestamp }}</li>
     <li class="btn">
       <tippy v-if="thinking" :theme="theTheme" trigger="mouseenter click">

@@ -149,20 +149,8 @@ func fetchSystemEnv(_ string) {
 	}
 	if err := store.FindCfg(cfg); err == nil {
 		err = manager.UpdateEnv(cfg)
-		log.Println("[BOOT] PRESET ENV", err)
+		log.Println("[ENV] PRESET ENV", err)
 	}
-
-	// @todo bot.Home Future Disabled
-	// cfg = &entity.CfgEntity{
-	// 	Name: entity.KEY_USE_WORKER,
-	// 	Type: entity.KEY_USE_WORKER,
-	// }
-	// if err := store.FindCfg(cfg); err == nil {
-	// 	bot := &entity.BotEntity{}
-	// 	maputil.MapTo(cfg.Data, bot)
-	// 	config.Set("CURRENT_HOME", bot.Home)
-	// 	log.Println("[BOOT] CURRENT_HOME", bot.Home)
-	// }
 }
 
 // 拉取并保存 servers.json
@@ -225,10 +213,10 @@ func startMcpServers(_ string) {
 }
 
 func rebootMcpServers(name string, data any) {
-	bot, _ := data.(*entity.BotEntity)
-	if bot == nil || bot.Home == "" {
-		return
-	}
+	// bot, _ := data.(*entity.BotEntity)
+	// if bot == nil || bot.Home == "" {
+	// 	return
+	// }
 
 	store, err := manager.GetStorage()
 	if err != nil || store == nil {

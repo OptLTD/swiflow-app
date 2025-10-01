@@ -8,11 +8,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
 	"swiflow/config"
 	"swiflow/support"
 	"time"
 
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -55,9 +58,15 @@ func (a *McpClient) Initialize() error {
 			return fmt.Errorf("启动MCP客户端失败: %v", err)
 		}
 	default:
+		opt := transport.WithCommandFunc(func(ctx context.Context, cmd string, env, args []string) (*exec.Cmd, error) {
+			command := exec.CommandContext(ctx, cmd, args...)
+			command.Env = append(os.Environ(), env...)
+			command.Dir = config.CurrentHome()
+			return command, nil
+		})
 		cmdPath, err := config.GetMcpEnv(a.server.Cmd)
-		mcpClient, err = client.NewStdioMCPClient(
-			cmdPath, a.server.GetEnv(), a.server.Args...,
+		mcpClient, err = client.NewStdioMCPClientWithOptions(
+			cmdPath, a.server.GetEnv(), a.server.Args, opt,
 		)
 		if err != nil {
 			return fmt.Errorf("启动MCP客户端失败: %v", err)

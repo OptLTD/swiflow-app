@@ -160,8 +160,7 @@ func (m *Manager) onComplete(tid string, data any) {
 func (m *Manager) Start(input action.Input, task *MyTask, leader *Worker) {
 	// debug mode, it's worker
 	if leader.Leader != "" {
-		task.Home = config.GetWorkPath(leader.Leader)
-		config.Set("CURRENT_HOME", task.Home)
+		task.Home = config.CurrentHome()
 		m.Handle(input, task, leader)
 		return
 	}
@@ -281,8 +280,6 @@ func (m *Manager) QueryWorker(uuid string) (*Worker, error) {
 		log.Println("[AGENT] find bot err:", uuid, err)
 		return nil, err
 	}
-	baseHome := config.GetWorkPath(worker.UUID)
-	worker.Home = support.Or(worker.Home, baseHome)
 	return worker, nil
 }
 
@@ -330,8 +327,6 @@ func (m *Manager) GetLLMConfig(name string) *model.LLMConfig {
 }
 
 func (m *Manager) GetExecutor(task *MyTask, worker *Worker) *Executor {
-	baseHome := config.GetWorkPath(worker.UUID)
-	worker.Home = support.Or(worker.Home, baseHome)
 	payload := &Payload{
 		UUID: task.UUID,
 		Time: time.Now(),
@@ -438,21 +433,36 @@ func (h *Manager) UpdateEnv(cfg *entity.CfgEntity) error {
 	for key, val := range cfg.Data {
 		var err error
 		switch key {
-		case "proxyUrl":
+		case "useProxyUrl":
 			err = config.Set("PROXY_URL", fmt.Sprint(val))
-		case "authGate":
+		case "authGateway":
 			err = config.Set("AUTH_GATE", fmt.Sprint(val))
-		case "useDebug":
+		case "useDebugMode":
 			if yes, ok := val.(bool); ok && yes {
 				err = config.Set("DEBUG_MODE", "yes")
 			} else {
 				err = config.Set("DEBUG_MODE", "no")
 			}
-		case "dataPath":
+		case "useSubAgent":
+			if yes, ok := val.(bool); ok && yes {
+				err = config.Set("USE_SUBAGENT", "yes")
+			} else {
+				err = config.Set("USE_SUBAGENT", "no")
+			}
+		case "useWorkPath":
 			if path, _ := val.(string); path == "" {
+				baseHome := config.GetWorkPath("secrets")
+				config.Set("CURRENT_HOME", baseHome)
 				continue
 			}
-			err = config.Set("SWIFLOW_HOME", fmt.Sprint(val))
+
+			origin := config.GetStr("CURRENT_HOME", "")
+			if origin != "" && origin != fmt.Sprint(val) {
+				config.Set("CURRENT_HOME", fmt.Sprint(val))
+				support.Emit("mcp-reboot", "UpdateEnv", nil)
+			} else {
+				config.Set("CURRENT_HOME", fmt.Sprint(val))
+			}
 		case "ctxMsgSize":
 			err = config.Set("CTX_MSG_SIZE", fmt.Sprint(val))
 		case "maxCallTurns":
