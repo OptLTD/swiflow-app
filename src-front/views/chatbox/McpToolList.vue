@@ -36,6 +36,7 @@ const install = ref({
 const buttonControl = computed(() => {
   // Priority 0: Missing components
   if (unref(lossCmd).length > 0) {
+    console.log(unref(lossCmd), 'lossCmd')
     return {
       text: '⚠️ 缺少必要组件，请点击修复',
       classes: ['btn-warning'],

@@ -88,26 +88,6 @@ const copyContent = async () => {
   }
 }
 
-const showReplay = computed(() => {
-  if (!view.getAction || 1) {
-    return false
-  }
-  const data = view.getAction
-  switch (data?.type) {
-    case "use-mcp-tool":
-    case "use-self-tool":
-    case "execute-command": {
-      return true
-    }
-    case 'file-text-replace':
-    case 'file-get-content':
-    case 'file-put-content': {
-      return true
-    }
-  }
-  return false
-})
-
 const result = computed(() => {
   if (!view.getAction) {
     return ''
@@ -127,9 +107,6 @@ const result = computed(() => {
   </div>
   <!-- content -->
   <div v-if="view.getAction" id="main-content">
-    <button class="btn-replay" v-if="showReplay" @click="replay">
-      REPLAY
-    </button>
     <!-- 复制按钮 -->
     <button v-if="isSupported"
       @click="copyContent" class="btn-copy"
@@ -162,17 +139,6 @@ const result = computed(() => {
   border: 0;
   width: 100%;
   height: 100%;
-}
-
-#main-content .btn-replay{
-  top: 12px;
-  right: 12px;
-  padding: 8px 12px;
-  display: none;
-  position: absolute;
-  vertical-align: middle;
-  align-items: center;
-  flex-direction: row;
 }
 
 #main-content .btn-copy{

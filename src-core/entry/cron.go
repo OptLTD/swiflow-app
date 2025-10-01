@@ -154,8 +154,8 @@ func fetchSystemEnv(_ string) {
 
 	// @todo bot.Home Future Disabled
 	// cfg = &entity.CfgEntity{
-	// 	Name: entity.KEY_ACTIVE_BOT,
-	// 	Type: entity.KEY_ACTIVE_BOT,
+	// 	Name: entity.KEY_USE_WORKER,
+	// 	Type: entity.KEY_USE_WORKER,
 	// }
 	// if err := store.FindCfg(cfg); err == nil {
 	// 	bot := &entity.BotEntity{}

@@ -24,7 +24,7 @@ defineEmits(['check', 'replay', 'display'])
       <template v-if="loading && loading!.actions">
       <MsgDetail :detail="loading" :loading="true">
         <template #header>
-          <MsgHeader :detail="loading"/>
+          <!-- <MsgHeader :detail="loading"/> -->
         </template>
       </MsgDetail>
       </template>

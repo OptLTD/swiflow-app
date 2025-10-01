@@ -89,6 +89,12 @@ func (h *HttpServie) GetMcpEnv() any {
 		result["uvx"] = strings.Split(env, "(")[0]
 	}
 
+	// uv env check
+	if data, err := dev.Run("uv", 3*time.Second, "-V"); err == nil {
+		env := strings.TrimSpace(string(data))
+		result["uv"] = strings.Split(env, "(")[0]
+	}
+
 	// node.js env check
 	if data, err := dev.Run("node", 3*time.Second, "-v"); err == nil {
 		result["nodejs"] = strings.TrimSpace(string(data))

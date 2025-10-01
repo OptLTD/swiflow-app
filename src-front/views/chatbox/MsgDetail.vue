@@ -4,7 +4,7 @@ import { computed, PropType } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useViewStore } from '@/stores/view'
 import { getActDesc } from '@/logics/chat'
-import { showDisplayAct } from '@/logics/chat'
+import { canShowDisplayAct } from '@/logics/chat'
 
 const emit = defineEmits(["check", 'display'])
 const app = useAppStore()
@@ -159,7 +159,7 @@ const hasMoreArgs = [
         <div class="rich-text" v-html="render(act)" />
       </div>
       <div class="msg-act" v-else-if="act.type == 'complete'">
-        <template v-if="!showDisplayAct(act)">
+        <template v-if="!canShowDisplayAct(act)">
           <div class="rich-text" v-html="render(act)" />
         </template>
         <div v-else class="act-card" @click="$emit('display', act)">

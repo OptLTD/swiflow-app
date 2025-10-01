@@ -17,8 +17,9 @@ import ShowSelect from './chatbox/ShowSelect.vue'
 import McpToolList from './chatbox/McpToolList.vue'
 import UploadFiles from './chatbox/UploadFiles.vue'
 import { setBotTools } from '@/logics/chat'
-import { showDisplayAct } from '@/logics/chat'
 import { autoScrollToEnd } from '@/logics/chat'
+import { shouldAutoDisplay } from '@/logics/chat'
+import { canShowDisplayAct } from '@/logics/chat'
 
 const app = useAppStore()
 const msg = useMsgStore()
@@ -169,8 +170,13 @@ const handleGoHome = () => {
 }
 
 const handleDisplay = (act: MsgAct) => {
-  const show = showDisplayAct(act)
-  if (!act.result && show === false) {
+  const shouldDisplay = shouldAutoDisplay(act)
+  const canShowComplete = canShowDisplayAct(act)
+  if (shouldDisplay && !canShowComplete) {
+    return
+  }
+  const skip = ['complete', 'start-subtask']
+  if (!act.result && !skip.includes(act.type)) {
     return
   }
   view.setAction(act)
@@ -212,7 +218,7 @@ const startPlayAction = (msg: ActionMsg, force: boolean = false) => {
     return null
   }
   const find = msg.actions.find(x => {
-    return showDisplayAct(x)
+    return canShowDisplayAct(x)
   })
   if (!find && force && app.getContent) {
     view.setAction(null)
@@ -252,14 +258,18 @@ watch(() => task.getActive, (uuid) => {
 onMounted(() => {
   currWorker.value = app.getActive
   eventEmitter.on('respond', (socketMsg: SocketMsg) => {
-    console.log('Received respond message:', socketMsg)
+    if (socketMsg.taskid != task.getActive) {
+      console.log('Respond message not match:', socketMsg)
+      return
+    }
+    console.log('Respond message:', socketMsg)
     // Add response message to local messages
     messages.value.push(socketMsg.detail)
     startPlayAction(socketMsg.detail)
   })
   
   eventEmitter.on('next-msg', (data: any) => {
-    if (data.nextMsg) {
+    if (msg.getSubtasks.includes(data.taskid)) {
       console.log('Received next-msg message:', data)
       startPlayAction(data.nextMsg)
       setTimeout(() => autoScroll(false), 150)
@@ -345,9 +355,8 @@ defineExpose({
             class="btn-icon btn-home"
             v-tippy="$t('tips.browserTips')"
           />
-          <ShowSelect v-if="app.getUseDebug"
-            @select="onWorkerChange" :items="getWorkers()"
-            :active="currWorker?.uuid" :enable="!task.getActive">
+          <ShowSelect :active="currWorker?.uuid"
+            @select="onWorkerChange" :items="getWorkers()">
             <button class="btn-icon btn-switch"/>
           </ShowSelect>
           <McpToolList v-if="app.getLoaded"
@@ -355,7 +364,6 @@ defineExpose({
             :tools="currWorker?.tools" :enable="!task.getActive">
             <button class="btn-icon btn-tools"/>
           </McpToolList>
-         
         </template>
       </ChatInput>
     </div>

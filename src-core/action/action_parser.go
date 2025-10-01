@@ -28,7 +28,6 @@ type Input interface {
 type Payload struct {
 	UUID string `json:"uuid"`
 	Home string `json:"home"`
-	// Path string `json:"path"`
 
 	Time time.Time `json:"time"`
 }
@@ -270,12 +269,15 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 			result[hash] = res.Result
 		case *FileReplaceText:
 			result[hash] = res.Result
-		// 自研Bot工具
+		// Subtask
 		case *StartSubtask:
 			result[hash] = res.Result
 		case *QuerySubtask:
 			result[hash] = res.Result
 		case *AbortSubtask:
+			result[hash] = res.Result
+		// MCP工具
+		case *UseMcpTool:
 			result[hash] = res.Result
 		// MCP工具
 		case *UseBuiltinTool:
@@ -311,6 +313,9 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 		case *AbortSubtask:
 			res.Result, _ = result[hash]
 		// MCP工具
+		case *UseMcpTool:
+			res.Result, _ = result[hash]
+		// 内置工具
 		case *UseBuiltinTool:
 			res.Result, _ = result[hash]
 		}

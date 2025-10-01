@@ -138,21 +138,22 @@ func (m *Manager) onComplete(tid string, data any) {
 	if tid == "" {
 		return
 	}
+	var subagent *SubAgent
+	for _, item := range m.subagents {
+		if item.mytask == nil {
+			continue
+		}
+		if item.mytask.UUID == tid {
+			subagent = item
+			break
+		}
+	}
 	log.Println("[AGENT] task complete", tid)
-	if act, ok := data.(*action.Complete); ok {
-		var subagent *SubAgent
-		for _, item := range m.subagents {
-			if item.mytask == nil {
-				continue
-			}
-			if item.mytask.UUID == tid {
-				subagent = item
-				break
-			}
-		}
-		if subagent != nil {
-			subagent.OnComplete(act)
-		}
+	act, _ := data.(*action.Complete)
+	if subagent != nil && act != nil {
+		subagent.OnComplete(act)
+	} else {
+		log.Println("[AGENT] subagent not found", tid)
 	}
 }
 

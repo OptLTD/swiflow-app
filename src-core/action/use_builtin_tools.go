@@ -8,7 +8,7 @@ import (
 
 // UseBuiltinTool 用于调用MCP服务器提供的工具
 type UseBuiltinTool struct {
-	XMLName xml.Name `xml:"use-inbuilt-tool"`
+	XMLName xml.Name `xml:"use-builtin-tool"`
 
 	Desc string `xml:"desc" json:"desc"`
 	Tool string `xml:"tool" json:"tool"`

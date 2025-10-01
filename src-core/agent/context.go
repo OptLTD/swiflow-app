@@ -286,9 +286,9 @@ func (c *Context) UsePrompt() *string {
 
 	var tools, _ = c.store.LoadTool()
 	var manager = builtin.GetManager().Init(tools)
-	inbuilt := manager.GetPrompt(c.worker.Tools)
 	prompt = strings.ReplaceAll(
-		prompt, "${{BUILTIN_TOOLS}}", inbuilt,
+		prompt, "${{BUILTIN_TOOLS}}",
+		manager.GetPrompt(c.worker.Tools),
 	)
 
 	mcpServ := amcp.GetMcpService(c.store)

@@ -14,8 +14,12 @@ const isScrollToEnd = (container: HTMLElement) => {
 
 export const AUTO_DISPLAY = ['complete']
 
-export const showDisplayAct = (msg: MsgAct) => {
-  if (!AUTO_DISPLAY.includes(msg.type)) {
+export const shouldAutoDisplay = (msg: MsgAct) => {
+  return AUTO_DISPLAY.includes(msg.type)
+}
+
+export const canShowDisplayAct = (msg: MsgAct) => {
+  if (!shouldAutoDisplay(msg)) {
     return false;
   }
   const data = (msg as Complete).content
@@ -183,7 +187,7 @@ export const getActDesc = (item: MsgAct): string => {
     }
     case "start-subtask": {
       const act = (item as StartSubtask)
-      return `执行子任务: ${act['sub-agent']}`
+      return `执行子任务: ${act['task-desc']}`
     }
     case "query-subtask": {
       const act = (item as QuerySubtask)
@@ -208,7 +212,11 @@ export const getActDesc = (item: MsgAct): string => {
     }
     case "use-mcp-tool": {
       const act = (item as UseMcpTool)
-      return `Use Tool: ${act.desc}`
+      return `Use Mcp: ${act.desc}`
+    }
+    case "use-builtin-tool": {
+      const act = (item as UseBuiltinTool)
+      return `内置工具(${act.tool}): ${act.desc}`
     }
   }
   return `undefined ${item.type}`
@@ -304,6 +312,16 @@ export const getActHtml = (data: MsgAct) => {
         content = result
       }
       return md.render(content.trim())
+    }
+    case 'start-subtask': {
+      const act = (data as StartSubtask)
+      var content = '### Task Desc\n\n```plain\n{{TASKDESC}}\n```\n\n'
+      content += '### Context\n\n{{CONTEXT}}\n\n'
+      content += '### Require\n\n{{REQUIRE}}\n\n'
+      content = content.replace('{{TASKDESC}}', act['task-desc'] || '')
+      content = content.replace('{{CONTEXT}}', act.context || '')
+      content = content.replace('{{REQUIRE}}', act.require || '')
+      return md.render(content)
     }
   }
   return ''
