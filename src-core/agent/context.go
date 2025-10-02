@@ -140,6 +140,14 @@ func (c *Context) GetContext() []*model.Message {
 	return messages
 }
 
+func (c *Context) HasMcpError() bool {
+	if finalPrompt := c.GetPrompt(); finalPrompt == "" {
+		return true
+	} else {
+		return strings.Contains(finalPrompt, amcp.NO_TOOL_MSG)
+	}
+}
+
 func (c *Context) GetSubject() string {
 	return c.mytask.Name
 }
@@ -293,6 +301,9 @@ func (c *Context) UsePrompt() *string {
 
 	mcpServ := amcp.GetMcpService(c.store)
 	mcpTools := mcpServ.GetPrompt(c.worker)
+	if strings.Contains(mcpTools, amcp.NO_TOOL_MSG) {
+		return nil
+	}
 	c.usePrompt = strings.ReplaceAll(
 		prompt, "${{MCP_TOOLS}}", mcpTools,
 	)

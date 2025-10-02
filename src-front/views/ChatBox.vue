@@ -49,8 +49,9 @@ const handleSend = async() => {
     const newTaskId = nanoid(12)
     inputMsg.value.startNew = 'yes'
     inputMsg.value.taskUUID = newTaskId
-    msg.setTaskId(newTaskId)
     task.setActive(newTaskId)
+    msg.setTaskId(newTaskId)
+    msg.setSubtasks([newTaskId])
   } else {
     inputMsg.value.taskUUID = task.getActive
   }
@@ -73,6 +74,7 @@ const handleSend = async() => {
     // Add user input message to local messages
     const action = { type: 'user-input', ...inputMsg.value }
     messages.value.push({ actions: [action] } as ActionMsg)
+    msg.setNextMsg({ actions: [] as any[]} as ActionMsg)
     setTimeout(() => autoScroll(true), 150)
     inputMsg.value = {} as InputMsg
   })
@@ -116,6 +118,9 @@ const loadTaskInfo = async (uuid: string) => {
     taskInfo.value = resp as TaskEntity
     msg.setRunning(resp.state == 'running')
     msg.setSubtasks(taskInfo.value.subtasks)
+    if (msg.getSubtasks.length === 0) {
+      msg.setSubtasks([uuid])
+    }
   } catch (e) {
     console.error('use bot:', e)
   }

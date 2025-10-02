@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+const NO_TOOL_MSG = "error:no-tools"
+
 type McpService struct {
 	storage *McpStorage
 	mockdb  *storage.MockStore
@@ -134,7 +136,7 @@ func (m *McpService) GetPrompt(worker *entity.BotEntity) string {
 		tools := server.Status.McpTools
 		if enable && len(tools) == 0 {
 			prompt.Reset()
-			prompt.WriteString("error:server-no-tools")
+			prompt.WriteString(NO_TOOL_MSG)
 			break
 		}
 	}
@@ -221,9 +223,9 @@ func (m *McpService) LoadMcpServer(mcps map[string]any) {
 		if len(server.Status.McpTools) == 0 {
 			// need load package first
 			if err := m.ServerStatus(server); err != nil {
-				log.Printf("[MCP] 启动服务器 %s 失败: %v", server.Name, err)
+				log.Printf("[MCP] Start %s err: %v", server.Name, err)
 			} else {
-				log.Printf("[MCP] 启动服务器 %s 成功", server.Name)
+				log.Printf("[MCP] Start %s ok", server.Name)
 			}
 			m.EnableServer(server)
 		}

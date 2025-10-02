@@ -422,8 +422,9 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "active":
+		status := found.Status
 		service.QueryServer(found)
-		if len(found.Status.McpTools) > 0 {
+		if status.Active && len(status.McpTools) > 0 {
 			JsonResp(w, found.Status)
 			return
 		}

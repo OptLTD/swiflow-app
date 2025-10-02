@@ -108,6 +108,13 @@ func (r *Executor) Handle() *action.SuperAction {
 			support.Emit("errors", r.UUID, errors.ErrTaskTerminatedByUser)
 			break
 		}
+		if r.context.HasMcpError() {
+			r.currentState = STATE_FAILED
+			log.Println("[EXEC] task", r.UUID, errors.ErrListMcpToolsError)
+			support.Emit("errors", r.UUID, errors.ErrListMcpToolsError)
+			break
+		}
+
 		currMsgId, _ := support.UniqueID()
 		messages := r.context.GetContext()
 

@@ -69,7 +69,11 @@ func Load(data string) []*SuperAction {
 	var response *SuperAction
 	thinking, datetime := "", ""
 	for strings.TrimSpace(data) != "" {
-		re := regexp.MustCompile(`<([^/>]+)>`)
+		// 原格式（过于宽松，易误判普通文本为标签）：
+		// re := regexp.MustCompile(`(?s)<([^/>]+)>`)
+		// 说明：该正则会将 `<` 后所有非 `/>` 的内容当作标签名，
+		// 在包含中文、空格或括号时会导致后续动态拼接正则触发 panic。
+		re := regexp.MustCompile(`(?s)<([a-zA-Z][a-zA-Z0-9-]*)>`)
 		matches := re.FindStringSubmatch(data)
 		if len(matches) == 0 || data == "" {
 			break
@@ -135,7 +139,10 @@ func Parse(data string) *SuperAction {
 		Origin: data, UseTools: []any{},
 	}
 
-	var tagreg = `(?s)<([^/>]+)>`
+	// 原格式（过于宽松，易误判普通文本为标签）：
+	// var tagreg = `(?s)<([^/>]+)>`
+	// 说明：仅匹配合法标签名（字母开头，允许数字与连字符）以避免误判。
+	var tagreg = `(?s)<([a-zA-Z][a-zA-Z0-9-]*)>`
 	re := regexp.MustCompile(tagreg)
 
 	attamp, max, left, curr := 0, 10, data, ""
@@ -358,7 +365,10 @@ func (act *SuperAction) MarshalJSON() ([]byte, error) {
 }
 
 func snap(text string, tag string) (string, string) {
-	regex := fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, tag, tag)
+	// 注意：标签名需进行正则转义。原先直接插入会在包含特殊字符时触发 panic：
+	// fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, tag, tag)
+	qtag := regexp.QuoteMeta(tag)
+	regex := fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, qtag, qtag)
 	result := regexp.MustCompile(regex).FindStringSubmatch(text)
 	if len(result) == 0 {
 		return text, ""
@@ -373,7 +383,9 @@ func parse(text string) any {
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
-	var tagreg = `(?s)<([^/>]+)>`
+	// 原格式（过于宽松，易误判普通文本为标签）：
+	// var tagreg = `(?s)<([^/>]+)>`
+	var tagreg = `(?s)<([a-zA-Z][a-zA-Z0-9-]*)>`
 	re := regexp.MustCompile(tagreg)
 	matches := re.FindStringSubmatch(text)
 	if len(matches) == 0 || matches[1] == "" {
@@ -484,7 +496,10 @@ func parseAction(text string, target any) error {
 		if fieldMeta.Name == "XMLName" {
 			for tagName := range strings.SplitSeq(tag, "/") {
 				fieldData.Set(reflect.ValueOf(xml.Name{Local: tagName}))
-				tagreg := fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, tagName, tagName)
+				// 原做法：直接拼接标签名到正则，若标签名包含特殊字符会导致 panic。
+				// 修正：使用 QuoteMeta 对标签名进行正则转义。
+				q := regexp.QuoteMeta(tagName)
+				tagreg := fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, q, q)
 				matches := regexp.MustCompile(tagreg).FindStringSubmatch(content)
 				if len(matches) > 1 {
 					content = matches[1]
@@ -494,7 +509,9 @@ func parseAction(text string, target any) error {
 
 		switch fieldData.Kind() {
 		case reflect.String:
-			tagreg := fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, tagName, tagName)
+			// 为避免特殊字符引发的正则编译错误，这里统一进行转义处理。
+			q := regexp.QuoteMeta(tagName)
+			tagreg := fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, q, q)
 			matches := regexp.MustCompile(tagreg).FindStringSubmatch(content)
 			if len(matches) > 1 {
 				fieldData.SetString(matches[1])
@@ -502,13 +519,17 @@ func parseAction(text string, target any) error {
 				fieldData.SetString(content)
 			}
 		case reflect.Interface:
-			tagreg := fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, tagName, tagName)
+			// 为避免特殊字符引发的正则编译错误，这里统一进行转义处理。
+			q := regexp.QuoteMeta(tagName)
+			tagreg := fmt.Sprintf(`(?s)<%s>(.*?)(</%s>|$)`, q, q)
 			matches := regexp.MustCompile(tagreg).FindStringSubmatch(content)
 			if len(matches) > 1 {
 				fieldData.Set(reflect.ValueOf(matches[1]))
 			}
 		case reflect.Slice:
-			tagreg := fmt.Sprintf("(?s)<%s>(.*?)</%s>", tagName, tagName)
+			// 为避免特殊字符引发的正则编译错误，这里统一进行转义处理。
+			q := regexp.QuoteMeta(tagName)
+			tagreg := fmt.Sprintf("(?s)<%s>(.*?)</%s>", q, q)
 			matches := regexp.MustCompile(tagreg).FindAllStringSubmatch(content, -1)
 			if len(matches) > 0 {
 				options := make([]string, 0, len(matches))
