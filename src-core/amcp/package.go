@@ -82,6 +82,8 @@ func (pkg *PackageInfo) GetProgressKey() string {
 // IsInstalled checks if this package is already installed locally
 func (pkg *PackageInfo) IsInstalled() (bool, error) {
 	switch pkg.Manager {
+	case "uv":
+		return true, nil
 	case "uvx":
 		return pkg.isUvxPackageInstalled()
 	case "npx":
@@ -244,9 +246,11 @@ func (pkg *PackageInfo) ParseCommand(cmd string, args []string) error {
 		return pkg.parseUvxCommand(args)
 	} else if strings.Contains(cmd, "npx") {
 		return pkg.parseNpxCommand(args)
-	} else {
-		return fmt.Errorf("unsupported command: %s", cmd)
+	} else if strings.HasPrefix(cmd, "uv") {
+		pkg.Manager, pkg.Name = "uv", "local"
+		return nil
 	}
+	return fmt.Errorf("unsupported command: %s", cmd)
 }
 
 // parseUvxCommand parses uvx command arguments to extract package information
