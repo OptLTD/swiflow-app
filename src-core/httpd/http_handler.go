@@ -12,6 +12,7 @@ import (
 	"swiflow/ability"
 	"swiflow/action"
 	"swiflow/agent"
+	"swiflow/builtin"
 	"swiflow/config"
 	"swiflow/entity"
 	"swiflow/initial"
@@ -68,9 +69,75 @@ func (h *HttpHandler) Static(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.FS(subfs)).ServeHTTP(w, r)
 }
 
-func (h *HttpHandler) Clean(w http.ResponseWriter, r *http.Request) {
-	uuid := r.URL.Query().Get("uuid")
-	JsonResp(w, "clean success"+uuid)
+func (h *HttpHandler) Intent(w http.ResponseWriter, r *http.Request) {
+	// Parse request body to get input data
+	var request struct {
+		Session string   `json:"session"`
+		Content string   `json:"content"`
+		Uploads []string `json:"uploads"`
+	}
+	if err := h.service.ReadTo(r.Body, &request); err != nil {
+		JsonResp(w, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	var manager = builtin.GetManager()
+	var store, _ = h.manager.GetStorage()
+	if len(manager.AllTools()) == 0 {
+		tools, _ := store.LoadTool()
+		manager.Init(tools)
+	}
+
+	// get tool and recognition intent
+	var intentTool *builtin.GetIntentTool
+	if tool, err := manager.Query("get-intent"); err != nil {
+		JsonResp(w, fmt.Errorf("get intent tool error: %w", err))
+		return
+	} else if tool, ok := tool.(*builtin.GetIntentTool); !ok {
+		JsonResp(w, fmt.Errorf("get intent tool error: %v", ok))
+		return
+	} else {
+		intentTool = tool
+	}
+
+	var events = h.service.GetEvents(request.Session)
+	var intent, err = intentTool.Submit(request.Content, events)
+	if err != nil || intent == nil {
+		JsonResp(w, fmt.Errorf("get intent error: %w", err))
+		return
+	} else if intent.Intent != "task" {
+		JsonResp(w, intent)
+		return
+	}
+
+	worker, err := h.manager.GetWorker(intent.Worker)
+	if err != nil || worker == nil {
+		JsonResp(w, fmt.Errorf("get worker error: %w", err))
+		return
+	}
+
+	// Handle task creation/retrieval logic
+	var task *agent.MyTask
+	if intent.TaskID == "" {
+		taskid := fmt.Sprintf("%s-%d", request.Session, time.Now().Unix())
+		task, err = h.manager.InitTask(request.Content, taskid)
+	} else {
+		task, err = h.manager.QueryTask(intent.TaskID)
+	}
+	if task == nil || err != nil {
+		JsonResp(w, fmt.Errorf("query task error: %w", err))
+		return
+	}
+
+	if config.Get("DEBUG_MODE") == "yes" {
+		task.IsDebug = true
+	}
+	task.Home = config.CurrentHome()
+	input := &action.UserInput{
+		Content: request.Content,
+	}
+	go h.manager.Handle(input, task, worker)
+	JsonResp(w, intent)
 }
 
 // Start chat handle

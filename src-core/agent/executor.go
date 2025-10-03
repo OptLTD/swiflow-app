@@ -230,15 +230,32 @@ func (r *Executor) Handle() *action.SuperAction {
 }
 
 func (r *Executor) PlayAction(super *action.SuperAction) string {
-	replyMsgs := []string{}
-	for _, tool := range super.UseTools {
-		switch act := tool.(type) {
-		case action.IAct:
-			result := act.Handle(super)
-			if support.Bool(result) {
-				reply := support.ToXML(act, nil)
-				replyMsgs = append(replyMsgs, reply)
-			}
+	// 并行执行 IAct.Handle，并保持结果顺序
+	// 通过有界并发控制最大并发数，避免资源过载
+	maxWorkers := config.GetInt("CONCURRENCY", 4)
+	sem := make(chan struct{}, maxWorkers)
+	wg, replyMsgs := sync.WaitGroup{}, []string{}
+	replies := make([]string, len(super.UseTools))
+	for idx, tool := range super.UseTools {
+		if act, ok := tool.(action.IAct); ok {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int, a action.IAct) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				result := a.Handle(super)
+				if support.Bool(result) {
+					reply := support.ToXML(a, nil)
+					replies[i] = reply
+				}
+			}(idx, act)
+		}
+	}
+	wg.Wait()
+
+	for _, rpl := range replies {
+		if rpl != "" {
+			replyMsgs = append(replyMsgs, rpl)
 		}
 	}
 	if super.Context != nil {

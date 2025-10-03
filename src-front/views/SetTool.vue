@@ -23,8 +23,9 @@ const { t, te } = useI18n({
 
 // Intent: Provide localized name/description for specific builtin tools
 const labelOf = (item: ToolEntity) => {
-  const keyName = `builtin.${item?.name}Name`
-  const keyDesc = `builtin.${item?.name}Desc`
+  const key = item.uuid.replace('-', '')
+  const keyName = `builtin.${key}Name`
+  const keyDesc = `builtin.${key}Desc`
   const name =  te(keyName) ? t(keyName) : item.name 
   const desc = te(keyDesc) ? t(keyDesc) : item?.desc 
   return { name, desc }
@@ -92,12 +93,12 @@ const doSubmitTool = async (item: ToolEntity) => {
 }
 
 const builtin = [
-  `chat2llm`, `image_ocr`,
-  `command`, `python3`
+  `chat2llm`, `image-ocr`,
+  `command`, `python3`, `get-intent`
 ]
 const isBaseLLM = computed(() => {
-  const llmBaseType = [`chat2llm`, `image_ocr`,]
-  return llmBaseType.includes(current.value?.name)
+  const llmBaseType = [`chat2llm`, `image-ocr`, `get-intent`]
+  return llmBaseType.includes(current.value?.uuid)
 })
 </script>
 

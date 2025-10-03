@@ -2,8 +2,10 @@ export default {
   builtin: {
     chat2llmName: 'Chat2LLM 对话工具',
     chat2llmDesc: '直接调用模型进行问答与推理',
-    image_ocrName: '图像 OCR 识别',
-    image_ocrDesc: '提取图片中的文字内容',
+    imageocrName: '图像 OCR 识别',
+    imageocrDesc: '提取图片中的文字内容',
+    getintentName: '用户意图识别',
+    getintentDesc: '根据用户输入识别意图',
     commandName: '系统命令执行',
     commandDesc: '在受控环境中执行命令',
     python3Name: 'Python3 运行环境',

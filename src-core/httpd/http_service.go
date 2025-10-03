@@ -839,3 +839,45 @@ func (h *HttpServie) DoImport(files []*multipart.FileHeader) ([]*entity.BotEntit
 	}
 	return allWorkers, nil
 }
+func (h *HttpServie) GetEvents(session string) string {
+	var builder strings.Builder
+
+	workers, err := h.store.LoadBot()
+	if err == nil && len(workers) > 0 {
+		builder.WriteString("\n\n---------------\n\n")
+		builder.WriteString("# Available Workers\n\n")
+		for _, worker := range workers {
+			if worker.Leader == "" {
+				continue
+			}
+			if worker.Type == "leader" {
+				continue
+			}
+			builder.WriteString(fmt.Sprintf(
+				"- **%s(id:%s)**\n",
+				worker.Name, worker.UUID,
+			))
+			builder.WriteString(fmt.Sprintf(
+				"Desc:   \n%s\n", worker.Desc,
+			))
+		}
+	}
+
+	tasks, err := h.store.LoadTask("trace", session)
+	if err == nil && len(tasks) > 0 {
+		builder.WriteString("\n\n---------------\n\n")
+		builder.WriteString("# Recent Tasks     \n\n")
+		for _, task := range tasks {
+			builder.WriteString(fmt.Sprintf(
+				"## - **%s(id:%s)**\n",
+				task.Name, task.UUID,
+			))
+			builder.WriteString(fmt.Sprintf(
+				"**%s**:\n```md\n%s\n```\n\n",
+				"Context", task.Context,
+			))
+		}
+	}
+
+	return builder.String()
+}

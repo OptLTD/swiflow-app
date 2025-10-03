@@ -13,6 +13,7 @@ type TaskEntity struct {
 	Desc  string `json:"desc" gorm:"column:desc;size:200"`
 	State string `json:"state" gorm:"column:state;size:10"`
 	Group string `json:"group" gorm:"column:group;size:36"`
+	Trace string `json:"trace" gorm:"column:trace;size:36"`
 	BotId string `json:"botid" gorm:"column:botid;size:36"`
 	// 任务状态 (process, running, completed, failed, canceled)
 

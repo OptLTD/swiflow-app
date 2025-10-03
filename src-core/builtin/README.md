@@ -13,9 +13,9 @@ The builtin tools module provides a small set of ready-to-use capabilities expos
 
 - `command` — execute a system shell command within the app’s working home
 - `python3` — run Python 3 code snippets (requires Python in PATH)
-- `image_ocr` — perform OCR on image content using configured LLM provider
+- `image-ocr` — perform OCR on image content using configured LLM provider
 - `chat2llm` — send text to an LLM and return the response
-- `cmd_alias` — auto-generated entries that wrap saved tools (based on `llm_tool` storage records)
+- `cmd-alias` — auto-generated entries that wrap saved tools (based on `llm_tool` storage records)
 
 Each tool exposes:
 
@@ -27,7 +27,7 @@ Each tool exposes:
 The manager is accessed through `builtin.GetManager()` and initialized via `Init(store)`:
 
 1. Clears the internal tool list to avoid duplicates on re-init
-2. Loads `cfg-data` records to build clients for tools like `image_ocr` and `chat2llm`
+2. Loads `cfg-data` records to build clients for tools like `image-ocr` and `chat2llm`
 3. Appends builtins: `CommandTool`, `Python3Tool`, and conditionally `ImageOCRTool`, `Chat2LLMTool`
 4. Loads saved tools from `llm_tool` and appends them as `CmdAliasTool`
 
@@ -57,7 +57,7 @@ This supports UI layers to render available tools and display usage guidance.
 
 At runtime, tools are resolved by name through `Query(name)`:
 
-- `chat2llm`, `image_ocr`, `command`, `python3` map to their respective builtin implementations
+- `chat2llm`, `image-ocr`, `command`, `python3` map to their respective builtin implementations
 - Saved aliases are resolved by their `UUID` (the UUID generated for the saved tool record)
 
 ## Storage Model

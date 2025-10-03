@@ -58,7 +58,8 @@ func (a *BuiltinManager) Init(tools []*entity.ToolEntity) *BuiltinManager {
 	ensure("command", "command tool")
 	ensure("python3", "python3 tool")
 	ensure("chat2llm", "chat2llm tool")
-	ensure("image_ocr", "image_ocr tool")
+	ensure("image-ocr", "image-ocr tool")
+	ensure("get-intent", "image-ocr tool")
 
 	// Append remaining tools preserving order
 	tail := make([]*entity.ToolEntity, 0, len(src))
@@ -73,7 +74,14 @@ func (a *BuiltinManager) Init(tools []*entity.ToolEntity) *BuiltinManager {
 	return a
 }
 
-func (a *BuiltinManager) List() []*entity.ToolEntity {
+func (a *BuiltinManager) GetList() []*entity.ToolEntity {
+	var hidden = []string{"get-intent"}
+	return slice.Filter(a.tools, func(idx int, t *entity.ToolEntity) bool {
+		return !slice.Contain(hidden, t.UUID)
+	})
+}
+
+func (a *BuiltinManager) AllTools() []*entity.ToolEntity {
 	return a.tools
 }
 
@@ -84,14 +92,17 @@ func (a *BuiltinManager) Query(name string) (BuiltinTool, error) {
 	if strings.EqualFold(name, "python3") {
 		return &Python3Tool{}, nil
 	}
-
+	if strings.EqualFold(name, "get-intent") {
+		client, prompt := a.getLLMClient("get-intent")
+		return &GetIntentTool{client: client, prompt: prompt}, nil
+	}
 	if strings.EqualFold(name, "chat2llm") {
 		client, prompt := a.getLLMClient("chat2llm")
 		return &Chat2LLMTool{client: client, prompt: prompt}, nil
 	}
 
 	if strings.EqualFold(name, "image_ocr") {
-		client, prompt := a.getLLMClient("image_ocr")
+		client, prompt := a.getLLMClient("image-ocr")
 		return &ImageOCRTool{client: client, prompt: prompt}, nil
 	}
 	return nil, fmt.Errorf("no tool found")
@@ -101,7 +112,7 @@ func (a *BuiltinManager) GetPrompt(checked []string) string {
 	var b strings.Builder
 	buildin := []string{
 		"command", "python3",
-		"chat2llm", "image_ocr",
+		"chat2llm", "image-ocr",
 	}
 	// checked builtin:*, includes all
 	if slice.Contain(checked, "builtin:*") {
@@ -116,7 +127,7 @@ func (a *BuiltinManager) GetPrompt(checked []string) string {
 	if slice.Contain(checked, "chat2llm") {
 		b.WriteString((&Chat2LLMTool{}).Prompt())
 	}
-	if slice.Contain(checked, "image_ocr") {
+	if slice.Contain(checked, "image-ocr") {
 		b.WriteString((&ImageOCRTool{}).Prompt())
 	}
 	// Alias prompts derived from tool entities

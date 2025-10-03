@@ -329,7 +329,7 @@ func (h *SettingHandler) GetMcp(w http.ResponseWriter, r *http.Request) {
 		}
 		var mcpTools = builtinServer.Status.McpTools
 		var prependList = []*amcp.McpServer{builtinServer}
-		for _, item := range manager.List() {
+		for _, item := range manager.GetList() {
 			mcpTools = append(mcpTools, &amcp.McpTool{
 				Name: item.UUID, Title: item.Name,
 			})
@@ -482,7 +482,7 @@ func (h *SettingHandler) ToolSet(w http.ResponseWriter, r *http.Request) {
 	var manager = builtin.GetManager().Init(tools)
 	switch act {
 	case "get-tools", "":
-		JsonResp(w, manager.List())
+		JsonResp(w, manager.AllTools())
 		return
 	case "set-tool":
 		// Save or update a user-defined tool alias

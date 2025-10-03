@@ -25,7 +25,6 @@ class MsgEventEmitter {
 
   emit(event: string, ...args: any[]) {
     if (!this.listeners[event]) return
-    console.log(`Emitting event: ${event} with args:`, ...args)
     this.listeners[event].forEach(callback => callback(...args))
   }
 }

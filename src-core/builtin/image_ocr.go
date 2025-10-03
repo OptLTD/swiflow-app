@@ -18,16 +18,16 @@ type ImageOCRTool struct {
 }
 
 func (a *ImageOCRTool) Prompt() string {
-	// Build a human-readable usage prompt for the image_ocr builtin tool
+	// Build a human-readable usage prompt for the image-ocr builtin tool
 	var b strings.Builder
-	b.WriteString("### **image_ocr**\n")
+	b.WriteString("### **image-ocr**\n")
 	b.WriteString("- 描述：识别图片中的文字并返回清理后的文本\n")
 	b.WriteString("- 入参：image path\n")
 	b.WriteString("- 示例：\n")
 	b.WriteString("```xml\n")
 	b.WriteString("<use-builtin-tool>\n")
 	b.WriteString("<desc>识别图片文字</desc>\n")
-	b.WriteString("<tool>image_ocr</tool>\n")
+	b.WriteString("<tool>image-ocr</tool>\n")
 	b.WriteString("<args>/path/to/image.png</args>\n")
 	b.WriteString("</use-builtin-tool>\n")
 	b.WriteString("```\n\n")
@@ -80,7 +80,7 @@ func (a *ImageOCRTool) Handle(args string) (string, error) {
 	}
 
 	msgs := []model.Message{userMsg}
-	choices, err := a.client.Respond("image_ocr", msgs)
+	choices, err := a.client.Respond("image-ocr", msgs)
 	if err == nil && len(choices) > 0 {
 		resp := choices[0].Message.Content
 		return strings.TrimSpace(resp), nil
