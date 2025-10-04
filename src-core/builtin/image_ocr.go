@@ -1,13 +1,16 @@
 package builtin
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"swiflow/config"
 	"swiflow/model"
+	"sync"
 
 	openai "github.com/sashabaranov/go-openai"
 )
@@ -16,6 +19,9 @@ type ImageOCRTool struct {
 	client model.LLMClient
 	prompt string
 }
+
+var ocrMutex sync.RWMutex
+var ocrCache = make(map[string]string)
 
 func (a *ImageOCRTool) Prompt() string {
 	// Build a human-readable usage prompt for the image-ocr builtin tool
@@ -57,12 +63,27 @@ func (a *ImageOCRTool) Handle(args string) (string, error) {
 		`
 	}
 
-	// Read image bytes from local filesystem
-	if buf, err := os.ReadFile(img); err != nil {
+	// Read image bytes and compute hash for caching
+	var buf []byte
+	if data, err := os.ReadFile(img); err != nil {
 		return "", fmt.Errorf("failed to read image: %v", err)
 	} else {
-		payload = base64.StdEncoding.EncodeToString(buf)
+		buf = data
 	}
+	sum := sha256.Sum256(buf)
+	hash := hex.EncodeToString(sum[:])
+
+	// Fast path: cache hit across instances
+	ocrMutex.RLock()
+	cached := ocrCache[hash]
+	if cached != "" {
+		ocrMutex.RUnlock()
+		return cached, nil
+	}
+	ocrMutex.RUnlock()
+
+	// Encode image bytes to base64
+	payload = base64.StdEncoding.EncodeToString(buf)
 	// Encode image bytes to base64 and format as a data URL
 	userMsg := model.Message{
 		Role: "user", MultiContent: []openai.ChatMessagePart{
@@ -83,7 +104,13 @@ func (a *ImageOCRTool) Handle(args string) (string, error) {
 	choices, err := a.client.Respond("image-ocr", msgs)
 	if err == nil && len(choices) > 0 {
 		resp := choices[0].Message.Content
-		return strings.TrimSpace(resp), nil
+		resp = strings.TrimSpace(resp)
+		if resp != "" {
+			ocrMutex.Lock()
+			ocrCache[hash] = resp
+			ocrMutex.Unlock()
+		}
+		return resp, nil
 	}
 	return "", err
 }

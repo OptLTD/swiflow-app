@@ -71,11 +71,7 @@ func (h *HttpHandler) Static(w http.ResponseWriter, r *http.Request) {
 
 func (h *HttpHandler) Intent(w http.ResponseWriter, r *http.Request) {
 	// Parse request body to get input data
-	var request struct {
-		Session string   `json:"session"`
-		Content string   `json:"content"`
-		Uploads []string `json:"uploads"`
-	}
+	var request builtin.IntentRequest
 	if err := h.service.ReadTo(r.Body, &request); err != nil {
 		JsonResp(w, fmt.Errorf("invalid request body: %w", err))
 		return
@@ -88,20 +84,9 @@ func (h *HttpHandler) Intent(w http.ResponseWriter, r *http.Request) {
 		manager.Init(tools)
 	}
 
-	// get tool and recognition intent
-	var intentTool *builtin.GetIntentTool
-	if tool, err := manager.Query("get-intent"); err != nil {
-		JsonResp(w, fmt.Errorf("get intent tool error: %w", err))
-		return
-	} else if tool, ok := tool.(*builtin.GetIntentTool); !ok {
-		JsonResp(w, fmt.Errorf("get intent tool error: %v", ok))
-		return
-	} else {
-		intentTool = tool
-	}
-
+	// recognize intent via manager, with OCR priority when uploads exist
 	var events = h.service.GetEvents(request.Session)
-	var intent, err = intentTool.Submit(request.Content, events)
+	var intent, err = manager.GetIntent(request, events)
 	if err != nil || intent == nil {
 		JsonResp(w, fmt.Errorf("get intent error: %w", err))
 		return
