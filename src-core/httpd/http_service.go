@@ -3,6 +3,7 @@ package httpd
 import (
 	"archive/zip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,12 +16,16 @@ import (
 	"swiflow/ability"
 	"swiflow/agent"
 	"swiflow/amcp"
+	"swiflow/builtin"
 	"swiflow/config"
 	"swiflow/entity"
 	"swiflow/initial"
+	"swiflow/model"
 	"swiflow/storage"
 	"swiflow/support"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type HttpServie struct {
@@ -839,7 +844,8 @@ func (h *HttpServie) DoImport(files []*multipart.FileHeader) ([]*entity.BotEntit
 	}
 	return allWorkers, nil
 }
-func (h *HttpServie) GetEvents(session string) string {
+
+func (h *HttpServie) GetContext(session string) string {
 	var builder strings.Builder
 
 	workers, err := h.store.LoadBot()
@@ -880,4 +886,85 @@ func (h *HttpServie) GetEvents(session string) string {
 	}
 
 	return builder.String()
+}
+
+func (h *HttpServie) GetHistory(req *builtin.IntentRequest) []model.Message {
+	result := []model.Message{
+		{Role: "user", Content: h.GetContext(req.Session)},
+		{Role: "assistant", Content: support.TrimIndent(`
+			<intent>
+				<type>talk</type>
+				<emoji>Typing</emoji>
+				<message>很开心能给你带来帮助，有什么需要我做的吗？</message>
+			</intent>`,
+		)},
+	}
+	cfg := &entity.CfgEntity{
+		Type: entity.KEY_INTENT_MSG,
+		Name: req.Session,
+	}
+	if err := h.store.FindCfg(cfg); err != nil {
+		return result
+	}
+	if len(cfg.Data) == 0 || cfg.Data == nil {
+		cfg.Data = map[string]any{}
+	}
+	if arr, ok := cfg.Data["msgs"].([]any); ok {
+		for _, item := range arr {
+			if m, ok := item.(map[string]any); ok {
+				role, _ := m["role"].(string)
+				utime, _ := m["time"].(float64)
+				content, _ := m["content"].(string)
+				if strings.TrimSpace(content) != "" {
+					continue
+				}
+				// 过滤30分钟之前的数据
+				if time.Now().Unix()-int64(utime) > 30*60 {
+					continue
+				}
+				result = append(result, model.Message{
+					Role: role, Content: content,
+				})
+			}
+		}
+	}
+	return result
+}
+
+func (h *HttpServie) AppendHistory(req *builtin.IntentRequest, res *builtin.IntentResult) error {
+	cfg := &entity.CfgEntity{
+		Type: entity.KEY_INTENT_MSG,
+		Name: req.Session, Data: map[string]any{},
+	}
+	if err := h.store.FindCfg(cfg); err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	}
+	if len(cfg.Data) == 0 || cfg.Data == nil {
+		cfg.Data = map[string]any{}
+	}
+	msgs := []map[string]any{}
+	if arr, ok := cfg.Data["msgs"].([]any); ok {
+		for _, item := range arr {
+			if m, ok := item.(map[string]any); ok {
+				utime, _ := m["time"].(float64)
+				if time.Now().Unix()-int64(utime) > 30*60 {
+					continue
+				}
+				msgs = append(msgs, m)
+			}
+		}
+	}
+	utime := time.Now().Unix()
+	msgs = append(msgs, map[string]any{
+		"role": "user", "time": utime,
+		"content": req.Content,
+	})
+	msgs = append(msgs, map[string]any{
+		"role": "assistant", "time": utime,
+		"content": support.ToXML(res, nil),
+	})
+	cfg.Data["msgs"] = msgs
+	return h.store.SaveCfg(cfg)
 }

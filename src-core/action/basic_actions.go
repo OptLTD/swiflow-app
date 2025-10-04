@@ -57,7 +57,6 @@ func (act *WaitTodo) Input() (string, string) {
 type Complete struct {
 	XMLName xml.Name `xml:"complete"`
 
-	BotName string `xml:"botname" json:"botname"`
 	Content string `xml:"content" json:"content"`
 }
 

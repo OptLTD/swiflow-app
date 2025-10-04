@@ -160,9 +160,8 @@ func (a *BuiltinManager) GetPrompt(checked []string) string {
 // 1) If uploads empty, use GetIntentTool
 // 2) If uploads present, OCR images first (limit concurrency 4) then feed merged text
 // 3) Cache merged IntentRequest for 5 minutes per session to handle split IM messages
-func (a *BuiltinManager) GetIntent(req IntentRequest, events string) (*IntentResult, error) {
-	// Merge with cached request if within 5 minutes
-	req = a.mergeIntentWithCache(req)
+// History messages are provided for better context.
+func (a *BuiltinManager) GetIntent(req *IntentRequest, history []model.Message) (*IntentResult, error) {
 	requestStart := time.Now()
 
 	var intentTool *GetIntentTool
@@ -177,7 +176,7 @@ func (a *BuiltinManager) GetIntent(req IntentRequest, events string) (*IntentRes
 	content := strings.TrimSpace(req.Content)
 	if len(req.Uploads) == 0 {
 		intentStart := time.Now()
-		res, err := intentTool.GetIntent(content, events)
+		res, err := intentTool.GetIntent(content, history)
 		intentMs := time.Since(intentStart).Milliseconds()
 		totalMs := time.Since(requestStart).Milliseconds()
 		log.Printf("[Intent] timing: ocr=%dms intent=%dms total=%dms", 0, intentMs, totalMs)
@@ -226,81 +225,43 @@ func (a *BuiltinManager) GetIntent(req IntentRequest, events string) (*IntentRes
 	}
 	ocrMs := time.Since(ocrStart).Milliseconds()
 
+	// if no input present, almost upload image
+	if content == "" && len(req.Uploads) == 1 {
+		log.Printf("[Intent] timing: ocr=%dms", ocrMs)
+		return &IntentResult{
+			Intent: "image-ocr", Message: results[0],
+		}, nil
+	}
+
 	// merge content and ocr
 	var b strings.Builder
-	if content != "" {
-		b.WriteString(content)
-	}
+	b.WriteString(content)
 	if started > 0 {
 		if b.Len() > 0 {
 			b.WriteString("\n\n")
 		}
-		b.WriteString("[OCR] Results")
-		for _, t := range results {
+		b.WriteString("**UPLOAD FILES**")
+		for idx, t := range results {
 			if t == "" {
 				continue
 			}
-			b.WriteString("\n")
-			b.WriteString(t)
+			b.WriteString(fmt.Sprintf(
+				"- File Name **%s**\n```",
+				req.Uploads[idx],
+			))
+			b.WriteString("**OCR Result**")
+			b.WriteString(fmt.Sprintf(
+				"\n```text\n%s\n```\n\n", t,
+			))
 		}
 	}
 	merged := b.String()
 	intentStart := time.Now()
-	res, err := intentTool.GetIntent(merged, events)
+	res, err := intentTool.GetIntent(merged, history)
 	intentMs := time.Since(intentStart).Milliseconds()
 	totalMs := time.Since(requestStart).Milliseconds()
 	log.Printf("[Intent] timing: ocr=%dms intent=%dms total=%dms", ocrMs, intentMs, totalMs)
 	return res, err
-}
-
-// mergeIntentWithCache merges current IntentRequest with cached one within 5 minutes
-// and updates cache timestamp and content. It de-duplicates uploads and concatenates content.
-func (a *BuiltinManager) mergeIntentWithCache(req IntentRequest) IntentRequest {
-	now := time.Now()
-	if req.Session == "" {
-		return req
-	}
-	if prev, ok := a.cacheReq[req.Session]; ok {
-		t := a.cacheTime[req.Session]
-		if now.Sub(t) <= 5*time.Minute {
-			// merge content
-			if strings.TrimSpace(prev.Content) != "" {
-				if strings.TrimSpace(req.Content) != "" {
-					req.Content = strings.TrimSpace(prev.Content) + "\n" + strings.TrimSpace(req.Content)
-				} else {
-					req.Content = prev.Content
-				}
-			}
-			// merge uploads unique
-			if len(prev.Uploads) > 0 {
-				exist := make(map[string]bool)
-				merged := make([]string, 0, len(prev.Uploads)+len(req.Uploads))
-				for _, u := range prev.Uploads {
-					u = strings.TrimSpace(u)
-					if u != "" && !exist[u] {
-						exist[u] = true
-						merged = append(merged, u)
-					}
-				}
-				for _, u := range req.Uploads {
-					u = strings.TrimSpace(u)
-					if u != "" && !exist[u] {
-						exist[u] = true
-						merged = append(merged, u)
-					}
-				}
-				req.Uploads = merged
-			}
-		}
-	}
-	// update cache
-	a.cacheReq[req.Session] = &IntentRequest{
-		Session: req.Session,
-		Content: req.Content,
-		Uploads: req.Uploads,
-	}
-	a.cacheTime[req.Session] = now
-	return req
 }
 
 func (a *BuiltinManager) findTool(name string) *entity.ToolEntity {

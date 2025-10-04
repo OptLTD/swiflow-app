@@ -10,6 +10,7 @@ import DocViewer from './browser/DocViewer.vue'
 import XlsViewer from './browser/XlsViewer.vue'
 import PdfViewer from './browser/PdfViewer.vue'
 import TextViewer from './browser/TextViewer.vue'
+import ImageViewer from './browser/ImageViewer.vue'
 import { ref, onMounted, watch, nextTick } from 'vue'
 
 const { t } = useI18n()
@@ -146,6 +147,18 @@ const getFileType = (fileName: string) => {
   if (name.endsWith('.doc') || name.endsWith('.docx')) return 'doc'
   if (name.endsWith('.xls') || name.endsWith('.xlsx')) return 'xls'
   
+  // 图片类型
+  if (
+    name.endsWith('.png') ||
+    name.endsWith('.jpg') ||
+    name.endsWith('.jpeg') ||
+    name.endsWith('.gif') ||
+    name.endsWith('.bmp') ||
+    name.endsWith('.svg') ||
+    name.endsWith('.webp') ||
+    name.endsWith('.ico')
+  ) return 'image'
+  
   // 文本类型
   if (name.endsWith('.html') || name.endsWith('.css')) return 'web'
   if (name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.log')) return 'text'
@@ -166,6 +179,7 @@ const getFileIcon = (item: any) => {
     case 'doc': return '📄'
     case 'xls': return '📊'
     case 'pdf': return '📕'
+    case 'image': return '🖼️'
     case 'text': return '📝'
     case 'code': return '📜'
     case 'config': return '⚙️'
@@ -187,6 +201,7 @@ const getViewerComponent = (fileName: string) => {
     case 'doc': return DocViewer
     case 'xls': return XlsViewer
     case 'pdf': return PdfViewer
+    case 'image': return ImageViewer
     case 'text':
     case 'code':
     case 'config':

@@ -84,15 +84,20 @@ func (h *HttpHandler) Intent(w http.ResponseWriter, r *http.Request) {
 		manager.Init(tools)
 	}
 
-	// recognize intent via manager, with OCR priority when uploads exist
-	var events = h.service.GetEvents(request.Session)
-	var intent, err = manager.GetIntent(request, events)
+	// 使用历史消息进行意图识别（按 session 从 cfg 读取）
+	var history = h.service.GetHistory(&request)
+	var intent, err = manager.GetIntent(&request, history)
 	if err != nil || intent == nil {
 		JsonResp(w, fmt.Errorf("get intent error: %w", err))
 		return
 	} else if intent.Intent != "task" {
 		JsonResp(w, intent)
 		return
+	}
+
+	// 完成时写入当前用户输入到历史
+	if h.service.AppendHistory(&request, intent) != nil {
+		log.Println("[HTTP] append history error", err)
 	}
 
 	worker, err := h.manager.GetWorker(intent.Worker)
@@ -103,15 +108,12 @@ func (h *HttpHandler) Intent(w http.ResponseWriter, r *http.Request) {
 
 	// Handle task creation/retrieval logic
 	var task *agent.MyTask
-	if intent.TaskID == "" {
-		taskid := fmt.Sprintf("%s-%d", request.Session, time.Now().Unix())
-		task, err = h.manager.InitTask(request.Content, taskid)
-	} else {
+	if intent.TaskID != "" {
 		task, err = h.manager.QueryTask(intent.TaskID)
 	}
-	if task == nil || err != nil {
-		JsonResp(w, fmt.Errorf("query task error: %w", err))
-		return
+	if task == nil {
+		intent.TaskID = fmt.Sprintf("%s-%d", request.Session, time.Now().Unix())
+		task, err = h.manager.InitTask(request.Content, intent.TaskID)
 	}
 
 	if config.Get("DEBUG_MODE") == "yes" {
@@ -120,6 +122,15 @@ func (h *HttpHandler) Intent(w http.ResponseWriter, r *http.Request) {
 	task.Home = config.CurrentHome()
 	input := &action.UserInput{
 		Content: request.Content,
+		Uploads: []string{},
+	}
+	for _, file := range request.Uploads {
+		if strings.HasPrefix(file, "[") {
+			input.Uploads = append(input.Uploads, file)
+		} else {
+			filename := fmt.Sprintf("[%s](%s)", file, file)
+			input.Uploads = append(input.Uploads, filename)
+		}
 	}
 	go h.manager.Handle(input, task, worker)
 	JsonResp(w, intent)

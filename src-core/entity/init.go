@@ -11,4 +11,5 @@ const (
 	KEY_MCP_SERVER = "mcp-server"
 	KEY_USE_WORKER = "use-worker"
 	KEY_LOGIN_USER = "login-user"
+	KEY_INTENT_MSG = "intent-msg"
 )
