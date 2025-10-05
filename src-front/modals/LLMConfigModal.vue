@@ -1,36 +1,29 @@
 <script setup lang="ts">
-import { onMounted, ref, unref } from 'vue'
+import { onMounted, ref, unref, PropType } from 'vue'
 import { VueFinalModal } from 'vue-final-modal'
 import FormModel from '@/widgets/FormModel.vue';
 import { request } from '@/support/index';
 
 const props = defineProps({
-  source: {
-    type: String,
-    default: ''
-  },
-  provider: {
-    type: String,
-    default: ''
+  config: {
+    type: Object as PropType<ModelMeta>,
+    default: () => {}
   },
 })
 
 const errmsg = ref<string>('')
-const config = ref<ModelMeta>()
 const models = ref<ModelResp>({})
+const config = ref<ModelMeta>(props.config)
 const theForm = ref<typeof FormModel>()
 const emit = defineEmits(['submit', 'cancel'])
-const doLoad = async (name: string) => {
+const doLoad = async () => {
   try {
     const url = `/setting?act=get-model`
     const resp = await request.get(url) as any
-    models.value = resp.models || {}
-    if (resp && resp.useModel) {
+    if (resp?.useModel && !props.config?.provider) {
       config.value = resp.useModel as ModelMeta
     }
-    if (props.source == 'provider' && models.value[name]) {
-      config.value = models.value[props.source] as ModelMeta
-    }
+    models.value = resp.models || {}
   } catch (err) {
     console.log('load setting:', err)
   }
@@ -42,56 +35,18 @@ const doSubmit = async () => {
     errmsg.value =  'invalid data'
     return
   }
-  switch (props.source) {
-    case 'llm-config':
-      return emit('submit', data)
-    case 'provider':
-      return doSaveProvider(data)
-    case 'use-model':
-      return doSaveUseModel(data)
-    default:
-      console.log('undefined source', props.source)
-  }
-}
-
-const doSaveUseModel = async (data: any) => {
-  try {
-    const url = `/setting?act=set-model`
-    const resp = await request.post(url, data)
-    errmsg.value = (resp as any)?.errmsg || 'success'
-  } catch (err) {
-    errmsg.value = err as string
-  } finally {
-    if (errmsg.value=='success') {
-      emit('submit', data)
-    }
-  }
-}
-
-const doSaveProvider = async (data: any) => {
-  try {
-    const url = `/setting?act=set-provider`
-    const resp = await request.post(url, data)
-    errmsg.value = (resp as any)?.errmsg || 'success'
-  } catch (err) {
-    errmsg.value = err as string
-  } finally {
-    if (errmsg.value=='success') {
-      emit('submit', data)
-      // alert('SUCCESS')
-    }
-  }
+  return emit('submit', data)
 }
 
 onMounted(async () => {
-  await doLoad(props.provider)
+  await doLoad()
 })
 
 // Remove signup function - no longer needed
 </script>
 
 <template>
-  <VueFinalModal modalId="theProviderModal" 
+  <VueFinalModal modalId="theLLMConfigModal" 
     class="swiflow-modal-wrapper" content-class="modal-content"
     overlay-transition="vfm-fade" content-transition="vfm-fade">
     <h2 class="modal-title">{{ $t('menu.modelSet') }}</h2>

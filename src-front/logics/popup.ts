@@ -5,6 +5,7 @@ import ContextModal from '@/modals/ContextModal.vue';
 import UseToolModal from '@/modals/UseToolModal.vue';
 import ProviderModal from '@/modals/ProviderModal.vue';
 import SetupEnvModal from '@/modals/SetupEnvModal.vue';
+import LLMConfigModal from '@/modals/LLMConfigModal.vue';
 import McpConfigModal from '@/modals/McpConfigModal.vue';
 import TextInputModal from '@/modals/TextInputModal.vue';
 
@@ -117,7 +118,7 @@ export const showUseModelPopup = () => {
     },
   })
   var attrs = theProviderModal.options.attrs || {}
-  Object.assign(attrs, { from: 'model' })
+  Object.assign(attrs, { source: 'use-model' })
   theProviderModal.open()
 }
 
@@ -138,7 +139,28 @@ export const showProviderPopup = (provider = '', callback: CallableFunction) => 
     },
   })
   var attrs = theProviderModal.options.attrs || {}
-  Object.assign(attrs, { provider, from: 'provider' })
+  Object.assign(attrs, { provider, source: 'provider' })
+  theProviderModal.open()
+}
+
+export const showLLMConfigPopup = (config: any, callback: CallableFunction) => {
+  if (useVfm().get('theLLMConfigModal')) {
+    return
+  }
+  const theProviderModal = useModal({
+    component: LLMConfigModal,
+    attrs: {
+      onSubmit: (data: any) => {
+        theProviderModal.close()
+        callback && callback(data)
+      },
+      onCancel: () => {
+        theProviderModal.close()
+      },
+    },
+  })
+  var attrs = theProviderModal.options.attrs || {}
+  Object.assign(attrs, { config, })
   theProviderModal.open()
 }
 

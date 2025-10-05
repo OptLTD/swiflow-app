@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, unref, onMounted } from 'vue'
 import { request } from '@/support/index'
 import FormModel from '@/widgets/FormModel.vue'
 
@@ -30,11 +30,10 @@ const loadModelConfig = async () => {
     if (resp && resp.useModel) {
       config = resp.useModel as ModelMeta
     } else {
-      config = {provider: 'doubao'} as ModelMeta
+      config = {provider: ''} as ModelMeta
     }
     
     modelConfig.value = config
-    
     return { modelConfig: config, models: models.value }
   } catch (err) {
     console.error('Failed to load model config:', err)
@@ -95,14 +94,7 @@ onMounted(async () => {
 })
 
 // Expose component capabilities
-defineExpose({
-  getFormModel,
-  handleSave,
-  loadModelConfig,
-  saveApiConfig,
-  loading: () => loading.value,
-  error: () => error.value
-})
+defineExpose({ handleSave })
 </script>
 
 <template>

@@ -1,7 +1,7 @@
 
 export const shownProviders = [
-  'doubao', 'qwen', 'bigmodel',
-  'openai', 'grok', 'claude', 'gemini',
+  'doubao', 'qwen', 'bigmodel', 'qianfan',
+  'deepseek', 'openai', 'grok', 'claude', 'gemini',
   'openrouter', 'siliconflow', 'openai-like',
 ]
 
@@ -9,7 +9,7 @@ export const allProviders: Record<string, ModelMeta> = {
   swiflow: {
     provider: 'Swiflow',
     useModel: 'qwen-plus-latest',
-    apiUrl: 'https://api.swiflow.cn',
+    apiUrl: 'https://api.swiflow.cc',
     models: [
       'qwen-plus-latest',
       'doubao-seed-1-6-250615'
@@ -29,6 +29,16 @@ export const allProviders: Record<string, ModelMeta> = {
     provider: 'BigModel',
     useModel: 'glm-4.5',
     apiUrl: 'https://open.bigmodel.cn/api/paas/v4',
+  },
+  qianfan: {
+    provider: 'Qianfan',
+    useModel: 'ernie-4.5-turbo-128k',
+    apiUrl: 'https://qianfan.baidubce.com/v2', // bce
+    // apiUrl: 'https://aistudio.baidu.com/llm/lmapi/v3',  // aistudio
+    models: [
+      'ernie-4.5-turbo-128k',
+      'ernie-4.5-turbo-vl-latest',
+    ]
   },
   deepseek: {
     provider: 'DeepSeek',

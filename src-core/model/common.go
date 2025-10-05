@@ -77,6 +77,9 @@ func (m *CommonModel) Stream(group string, msgs []Message, handle Handle) error 
 	result := []Choice{{}}
 	for {
 		if resp, err := stream.Recv(); err == nil {
+			if len(resp.Choices) == 0 {
+				continue
+			}
 			choice := resp.Choices[0]
 			result[0] = Choice{
 				Message: openai.ChatCompletionMessage{

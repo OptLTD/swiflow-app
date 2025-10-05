@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { allProviders } from '@/config/models'
 import { shownProviders } from '@/config/models'
-import { PropType, computed } from 'vue'
-import { watch, ref, unref } from 'vue'
+import { PropType, watch, computed } from 'vue'
+import { onMounted, ref, unref } from 'vue'
 import { FormKit } from '@formkit/vue'
 
 const props = defineProps({
@@ -19,12 +19,22 @@ const props = defineProps({
 const theForm = ref()
 const formModel = ref(props.config || {})
 watch(() => props.config, (data, old: any) => {
+  if (!data || !data.provider) {
+    return
+  }
   if (data.provider != old?.provider) {
     formModel.value = {...data} 
-    data.provider && onSwitch(data.provider)
+    doSwitch(data.provider)
     return
   }
   Object.assign(formModel.value, {...data})
+})
+
+onMounted(() => {
+  const config = props.config
+  if (!config?.provider) {
+    doSwitch('doubao')
+  }
 })
 
 const providers = computed(() => {
@@ -51,7 +61,10 @@ const getFormModel = () => {
   return formModel.value
 }
 
-const onSwitch = (provider: string) => {
+const doSwitch = (provider: string) => {
+  if (!provider) {
+    return
+  }
   const config = props.models[provider]
   if (provider && config && config.apiKey) {
     Object.assign(formModel.value, {
@@ -69,9 +82,9 @@ const onSwitch = (provider: string) => {
     const config = endpoints.value || {}
     formModel.value.apiUrl = config[provider]
   }
-  const useModel =  allProviders[provider]?.useModel
-  if (useModel && !formModel.value.useModel) {
-    formModel.value.useModel = useModel || ''
+  if (!formModel.value.useModel) {
+    const selected =  allProviders[provider] || {}
+    formModel.value.useModel = selected?.useModel
   }
 }
 
@@ -91,7 +104,7 @@ defineExpose({ getFormModel })
       :options="providers"
       validation="required"
       v-model="formModel.provider"
-      @change="() => onSwitch(formModel.provider)"
+      @change="() => doSwitch(formModel.provider)"
     />
     <FormKit
       type="password" name="apiKey"
