@@ -15,7 +15,11 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
-    let bytes = include_bytes!("../icons/icon-tray.png");
+    let bytes = if cfg!(target_os = "windows") {
+        include_bytes!("../icons/icon-dark.png");
+    } else {
+        include_bytes!("../icons/icon-light.png");
+    };
     let _ = TrayIconBuilder::new().tooltip("Swiflow")
         .icon(Image::from_bytes(bytes)?)
         .menu(&menu).show_menu_on_left_click(false)
