@@ -65,6 +65,8 @@ const doSwitch = (provider: string) => {
   if (!provider) {
     return
   }
+
+  formModel.value.provider = provider
   const config = props.models[provider]
   if (provider && config && config.apiKey) {
     Object.assign(formModel.value, {

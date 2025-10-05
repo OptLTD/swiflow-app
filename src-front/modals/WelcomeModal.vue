@@ -92,9 +92,9 @@ const canProceed = computed(() => {
 
 const handleSaveApiConfig = async () => {
   try {
-    if (initSetKeyRef.value?.saveApiConfig) {
+    if (initSetKeyRef.value?.handleSave) {
       state.loading = true
-      await initSetKeyRef.value.saveApiConfig()
+      await initSetKeyRef.value.handleSave()
     }
   } catch (err) {
     console.error('API config save error:', err)

@@ -82,10 +82,6 @@ const getFormModel = () => {
   return modelForm.value?.getFormModel()
 }
 
-const handleSave = async () => {
-  return await saveApiConfig()
-}
-
 // Initialize on mount
 onMounted(async () => {
   if (!modelConfig.value || !models.value || Object.keys(models.value).length === 0) {
@@ -94,7 +90,7 @@ onMounted(async () => {
 })
 
 // Expose component capabilities
-defineExpose({ handleSave })
+defineExpose({ handleSave: saveApiConfig })
 </script>
 
 <template>
