@@ -105,8 +105,8 @@ defineExpose({
   text-align: left;
   display: flex;
   flex-direction: column;
-  border-radius: 10px;
-  padding: 15px 15px;
+  border-radius: 5px;
+  padding: 12px 15px;
   cursor: pointer;
   position: relative;
   transition: all 0.3s ease;
@@ -134,7 +134,7 @@ defineExpose({
 }
 
 .task-brief {
-  margin: 10px auto;
+  margin: 5px auto;
   min-height: 4rem;
   line-height: 1.5;
   text-align: left;

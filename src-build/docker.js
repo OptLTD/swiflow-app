@@ -115,10 +115,33 @@ function executeCommand(command, dryRun = false) {
 }
 
 /**
+ * Pre-build steps: build frontend and copy assets to backend initial html
+ */
+function preBuildAssets(options) {
+    const { dryRun } = options;
+
+    console.log('\n=== Pre-Build Frontend Assets ===\n');
+    // Build frontend assets
+    executeCommand('yarn build', dryRun);
+
+    // Ensure target directory exists
+    executeCommand('mkdir -p src-core/initial/html', dryRun);
+
+    // Clean up existing files in target directory
+    executeCommand('rm -rf src-core/initial/html/*', dryRun);
+
+    // Copy built assets
+    executeCommand('cp -R dist/* src-core/initial/html/', dryRun);
+}
+
+/**
  * Build Docker image
  */
 function buildDockerImage(options) {
     const { tag, dryRun, push } = options;
+    
+    // Run pre-build steps before Docker build
+    preBuildAssets(options);
     
     console.log('\n=== Docker Build Process ===\n');
     console.log(`Platform: ${CONFIG.platform}`);

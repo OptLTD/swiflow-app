@@ -333,7 +333,7 @@ const onCancel = () => {
   flex-direction: column;
   overflow-y: auto;
   padding: 0 5px;
-  min-height: 450px;
+  min-height: 400px;
   max-height: 450px;
 }
 
