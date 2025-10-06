@@ -15,7 +15,7 @@ type CfgEntity struct {
 	ID uint `gorm:"primarykey"`
 
 	Type string `json:"type" gorm:"size:30;not null;uniqueIndex:idx_uniq"`
-	Name string `json:"name" gorm:"size:30;not null;uniqueIndex:idx_uniq"`
+	Name string `json:"name" gorm:"size:80;not null;uniqueIndex:idx_uniq"`
 	Data object `json:"data" gorm:"type:text;serializer:json;not null"`
 
 	gorm.Model `json:"-"`

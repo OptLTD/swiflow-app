@@ -271,7 +271,11 @@ func (c *Context) GetMemory() string {
 }
 
 func (c *Context) GetPrompt() string {
-	prompt := *c.UsePrompt()
+	up := c.UsePrompt()
+	if up == nil {
+		return ""
+	}
+	prompt := *up
 	prompt = strings.ReplaceAll(
 		prompt, "${{WORK_PATH}}",
 		c.GetWorkHome(),
@@ -302,7 +306,7 @@ func (c *Context) UsePrompt() *string {
 	mcpServ := amcp.GetMcpService(c.store)
 	mcpTools := mcpServ.GetPrompt(c.worker)
 	if strings.Contains(mcpTools, amcp.NO_TOOL_MSG) {
-		return nil
+		return &c.usePrompt
 	}
 	c.usePrompt = strings.ReplaceAll(
 		prompt, "${{MCP_TOOLS}}", mcpTools,

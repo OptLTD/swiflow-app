@@ -869,7 +869,7 @@ func (h *HttpServie) GetContext(session string) string {
 		}
 	}
 
-	tasks, err := h.store.LoadTask("session", session)
+	tasks, err := h.store.LoadTask("sessid", session)
 	if err == nil && len(tasks) > 0 {
 		builder.WriteString("\n\n---------------\n\n")
 		builder.WriteString("# Recent Tasks     \n\n")

@@ -36,27 +36,58 @@ impl WebServer {
     }
 
     fn start(&mut self, app: &tauri::App) -> Result<()> {
-        // let args = ["-m", "serve", "-d", "com.option.swiflow"]
-        // Create the sidecar command using the app's API
-        let sidecar: TauriCommand = app
-            .shell()
-            .sidecar("main")
-            .expect("Failed to get SIDECAR")
-            .args(["-m", "serve", "-d", "com.option.swiflow"]);
-
-        self.processes = Some(match self.mode {
-            ServerMode::OneFile => ProcessHandle::Group(
-                Command::new("main")
+        let handle = match self.mode {
+            ServerMode::OneFile => {
+                let group = Command::new("main")
                     .group_spawn()
-                    .expect("Failed to spawn process"),
-            ),
-            ServerMode::MultiFile => {
-                let (_, child) = sidecar.spawn().expect("Failed to spawn process");
-                ProcessHandle::Single(child)
+                    .map_err(|e| anyhow::anyhow!("Failed to spawn 'main' group: {}", e))?;
+                ProcessHandle::Group(group)
             }
-        });
+            ServerMode::MultiFile => {
+                let sidecar: TauriCommand = app
+                    .shell()
+                    .sidecar("main")
+                    .map_err(|e| anyhow::anyhow!("Failed to get sidecar 'main': {}", e))?
+                    .args(["-m", "serve", "-d", "com.option.swiflow"]);
 
+                match sidecar.spawn() {
+                    Ok((_, child)) => ProcessHandle::Single(child),
+                    Err(e) => return Err(anyhow::anyhow!("Failed to spawn sidecar process: {}", e)),
+                }
+            }
+        };
+
+        self.processes = Some(handle);
         Ok(())
+    }
+
+    fn start_with_retry(&mut self, app: &tauri::App, retries: usize, delay_ms: u64) -> Result<()> {
+        let mut last_err: Option<anyhow::Error> = None;
+        for attempt in 1..=retries {
+            match self.start(app) {
+                Ok(()) => {
+                    if attempt > 1 {
+                        log::info!("[Server] Start succeeded on attempt {}", attempt);
+                    }
+                    return Ok(())
+                }
+                Err(e) => {
+                    log::warn!("[Server] Start attempt {} failed: {}", attempt, e);
+                    last_err = Some(e);
+                    if attempt < retries {
+                        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                    }
+                }
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "Server failed to start after {} attempts: {}",
+            retries,
+            last_err
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "unknown error".to_string())
+        ))
     }
 
     fn shutdown(&mut self) -> Result<()> {
@@ -100,7 +131,7 @@ pub async fn run(app: &tauri::App, mode: ServerMode) -> Result<()> {
     }
 
     if let Some(server) = server_guard.as_mut() {
-        server.start(app)?;
+        server.start_with_retry(app, 3, 800)?;
     }
 
     Ok(())
