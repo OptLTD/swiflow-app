@@ -141,6 +141,7 @@ func (s *MySQLStorage) SaveTask(task *TaskEntity) error {
 	update := map[string]any{
 		"uuid": task.UUID, "name": task.Name, "home": task.Home,
 		"group": task.Group, "botid": task.BotId, "state": task.State,
+		"sessid": task.SessID, "source": task.Source, "desc": task.Desc,
 		"context": task.Context, "command": task.Command, "process": task.Process,
 	}
 

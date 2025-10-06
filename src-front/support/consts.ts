@@ -14,5 +14,8 @@ export const BASE_ADDR = base_addr
 export const getWebSocketUrl = () => {
   const isSsl = location.protocol == 'https:'
   const wsProto = isSsl && !isTauri ? 'wss' : 'ws'
-  return `${wsProto}://${base_host}/socket`;
+  const source = isTauri ? 'browser' : 'client'
+  const sessid = localStorage.getItem('sessid') || ''
+  const query = `source=${source}&sessid=${sessid}`
+  return `${wsProto}://${base_host}/socket?${query}`;
 }

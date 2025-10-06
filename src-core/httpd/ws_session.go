@@ -20,12 +20,14 @@ type WebSocketSession struct {
 }
 
 // 创建一个新的WebSocket会话
-func NewWSSession(conn *websocket.Conn, manager *agent.Manager) *WebSocketSession {
+func NewWSSession(conn *websocket.Conn, manager *agent.Manager, sessid, source string) *WebSocketSession {
 	session := &WebSocketSession{
-		conn:  conn,
-		msgs:  make(chan any, 10),
-		done:  make(chan struct{}),
-		logic: NewWsHandler(manager),
+		conn: conn,
+		msgs: make(chan any, 10),
+		done: make(chan struct{}),
+		logic: NewWsHandler(
+			manager, sessid, source,
+		),
 
 		handlers: make(map[string]support.EventHandler),
 	}
@@ -86,6 +88,9 @@ func (s *WebSocketSession) createHandler(processor func(task string, data any) *
 		case <-s.done:
 			return // 如果连接已关闭，不发送消息
 		default:
+			if !s.logic.shouldHandle(task, data) {
+				return
+			}
 			if msg := processor(task, data); msg != nil {
 				select {
 				case s.msgs <- msg: // 尝试发送消息

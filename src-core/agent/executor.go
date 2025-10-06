@@ -41,6 +41,7 @@ const (
 	STATE_FAILED    = "failed"    // 执行失败
 	STATE_CANCELED  = "canceled"  // 取消执行
 	STATE_COMPLETED = "completed" // 任务完成
+	STATE_SEEK_HELP = "seek-help" // 任务完成
 )
 
 const (
@@ -191,6 +192,8 @@ func (r *Executor) Handle() *action.SuperAction {
 			switch tool.(type) {
 			case *action.Complete:
 				r.currentState = STATE_COMPLETED
+			case *action.MakeAsk:
+				r.currentState = STATE_SEEK_HELP
 			default:
 				r.currentState = STATE_WAITING
 			}
@@ -208,19 +211,19 @@ func (r *Executor) Handle() *action.SuperAction {
 			continue
 		}
 		// step 8. handle waiting state
-		if r.currentState != STATE_COMPLETED {
+		switch r.currentState {
+		case STATE_SEEK_HELP, STATE_COMPLETED:
+			log.Println("[EXEC] task", r.UUID, r.currentState)
+		default:
 			if resp.Context == nil || resp.Origin == "" {
 				continue
 			}
 			r.queueLock.Lock() // @todo 需要强制继续
 			input := []action.Input{&action.UserInput{
-				Content: r.context.TaskContext(),
+				Content: "continue handle task",
 			}}
 			r.msgsQueue = append(input, r.msgsQueue...)
 			r.queueLock.Unlock()
-			continue
-		} else {
-			log.Println("[EXEC] task", r.UUID, STATE_COMPLETED)
 		}
 	}
 	r.stopFileWatcher()

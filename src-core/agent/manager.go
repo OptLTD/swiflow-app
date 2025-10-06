@@ -7,6 +7,7 @@ import (
 	"swiflow/ability"
 	"swiflow/action"
 	"swiflow/amcp"
+	"swiflow/builtin"
 	"swiflow/config"
 	"swiflow/entity"
 	"swiflow/model"
@@ -229,7 +230,7 @@ func (m *Manager) InitTask(name string, uuid string) (*MyTask, error) {
 	}
 	task := &MyTask{
 		UUID: uuid, BotId: m.CurrentWorker(),
-		Name: support.Substring(name, 20),
+		Name: support.Substring(name, 80),
 	}
 
 	if err := m.store.InitTask(task); err != nil {
@@ -238,6 +239,22 @@ func (m *Manager) InitTask(name string, uuid string) (*MyTask, error) {
 	}
 	return task, nil
 }
+func (m *Manager) FromIntent(worker string, intent *builtin.IntentRequest) (*MyTask, error) {
+	uuid, _ := support.UniqueID()
+	subtask := &MyTask{
+		UUID: "im-" + uuid, BotId: worker,
+		Name: support.Substring(intent.Content, 80),
+		// log source and session id
+		SessID: intent.Session, Source: intent.Source,
+	}
+
+	if err := m.store.InitTask(subtask); err != nil {
+		log.Println("[AGENT] init im task err", err)
+		return nil, err
+	}
+	return subtask, nil
+}
+
 func (m *Manager) InitSubtask(worker string, group string) (*MyTask, error) {
 	uuid, _ := support.UniqueID()
 	subtask := &MyTask{

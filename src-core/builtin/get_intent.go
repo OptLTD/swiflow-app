@@ -10,6 +10,7 @@ import (
 )
 
 type IntentRequest struct {
+	Source  string   `json:"source"`
 	Session string   `json:"session"`
 	Content string   `json:"content"`
 	Uploads []string `json:"uploads"`
@@ -86,7 +87,7 @@ func (a *GetIntentTool) Format() string {
 			<type>talk/task/wait</type>
 			<taskid>taskid-xx</taskid>
 			<worker>workerid</worker>
-			<emoji>SMILE</emoji>
+			<emoji>OK</emoji>
 			<message>Hi, Nice To Meet You</message>
 		</intent>`,
 	))

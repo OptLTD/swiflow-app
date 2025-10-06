@@ -99,7 +99,7 @@ defineExpose({
   </div>
   <div id="nav-container">
     <dl class="nav-list">
-      <template v-if="leaders.length == 0">
+      <template v-if="leaders.length < 0">
         <div class="empty-result">
           {{ $t('common.empty') }}
         </div>

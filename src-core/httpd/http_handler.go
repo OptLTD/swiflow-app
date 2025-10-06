@@ -112,8 +112,7 @@ func (h *HttpHandler) Intent(w http.ResponseWriter, r *http.Request) {
 		task, err = h.manager.QueryTask(intent.TaskID)
 	}
 	if task == nil {
-		intent.TaskID = fmt.Sprintf("%s-%d", request.Session, time.Now().Unix())
-		task, err = h.manager.InitTask(request.Content, intent.TaskID)
+		task, err = h.manager.FromIntent(worker.UUID, &request)
 	}
 
 	if config.Get("DEBUG_MODE") == "yes" {

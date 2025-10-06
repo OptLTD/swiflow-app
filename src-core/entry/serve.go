@@ -112,7 +112,11 @@ func startSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session := httpd.NewWSSession(conn, manager)
+	sessid := r.URL.Query().Get("sessid")
+	source := r.URL.Query().Get("source")
+	session := httpd.NewWSSession(
+		conn, manager, sessid, source,
+	)
 	defer session.Close()
 	session.Handle()
 }
