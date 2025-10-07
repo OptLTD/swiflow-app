@@ -12,13 +12,13 @@ const { t } = useI18n({
 const app = useAppStore()
 
 const items = [
-  { uuid: 'set-bot', icon: 'btn-robot', name: t('menu.botSet') },
-  { uuid: 'set-mcp', icon: 'btn-tools', name: t('menu.mcpSet') },
-  { uuid: 'set-mem', icon: 'btn-memory', name: t('menu.memSet') },
-  { uuid: 'set-todo', icon: 'btn-clock', name: t('menu.todoSet') },
-  { uuid: 'set-tool', icon: 'btn-tools', name: t('menu.toolSet') },
-  { uuid: 'set-model', icon: 'btn-switch', name: t('menu.modelSet') },
-  { uuid: 'setting', icon: 'btn-gear', name: t('menu.basicSet') },
+  { uuid: 'set-bot', icon: 'icon-robot', name: t('menu.botSet') },
+  { uuid: 'set-mcp', icon: 'icon-agent', name: t('menu.mcpSet') },
+  { uuid: 'set-mem', icon: 'icon-brain', name: t('menu.memSet') },
+  { uuid: 'set-todo', icon: 'task-list', name: t('menu.todoSet') },
+  { uuid: 'set-tool', icon: 'icon-wrench', name: t('menu.toolSet') },
+  { uuid: 'set-model', icon: 'arrow-swap', name: t('menu.modelSet') },
+  { uuid: 'setting', icon: 'icon-setting', name: t('menu.basicSet') },
 ]
 
 const onSwitchSet = (item: any) => {
@@ -75,13 +75,12 @@ const onSwitchSet = (item: any) => {
 <template>
   <tippy interactive :theme="app.getTheme" arrow 
     placement="left-start" trigger="mouseenter click">
-    <button class="btn-icon icon-large btn-gear"/>
+    <icon size="large" icon="icon-setting"/>
     <template #content>
       <template v-for="item in items">
-        <div class="opt-set" @click="onSwitchSet(item)">
-          <a class="btn-icon icon-mini" :class="item.icon" />
-          <span>{{ item.name }}</span>
-        </div>
+        <icon :icon="item.icon" :text="item.name"
+          @click="onSwitchSet(item)" size="small"
+        />
       </template>
     </template>
   </tippy>
@@ -118,13 +117,5 @@ const onSwitchSet = (item: any) => {
 }
 .opt-set.checked{
   font-weight: bold;
-}
-.opt-set>.btn-icon{
-  width: 1rem;
-  height: 1rem;
-  margin-right: 5px;
-}
-.opt-set>.btn-icon:hover{
-  background-color: unset;
 }
 </style>

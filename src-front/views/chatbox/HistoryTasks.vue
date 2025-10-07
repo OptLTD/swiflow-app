@@ -151,7 +151,8 @@ const doRemoveTask = async(uuid: string) => {
                   </span>
                 </div>
               </div>
-              <button class="btn-icon btn-remove" 
+              <icon icon="bin-recycle" 
+                size="small" class="btn-remove"
                 @click.stop="doRemoveTask(item.uuid)"
               />
             </div>
@@ -220,6 +221,7 @@ const doRemoveTask = async(uuid: string) => {
   border: none;
   background: none;
   font-size: 18px;
+  padding: 5px 5px;
   cursor: pointer;
   color: var(--color-text-secondary);
   display: flex;

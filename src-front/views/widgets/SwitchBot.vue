@@ -28,18 +28,14 @@ const doClick = (bot: BotEntity) => {
 <template>
   <tippy interactive :theme="app.getTheme" arrow 
     placement="top-start" trigger="mouseenter click">
-    <button class="btn-icon btn-robot">
-      {{ app.getActive?.name }}
-    </button>
+    <icon icon="icon-robot" :text="app.getActive?.name"/>
     <template #content>
       <template v-for="item in app.getBotList">
         <div class="opt-bot checked" :class="{disabled}" v-if="checked(item)">
-          <a class="btn-icon icon-mini btn-robot" />
-          <span>{{ item.name }}</span>
+          <icon icon="icon-robot" :text="item.name" size="mini"/>
         </div>
         <div v-else class="opt-bot no-checked" :class="{disabled}" @click="doClick(item)">
-          <a class="btn-icon icon-mini btn-none" />
-          <span>{{ item.name }}</span>
+          <icon icon="icon-none" :text="item.name" size="mini"/>
         </div>
       </template>
     </template>
@@ -77,13 +73,5 @@ const doClick = (bot: BotEntity) => {
 }
 .opt-bot.checked{
   font-weight: bold;
-}
-.opt-bot>.btn-icon{
-  width: 1rem;
-  height: 1rem;
-  margin-right: 5px;
-}
-.opt-bot>.btn-icon:hover{
-  background-color: unset;
 }
 </style>

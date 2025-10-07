@@ -154,8 +154,9 @@ const onMenuClick = () => {
         <button class="btn-add-new" @click="onCreate">
           {{ $t('common.addMcp') }}
         </button>
-        <button class="btn-icon btn-market .icon-large" @click="onMenuClick">
-        </button>
+        <icon icon="square-box" size="large" 
+          @click="onMenuClick"
+        />
       </div>
       <BasicMenu
         :items="items"
@@ -177,8 +178,8 @@ const onMenuClick = () => {
               @click="onDetail(item)">
               {{ $t('common.view') }}
             </a>
-            <button v-if="loading[item.name]"
-              class="btn-loading btn-icon icon-mini"
+            <icon  v-if="loading[item.name]"
+              icon="icon-loading" size="mini"
             />
             <SwitchInput v-else
               :id="'switch-' + item.name"

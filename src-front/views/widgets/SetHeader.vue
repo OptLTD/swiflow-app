@@ -28,9 +28,6 @@ const onGoBack = () => {
       </svg>
     </button>
     <h3 class="main-title">{{ title }}</h3>
-    <button @click="app.toggleMenuBar" 
-      class="btn-icon icon-large btn-menubar" 
-    />
   </div>
 </template>
 

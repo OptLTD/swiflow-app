@@ -13,6 +13,7 @@ import 'vue3-toastify/dist/index.css';
 import Vue3Toastify from 'vue3-toastify';
 import {ToastContainerOptions} from 'vue3-toastify';
 import { plugin, defaultConfig } from '@formkit/vue'
+import IconButton from '@/widgets/IconButton.vue'
 
 import zhCN from '@/locales/zh-CN'
 import enUS from '@/locales/en-US'
@@ -33,6 +34,8 @@ app.use(Vue3Toastify, {
   pauseOnFocusLoss: false,
 } as ToastContainerOptions);
 app.use(plugin, defaultConfig)
+// Register global components
+app.component('Icon', IconButton)
 app.use(VueTippy, {
   directive: 'tippy',
   component: 'tippy',

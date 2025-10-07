@@ -30,7 +30,7 @@ function handleOpen() {
   <tippy ref="tippyRef" interactive :theme="theTheme" arrow
     placement="top-start" trigger="click">
     <slot name="default" v-if="$slots['default']"/>
-    <button class="btn-icon btn-folder"  v-else/>
+    <icon v-else icon="bin-folder"/>
     <template #content>
       <div class="opt-folder" @click="handleSet">
         <span>{{ $t('common.setHomePath') }}</span>

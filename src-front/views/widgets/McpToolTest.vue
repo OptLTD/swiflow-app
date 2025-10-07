@@ -243,7 +243,9 @@ const handleErrors = (detail: string) => {
         @send="handleSend" @stop="handleStop"
       >
         <template #tools>
-          <button class="btn-icon btn-remove" @click="handleClearMsg"/>
+          <icon icon="bin-recycle" 
+            @click="handleClearMsg"
+          />
         </template>
       </ChatInput>
     </div>

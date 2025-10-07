@@ -36,7 +36,7 @@ const handleClick = (item: OptMeta) => {
   <tippy ref="tippyRef" :theme="app.getTheme" arrow
     interactive placement="top-start" trigger="click">
     <slot name="default" v-if="$slots['default']"/>
-    <button class="btn-icon btn-folder"  v-else/>
+    <icon v-else icon="bin-folder"/>
     <template #content>
       <template v-for="item in items" :key="item.value">
       <div class="opt-item" @click="handleClick(item)">

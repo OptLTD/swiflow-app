@@ -83,15 +83,16 @@ const showContextModal = () => {
     <li class="name">{{ worker?.name }}</li>
     <li class="time">{{ timestamp }}</li>
     <li class="btn">
-      <tippy v-if="thinking" :theme="theTheme" trigger="mouseenter click">
-        <button class="btn-icon icon-small btn-thought"/>
+      <tippy trigger="mouseenter click"
+        v-if="thinking" :theme="theTheme">
+        <icon icon="icon-brain1" size="mini"/>
         <template #content>
           <div class="thinking" v-html="thinking"/>
         </template>
       </tippy>
-      <button v-if="context" 
+      <icon v-if="context"  
         @click="showContextModal"
-        class="btn-icon icon-small btn-todolist" 
+        icon="task-list" size="mini"
       />
     </li>
   </ul>

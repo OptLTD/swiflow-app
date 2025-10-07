@@ -98,12 +98,16 @@ watch(() => task.getActive, (val) => {
 
 <template>
   <div id="menu-header">
-    <button class="btn-icon icon-large btn-menubar" @click="() => doToggleMenu()"/>
-    <button class="btn-icon icon-large btn-newchat" @click="() => doSwitchTask(null)"/>
+    <icon icon="icon-history" size="large" 
+      @click="() => doToggleMenu()"
+    />
+    <icon icon="add-square" size="large" 
+      @click="() => doSwitchTask(null)" 
+    />
   </div>
   <div id="menu-title">
-      <img src="/assets/icon.svg">
-      <h1> {{ "SWIFLOW" }} </h1>
+    <img src="/assets/icon.svg">
+    <h1> {{ "SWIFLOW" }} </h1>
   </div>
   <div id="menu-container">
     <dl class="menu-list">
@@ -115,25 +119,16 @@ watch(() => task.getActive, (val) => {
       <template v-for="item in task.getHistory" :key="item.uuid">
         <dd :class="clazz(item)" @click="doSwitchTask(item)">
           <label>{{ item.name }}</label>
-          <button class="btn-icon btn-run" 
-            v-if="item.command && !item.process"
-            @click.stop="doStartProgram(item.uuid, 'start')"
-          />
-          <button class="btn-icon btn-stop" 
-            v-if="item.command && item.process"
-            @click.stop="doStartProgram(item.uuid, 'stop')"
-          />
-          <button class="btn-icon btn-remove" 
-            @click.stop="doRemoveTask(item.uuid)"
-          />
+          <button class="btn-icon btn-run" v-if="item.command && !item.process"
+            @click.stop="doStartProgram(item.uuid, 'start')" />
+          <button class="btn-icon btn-stop" v-if="item.command && item.process"
+            @click.stop="doStartProgram(item.uuid, 'stop')" />
+          <button class="btn-icon btn-remove" @click.stop="doRemoveTask(item.uuid)" />
         </dd>
       </template>
       <dt class="menu-footer">
-        <SwitchBot  
-          @click="onSwitchBot" 
-          :disabled="disabled"
-        />
-        <SwitchSet/>
+        <SwitchBot @click="onSwitchBot" :disabled="disabled" />
+        <SwitchSet />
       </dt>
     </dl>
   </div>

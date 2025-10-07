@@ -325,7 +325,6 @@ defineExpose({
 <template>
   <tippy interactive :theme="app.getTheme" arrow placement="top-start" trigger="click">
     <slot name="default" v-if="$slots['default']" />
-    <button class="btn-icon btn-tools" v-else />
     <template #content>
       <div class="tools-panel">
         <template v-for="(server, i) in servers" :key="i">
@@ -338,7 +337,7 @@ defineExpose({
               :disabled="!enable || isBuiltin(server)" :modelValue="!!server.status.enable" 
               @change="(val) => onSwitchServer(server, val)" size="small"  style="margin-left:8px;" 
             />
-            <button v-else class="btn-icon btn-loading" />
+            <icon v-else  icon="icon-loading" size="mini"/>
           </div>
           <div v-for="tool in server.status.tools" @click.stop="toggleCheck(tool, server)" 
             :key="tool.value" class="dropdown-item" :class="{'disabled': isDisabled(server)}">
@@ -362,15 +361,6 @@ defineExpose({
 <style scoped>
 .btn-tools{
   margin-right: 10px;
-}
-.btn-icon{
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
-}
-.btn-icon:hover{
-  background-color: #aaa;
 }
 .tools-panel {
   margin: 4px 0 0 0;

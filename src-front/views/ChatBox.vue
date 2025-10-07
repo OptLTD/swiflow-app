@@ -349,19 +349,18 @@ defineExpose({
           />
         </template>
         <template #tools>
-          <button @click="handleGoHome"
-            class="btn-icon btn-home"
-            v-tippy="$t('tips.browserTips')"
+          <icon icon="icon-home" @click="handleGoHome"
+            size="small" v-tippy="$t('tips.browserTips')"
           />
           <ShowSelect 
             v-if="app.useSubAgent" :active="currWorker?.uuid"
             @select="onWorkerChange" :items="getWorkers()">
-            <button class="btn-icon btn-switch"/>
+            <icon icon="icon-agent" size="small"/>
           </ShowSelect>
           <McpToolList v-if="app.getLoaded"
             @change="handleToolsChange" ref="refMcpTool"
             :tools="currWorker?.tools" :enable="!task.getActive">
-            <button class="btn-icon btn-tools"/>
+            <icon icon="icon-wrench" size="small" />
           </McpToolList>
         </template>
       </ChatInput>

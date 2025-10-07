@@ -272,63 +272,6 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-.btn-icon {
-  border: 0;
-  padding: 0;
-  gap: 5px;
-  display: inline-flex;
-  align-items: center;
-  border-color: transparent;
-  background-color: transparent;
-  color: var(--icon-color);
-}
-
-.btn-icon::before {
-  content: '';
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  display: inline-block;
-  border-color: transparent;
-  background-size: 85% 85%;
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-position: center center;
-}
-
-.btn-icon:focus,
-.btn-icon:focus-visible {
-  outline: none
-}
-
-.btn-icon::before {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-}
-
-.btn-icon.icon-small::before {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
-}
-
-.btn-icon.icon-mini::before {
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  min-height: 16px;
-}
-
-.btn-icon.icon-large::before {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-}
-
 /* =====================
    主题适配的常用块
    ===================== */

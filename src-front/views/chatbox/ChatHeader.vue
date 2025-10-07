@@ -51,16 +51,20 @@ const goDownload = () => {
 </script>
 <template>
   <div id="chat-header">
-    <button class="btn-icon icon-large btn-menubar" @click="toggleHistory" />
-    <button class="btn-icon icon-large btn-newchat" @click="$emit('new-chat')"/>
+     <Icon icon="icon-list" 
+      @click="() => toggleHistory()" 
+    />
+    <Icon icon="icon-plus" 
+      @click="() => $emit('new-chat')" 
+    />
     <h3 class="main-title">SWIFLOW</h3>
   </div>
-  <div id="new-version" v-if="hasNewVer">
+  <div id="new-version" v-if="hasNewVer && false">
     <tippy placement="bottom-end" trigger="mouseenter click" :theme="app.getTheme">
       <a :href="downloadUrl" target="_blank" id="downloadUrl"/>
-      <button class="btn-icon btn-restart" @click="goDownload">
-        {{ $t('tips.newVersion') }}
-      </button>
+      <Icon icon="arrow-sync" @click="goDownload"
+        size="small" :text="$t('tips.newVersion')"
+      />
       <template #content>
         <div id="new-feature" class="rich-text" 
           v-html="md.render(newFeature)"
@@ -68,8 +72,8 @@ const goDownload = () => {
       </template>
     </tippy>
   </div>
-  <div id="show-welcome" v-if="showEpigraph">
-    <button class="btn-icon btn-welcome" @click="showWelcome">
+  <div id="show-welcome" v-if="showEpigraph || true">
+    <button class="btn-welcome" @click="showWelcome">
       🎉
     </button>
   </div>
@@ -108,7 +112,7 @@ const goDownload = () => {
 }
 .btn-welcome {
   font-size: 1.2rem;
-  padding: 0rem 0.5rem;
+  padding: 4px 0.5rem;
   background-color: transparent;
   border: 1px solid var(--color-border);
   border-radius: 4px;

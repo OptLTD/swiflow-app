@@ -39,7 +39,7 @@ const timestamp = computed(() => {
     <li class="time">{{ timestamp }}</li>
     <li class="flex"></li>
     <li class="btn">
-      <button class="btn-icon icon-small btn-replay"/>
+      <icon icon="icon-replay" />
     </li>
   </ul>
 </template>

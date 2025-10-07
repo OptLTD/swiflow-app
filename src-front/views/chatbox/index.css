@@ -117,17 +117,16 @@
 }
 .btn-tool-group {
   position: absolute;
-  bottom: 15px;
   left: 15px;
+  bottom: 12px;
   display: inline-flex;
   z-index: 2;
 }
 .btn-tool-group > * {
-  margin-left: 5px;
+  margin-left: 2px;
   display: inline-flex;
 }
-.btn-stop,
-.btn-start {
+.input-btn {
   z-index: 2;
   right: 1rem;
   bottom: 1rem;

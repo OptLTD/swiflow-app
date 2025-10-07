@@ -1,16 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Tippy } from 'vue-tippy'
-import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { request, toast } from '@/support';
 
 const app = useAppStore()
-const { t } = useI18n({
-  inheritLocale: true,
-  useScope: 'global'
-})
-
 const isLogin = computed(() => {
   return !!app.getLogin?.email
 })
@@ -64,14 +58,15 @@ const handleLogout = async () => {
 
 // 处理登录
 const handleLogin = () => {
-  if (!app.authGate) {
+  if (!app.authGateway) {
     console.warn('认证中心地址未配置')
     toast.error('认证中心地址未配置')
     return
   }
   
+  const uri = 'authorization?from=swiflow-app'
   const loginLink = document.getElementById('loginUrl')
-  loginLink?.setAttribute('href', `${app.authGate}/authorization?from=swiflow-app`)
+  loginLink?.setAttribute('href', `${app.authGateway}/${uri}`)
   return loginLink && loginLink.click && loginLink.click()
 }
 
@@ -79,9 +74,9 @@ const handleLogin = () => {
 const handleAvatarClick = () => {
   if (isLogin.value) {
     // 已登录，跳转到profile页面
-    if (app.authGate) {
+    if (app.authGateway) {
       const profileLink = document.getElementById('profileUrl')
-      profileLink?.setAttribute('href', `${app.authGate}/profile`)
+      profileLink?.setAttribute('href', `${app.authGateway}/profile`)
       return profileLink && profileLink.click && profileLink.click()
     }
   } else {
@@ -94,7 +89,7 @@ const handleAvatarClick = () => {
 <template>
   <tippy interactive :theme="app.getTheme" arrow
     placement="left-start" trigger="mouseenter click">
-    <button class="btn-icon icon-large btn-user"/>
+    <icon size="large" icon="icon-person"/>
     <template #content>
       <div class="profile-menu">
         <!-- 隐藏的链接元素 -->

@@ -115,7 +115,7 @@ defineExpose({ getFormModel: () => formModel.value })
             trigger="click"
             :arrow="false">
             <template #default>
-              <button class="btn-icon btn-emoji" type="button">
+              <button class="btn-emoji" type="button">
                 {{ emoji.get(formModel.emoji || ':man_technologist:') }}
               </button>
             </template>
@@ -138,8 +138,10 @@ defineExpose({ getFormModel: () => formModel.value })
         v-model="formModel.provider"
       >
       <template #prefix>
-        <button class="btn-icon btn-gear" type="button"
-          :disabled="!$props.isMulti" @click="doSetupApiKey"
+        <Icon icon="icon-setting" size="small" 
+          :disabled="!$props.isMulti"
+          color="var(--fk-bg-button)" 
+          @click="doSetupApiKey"
         />
       </template>
       </FormKit>
@@ -163,18 +165,28 @@ defineExpose({ getFormModel: () => formModel.value })
   width: -webkit-fill-available;
 }
 .btn-emoji{
+  outline: none;
   font-size: 20px;
   margin-top: 0px;
   margin-left: 5px;
   margin-right: -5px;
   line-height: 24px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
 
+  border: 0;
+  padding: 0;
   cursor: pointer;
   position: relative;
 }
 .btn-emoji::before{
   display: none;
   position: absolute;
+}
+.btn-emoji:hover{
+  background-color: var(--bg-light);
 }
 
 .v3-emoji-picker :deep(.v3-footer) {

@@ -171,9 +171,9 @@ const hasMoreArgs = [
           {{ getActDesc(act) }}
           <img v-if="$props.loading" class="loading-image" src="/assets/loading.svg" />
           <template v-if="!$props.loading && hasMoreArgs.includes(act.type)">
-            <button class="btn-more" @click.stop="handleDisplayWithArgs(act)">
-              <img class="icon" src="/assets/weather.svg" />
-            </button>
+            <icon icon="icon-weather" class="btn-more"
+              @click.stop="handleDisplayWithArgs(act)"
+            />
           </template>
         </div>
       </div>
@@ -205,7 +205,6 @@ const hasMoreArgs = [
   display: block;
   padding: 8px 12px;
   border-radius: 5px;
-  background: #f1f1f1;
 }
 
 .user-files {
@@ -278,8 +277,8 @@ const hasMoreArgs = [
 }
 
 .btn-more {
-  top: 2px;
-  right: 2px;
+  top: 4px;
+  right: 4px;
   outline: none;
   cursor: pointer;
   font-size: 14px;

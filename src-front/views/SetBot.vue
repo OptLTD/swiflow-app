@@ -313,8 +313,8 @@ const doUpdateBotDesc = async (bot: BotEntity) => {
             </p>
           </div>
           <div class="item-action">
-            <button @click.stop="onRemoveBot(item)" 
-              class="btn-icon icon-small btn-remove" 
+            <icon icon="bin-recycle" size="small"
+              @click.stop="onRemoveBot(item)" 
             />
             <a class="btn-modify" 
               @click="onEditBot(item)">
