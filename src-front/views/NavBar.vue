@@ -100,9 +100,9 @@ defineExpose({
   <div id="nav-container">
     <dl class="nav-list">
       <template v-if="leaders.length < 0">
-        <div class="empty-result">
+        <dt class="empty-result">
           {{ $t('common.empty') }}
-        </div>
+        </dt>
       </template>
       <template v-for="leader in leaders" :key="leader.uuid">
         <dd :class="clazz(leader)" @click="onSwitchBot(leader)">
@@ -146,6 +146,7 @@ defineExpose({
 
 #nav-container {
   flex-grow: 1;
+  width: inherit;
   margin: 0px auto;
   position: relative;
 }
@@ -157,7 +158,7 @@ defineExpose({
 
 .nav-list>dd {
   cursor: pointer;
-  margin: 12px 0px;
+  margin: 12px auto;
   font-size: 25px;
   width: 32px;
   height: 32px;

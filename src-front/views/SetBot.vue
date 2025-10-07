@@ -37,6 +37,16 @@ const groupedBots = computed(() => {
 })
 
 const botLeaders = computed(() => {
+  if (!app.useSubAgent) {
+    return [
+      {
+        label: 'Swiflow',
+        value: 'swiflow',
+        group: 'leader',
+      } as MenuMeta
+    ]
+  }
+
   return groupedBots.value.leaders.map(bot => ({
     label: bot.name, value: bot.uuid,
     group: 'leader', other: bot
@@ -50,7 +60,7 @@ const botWorkers = computed(() => {
   } as MenuMeta))
 })
 const botActive = computed(() => {
-  if (!app.getActive) {
+  if (!app.getActive || !app.useSubAgent) {
     return undefined
   }
   const bot = app.getActive
@@ -133,10 +143,11 @@ const onSelectBot = async (item: MenuMeta) => {
 }
 
 const onCreateBot = (leaderId: string) => {
-  current.value = {
-    'leader': leaderId
-  } as BotEntity
   active.value = ''
+  if (!app.useSubAgent && !leaderId) {
+    leaderId = 'swiflow'
+  }
+  current.value = {'leader': leaderId} as BotEntity
 }
 
 const onRemoveBot = async (item: MenuMeta) => {

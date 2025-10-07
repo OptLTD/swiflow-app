@@ -72,7 +72,7 @@ const onRemove = (item: MenuMeta) => {
 
 const getGroupName = (groupId: string) => {
   const groupItem = props.group.find(g => g.value === groupId)
-  return groupItem ? groupItem.label : '其他'
+  return groupItem ? groupItem.label : 'Other'
 }
 
 // 折叠/展开功能
@@ -95,7 +95,6 @@ watch(() => props.current, (val, old) => {
 })
 onMounted(() => {
   Object.keys(groupedItems.value).forEach(groupId => {
-    // 如果不是活跃的 group，则折叠
     if (props.active && groupId !== props.active.value) {
       allCollapsed.value.add(groupId)
     }

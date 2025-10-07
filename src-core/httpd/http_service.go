@@ -455,29 +455,22 @@ func (h *HttpServie) InitBot() []*entity.BotEntity {
 	if len(bots) == 0 {
 		return nil
 	}
-	service := amcp.GetMcpService(h.store)
+	var workers = []*storage.BotEntity{}
 	for _, item := range bots {
-		bot := &storage.BotEntity{
+		worker := &storage.BotEntity{
 			UUID: item.UUID, Name: item.Name,
-			UsePrompt: item.Desc,
+			UsePrompt: item.Desc, Type: "worker",
+			McpServers: item.Mcps, Leader: "swiflow",
 		}
-		// 如果有mcps，Tools为[uuid:*]格式
-		if len(item.Mcps) > 0 {
-			tools := make([]string, 0, len(item.Mcps))
-			for uuid := range item.Mcps {
-				tools = append(tools, uuid+":*")
-			}
-			bot.Tools = tools
-		}
-		if err := h.store.SaveBot(bot); err != nil {
-			continue
-		}
-		go service.LoadMcpServer(item.Mcps)
+		workers = append(workers, worker)
 	}
-	list, _ = h.store.LoadBot()
-	if len(list) > 0 {
-		h.UseBot(list[0])
+	if err := h.ImportWorkers(workers); err == nil {
+		if list, _ = h.store.LoadBot(); len(list) > 0 {
+			h.UseBot(list[0])
+			return list
+		}
 	}
+
 	return list
 }
 
