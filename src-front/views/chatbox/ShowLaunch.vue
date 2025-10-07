@@ -23,7 +23,7 @@ const names = {
   <tippy interactive :theme="app.getTheme" arrow
     placement="top-start" trigger="mouseenter click">
     <slot name="default" v-if="$slots['default']"/>
-    <button class="btn-icon btn-launch"  v-else/>
+    <icon v-else icon="bin-launch"/>
     <template #content>
       <template v-for="item in props.launch">
       <div class="opt-launch" @click="$emit('select', item)">

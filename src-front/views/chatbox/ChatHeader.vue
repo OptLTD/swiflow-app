@@ -59,8 +59,9 @@ const goDownload = () => {
     />
     <h3 class="main-title">SWIFLOW</h3>
   </div>
-  <div id="new-version" v-if="hasNewVer && false">
-    <tippy placement="bottom-end" trigger="mouseenter click" :theme="app.getTheme">
+  <div id="new-version" v-if="hasNewVer">
+    <tippy  trigger="mouseenter click"
+      placement="bottom-end" :theme="app.getTheme">
       <a :href="downloadUrl" target="_blank" id="downloadUrl"/>
       <Icon icon="arrow-sync" @click="goDownload"
         size="small" :text="$t('tips.newVersion')"
@@ -72,7 +73,7 @@ const goDownload = () => {
       </template>
     </tippy>
   </div>
-  <div id="show-welcome" v-if="showEpigraph || true">
+  <div id="show-welcome" v-if="showEpigraph">
     <button class="btn-welcome" @click="showWelcome">
       🎉
     </button>
