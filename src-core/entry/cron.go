@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"os"
 	"swiflow/action"
-	"swiflow/agent"
 	"swiflow/amcp"
 	"swiflow/config"
 	"swiflow/entity"
+	"swiflow/storage"
 	"swiflow/support"
 	"time"
 
@@ -98,7 +98,11 @@ func fetchTodoList(name string) {
 	log.Printf("[%s] start pull", name)
 	scheduler.RemoveByTags()
 
-	store, _ := manager.GetStorage()
+	store, err := storage.GetStorage()
+	if store == nil || err != nil {
+		log.Printf("[%s] store err: %v", name, err)
+		return
+	}
 	list, err := store.LoadTodo() // Call without parameters to maintain existing behavior
 	if len(list) == 0 || err != nil {
 		log.Printf("[%s] no todo list", name)
@@ -142,7 +146,7 @@ func execThisTodo(todo *entity.TodoEntity) {
 }
 
 func fetchSystemEnv(_ string) {
-	store, _ := manager.GetStorage()
+	store, _ := storage.GetStorage()
 	cfg := &entity.CfgEntity{
 		Name: entity.KEY_APP_SETUP,
 		Type: entity.KEY_APP_SETUP,
@@ -183,16 +187,7 @@ func fetchMcpServers(name string) {
 
 // 启动所有MCP服务器
 func startMcpServers(_ string) {
-	var err error
-	if manager == nil {
-		manager, err = agent.NewManager()
-	}
-
-	if err != nil || manager == nil {
-		log.Println("[MCP] 获取存储失败", err)
-		return
-	}
-	store, err := manager.GetStorage()
+	store, err := storage.GetStorage()
 	if err != nil || store == nil {
 		log.Println("[MCP] 获取store失败", err)
 		return
@@ -218,7 +213,7 @@ func rebootMcpServers(name string, data any) {
 	// 	return
 	// }
 
-	store, err := manager.GetStorage()
+	store, err := storage.GetStorage()
 	if err != nil || store == nil {
 		log.Println("[MCP] 获取store失败", err)
 		return
@@ -247,6 +242,11 @@ func rebootMcpServers(name string, data any) {
 		go func() {
 			if mcpSrv.ServerClose(server) == nil {
 				log.Printf("[MCP] Stop Server %s Success", server.Name)
+			}
+			// check env and package ready
+			if err := server.Preload(); err != nil {
+				log.Printf("[MCP] Preload %s err: %v", server.Name, err)
+				return
 			}
 			if err := mcpSrv.ServerStatus(server); err == nil {
 				log.Printf("[MCP] Start Server %s Success", server.Name)

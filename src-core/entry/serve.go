@@ -25,12 +25,8 @@ func StopWebServer(ctx context.Context) error {
 }
 
 func StartWebServer(address string) (err error) {
-	manager, err = agent.NewManager()
-	if err != nil {
-		panic(err)
-	}
-
 	mux := http.NewServeMux()
+	manager = agent.NewManager()
 	handler := httpd.NewHttpHandler(manager)
 	setting := httpd.NewSettingHandle(manager)
 	mux.HandleFunc("/", handler.Static)

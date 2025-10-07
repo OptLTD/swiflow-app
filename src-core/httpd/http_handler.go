@@ -17,6 +17,7 @@ import (
 	"swiflow/entity"
 	"swiflow/initial"
 	"swiflow/model"
+	"swiflow/storage"
 	"swiflow/support"
 	"time"
 
@@ -30,9 +31,14 @@ type HttpHandler struct {
 
 func NewHttpHandler(m *agent.Manager) *HttpHandler {
 	var s = new(HttpServie)
-	store, e := m.GetStorage()
-	if store != nil && e == nil {
+	store, err := storage.GetStorage()
+	if store != nil && err == nil {
 		s.store = store
+	} else {
+		panic(err)
+	}
+	if err := m.Initial(store); err != nil {
+		panic(err)
 	}
 	return &HttpHandler{s, m}
 }
@@ -78,7 +84,7 @@ func (h *HttpHandler) Intent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var manager = builtin.GetManager()
-	var store, _ = h.manager.GetStorage()
+	var store, _ = storage.GetStorage()
 	if len(manager.AllTools()) == 0 {
 		tools, _ := store.LoadTool()
 		manager.Init(tools)
@@ -217,7 +223,7 @@ func (h *HttpHandler) Global(w http.ResponseWriter, r *http.Request) {
 			JsonResp(w, fmt.Errorf("init bot fail"))
 			return
 		}
-		if err := h.manager.Initial(); err != nil {
+		if err := h.manager.Initial(nil); err != nil {
 			JsonResp(w, fmt.Errorf("init bot: %w", err))
 			return
 		}

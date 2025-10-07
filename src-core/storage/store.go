@@ -2,6 +2,7 @@ package storage
 
 import (
 	"strings"
+	"swiflow/config"
 )
 
 type MyStore interface {
@@ -35,6 +36,48 @@ type MyStore interface {
 	FindTodo(*TodoEntity) error
 	SaveTodo(*TodoEntity) error
 	LoadTodo(query ...any) ([]*TodoEntity, error)
+}
+
+var mystore MyStore
+
+func GetStorage() (MyStore, error) {
+	if mystore != nil {
+		return mystore, nil
+	}
+	needUpgrade := config.NeedUpgrade()
+	kind := config.GetStr("STORAGE_TYPE", "sqlite")
+	cfg := map[string]any{"path": config.GetWorkHome()}
+	switch strings.ToLower(kind) {
+	case "sqlite":
+		cfg["path"] = config.SQLiteFile()
+	case "mysql":
+		dsn := config.MySQLDSN()
+		switch dsn := dsn.(type) {
+		case string:
+			cfg["dsn"] = dsn
+		case error:
+			return nil, dsn
+		}
+	}
+	store, err := NewStorage(kind, cfg)
+	if store == nil || err != nil {
+		return store, err
+	}
+	// handle migrate
+	switch strings.ToLower(kind) {
+	case "sqlite", "mysql":
+		// Call without parameters to maintain existing behavior
+		if _, err = store.LoadCfg(); err != nil {
+			if strings.Contains(err.Error(), "no such table") {
+				needUpgrade = true
+			}
+		}
+	}
+	if needUpgrade {
+		err = store.AutoMigrate()
+	}
+	mystore = store
+	return store, err
 }
 
 func NewStorage(kind string, config map[string]any) (MyStore, error) {

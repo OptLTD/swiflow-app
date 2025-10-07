@@ -221,7 +221,11 @@ func (m *McpService) LoadMcpServer(mcps map[string]any) {
 			exist[uuid] = server
 		}
 		if len(server.Status.McpTools) == 0 {
-			// need load package first
+			// check env and package ready
+			if err := server.Preload(); err != nil {
+				log.Printf("[MCP] Preload %s err: %v", server.Name, err)
+				continue
+			}
 			if err := m.ServerStatus(server); err != nil {
 				log.Printf("[MCP] Start %s err: %v", server.Name, err)
 			} else {

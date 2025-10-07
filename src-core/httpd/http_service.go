@@ -482,7 +482,7 @@ func (h *HttpServie) InitBot() []*entity.BotEntity {
 }
 
 func (h *HttpServie) LoadBot() []*entity.BotEntity {
-	bots, _ := h.store.LoadBot() // Call without parameters to maintain existing behavior
+	bots, _ := h.store.LoadBot()
 	return bots
 }
 

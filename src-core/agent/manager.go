@@ -19,14 +19,14 @@ import (
 	"github.com/duke-git/lancet/v2/maputil"
 )
 
-type Store = storage.MyStore
+// type Store = storage.MyStore
 type MyMsg = entity.MsgEntity
 type MyTask = entity.TaskEntity
 type Worker = entity.BotEntity
 type Payload = action.Payload
 
 type Manager struct {
-	store Store
+	store storage.MyStore
 
 	workers []*Worker
 	configs map[string]any
@@ -37,52 +37,19 @@ type Manager struct {
 	initOnce sync.Once
 }
 
-func FromAgents(agents []*Worker) (*Manager, error) {
+func NewManager() *Manager {
 	m := &Manager{}
-	// init storage
-	m.workers = agents
-	store, err := m.InitStorage()
-	if err != nil || store == nil {
-		log.Println("[AGENT] init store error", err)
-		return nil, fmt.Errorf("init store error: %v", err)
-	} else {
-		m.store = store
-	}
+
 	m.configs = map[string]any{}
 	m.executors = map[string]*Executor{}
 	m.subagents = map[string]*SubAgent{}
-
-	provider := config.Get("SWIFLOW_PROVIDER")
-	name, model, _ := strings.Cut(provider, "@")
-	m.configs[entity.KEY_USE_MODEL] = map[string]any{
-		"provider": name, "useModel": model,
-		"apiUrl": config.Get("SWIFLOW_API_URL"),
-		"apiKey": config.Get("SWIFLOW_API_KEY"),
-	}
-	return m, nil
+	return m
 }
 
-func NewManager() (*Manager, error) {
-	m := &Manager{}
-
-	// init storage
-	m.configs = map[string]any{}
-	m.executors = map[string]*Executor{}
-	m.subagents = map[string]*SubAgent{}
-	store, err := m.InitStorage()
-	if err != nil || store == nil {
-		log.Println("[AGENT] init store error", err)
-		return nil, fmt.Errorf("init store error: %v", err)
-	} else {
+func (m *Manager) Initial(store storage.MyStore) (err error) {
+	if store != nil {
 		m.store = store
 	}
-	if err := m.Initial(); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func (m *Manager) Initial() (err error) {
 	if info := config.EpigraphInfo(); len(info) > 0 {
 		epigraph := &entity.CfgEntity{
 			Type: entity.KEY_EPIGRAPH,
@@ -94,7 +61,8 @@ func (m *Manager) Initial() (err error) {
 	if err = m.InitConfig(); err != nil {
 		log.Println("[AGENT] init cfg error", err)
 	}
-	if m.workers, err = m.store.LoadBot(); err == nil { // Call without parameters to maintain existing behavior
+	// Call without parameters to maintain existing behavior
+	if m.workers, err = m.store.LoadBot(); err == nil {
 		return nil
 	}
 	log.Println("[AGENT] init worker error", err)
@@ -192,8 +160,12 @@ func (m *Manager) Handle(input action.Input, task *MyTask, worker *Worker) {
 			return
 		}
 		if len(server.Status.McpTools) == 0 {
+			// check env and package ready
+			if err := server.Preload(); err != nil {
+				log.Printf("[MCP] Preload %s err: %v", server.Name, err)
+				return
+			}
 			log.Println("[AGENT] start mcp server", server.UUID)
-			// need load package first
 			err := mcpServ.ServerStatus(server)
 			if len(server.Status.McpTools) == 0 {
 				log.Println("[AGENT] query status error", err)
@@ -511,13 +483,6 @@ func (m *Manager) CurrentWorker() string {
 	return support.Or(uuid, "nobody")
 }
 
-func (m *Manager) GetStorage() (Store, error) {
-	if m.store != nil {
-		return m.store, nil
-	}
-	return m.InitStorage()
-}
-
 func (m *Manager) InitConfig() error {
 	list, err := m.store.LoadCfg()
 	if err != nil {
@@ -536,41 +501,6 @@ func (m *Manager) InitConfig() error {
 		}
 	}
 	return nil
-}
-
-func (m *Manager) InitStorage() (Store, error) {
-	needUpgrade := config.NeedUpgrade()
-	kind := config.GetStr("STORAGE_TYPE", "sqlite")
-	cfg := map[string]any{"path": config.GetWorkHome()}
-	switch strings.ToLower(kind) {
-	case "sqlite":
-		cfg["path"] = config.SQLiteFile()
-	case "mysql":
-		dsn := config.MySQLDSN()
-		switch dsn := dsn.(type) {
-		case string:
-			cfg["dsn"] = dsn
-		case error:
-			return nil, dsn
-		}
-	}
-	store, err := storage.NewStorage(kind, cfg)
-	if store == nil || err != nil {
-		return store, err
-	}
-	// handle migrate
-	switch strings.ToLower(kind) {
-	case "sqlite", "mysql":
-		if _, err = store.LoadCfg(); err != nil { // Call without parameters to maintain existing behavior
-			if strings.Contains(err.Error(), "no such table") {
-				needUpgrade = true
-			}
-		}
-	}
-	if needUpgrade {
-		err = store.AutoMigrate()
-	}
-	return store, err
 }
 
 func (m *Manager) ClearProcess() {

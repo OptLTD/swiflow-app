@@ -17,6 +17,7 @@ import (
 	"swiflow/config"
 	"swiflow/entity"
 	"swiflow/model"
+	"swiflow/storage"
 	"swiflow/support"
 	"time"
 
@@ -30,7 +31,7 @@ type SettingHandler struct {
 
 func NewSettingHandle(m *agent.Manager) *SettingHandler {
 	var s = new(HttpServie)
-	store, e := m.GetStorage()
+	store, e := storage.GetStorage()
 	if store != nil && e == nil {
 		s.store = store
 	}
@@ -39,7 +40,7 @@ func NewSettingHandle(m *agent.Manager) *SettingHandler {
 
 func (h *SettingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	tasks := []map[string]any{}
-	store, _ := h.manager.GetStorage()
+	store, _ := storage.GetStorage()
 	query := "(`group`='' or `group`=`uuid`)"
 	if config.Get("USE_SUBAGENT") != "yes" {
 		// filter task not by leader
@@ -58,7 +59,7 @@ func (h *SettingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 
 func (h *SettingHandler) GetMsgs(w http.ResponseWriter, r *http.Request) {
 	uuid := r.URL.Query().Get("task")
-	store, _ := h.manager.GetStorage()
+	store, _ := storage.GetStorage()
 	tasks, _ := store.LoadTask("group", uuid)
 	useSubagent := config.Get("USE_SUBAGENT")
 	if len(tasks) == 0 || useSubagent != "yes" {
@@ -95,7 +96,7 @@ func (h *SettingHandler) TaskSet(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
 	uuid := r.URL.Query().Get("uuid")
 	task, _ := h.manager.QueryTask(uuid)
-	store, _ := h.manager.GetStorage()
+	store, _ := storage.GetStorage()
 	switch act {
 	case "get-task", "":
 		subtasks := []string{}
@@ -130,7 +131,7 @@ func (h *SettingHandler) TaskSet(w http.ResponseWriter, r *http.Request) {
 
 func (h *SettingHandler) TodoSet(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
-	store, _ := h.manager.GetStorage()
+	store, _ := storage.GetStorage()
 	switch act {
 	case "get-todo":
 		resp := []any{}
@@ -198,7 +199,7 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 			JsonResp(w, fmt.Errorf("no bot avaliable"))
 			return
 		}
-		if err := h.manager.Initial(); err != nil {
+		if err := h.manager.Initial(h.service.store); err != nil {
 			JsonResp(w, fmt.Errorf("initial err: %w", err))
 			return
 		}
@@ -223,7 +224,7 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 		} else {
 			bot.Type = agent.AGENT_LEADER
 		}
-		store, _ := h.manager.GetStorage()
+		store, _ := storage.GetStorage()
 		context := agent.NewContext(store, bot)
 		w.Write([]byte(*context.UsePrompt()))
 		return
@@ -274,7 +275,7 @@ func (h *SettingHandler) BotSet(w http.ResponseWriter, r *http.Request) {
 }
 func (h *SettingHandler) NewMcp(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
-	store, _ := h.manager.GetStorage()
+	store, _ := storage.GetStorage()
 	service := amcp.GetMcpService(store)
 	server := &amcp.McpServer{}
 	if err := h.service.ReadTo(r.Body, server); err != nil {
@@ -288,7 +289,10 @@ func (h *SettingHandler) NewMcp(w http.ResponseWriter, r *http.Request) {
 			JsonResp(w, fmt.Errorf("upsert: %v", err))
 			return
 		}
-		// need load package first
+		if err := server.Preload(); err != nil {
+			err = JsonResp(w, err)
+			return
+		}
 		if err := service.ServerStatus(server); err == nil {
 			_ = service.EnableServer(server)
 			err = JsonResp(w, server)
@@ -306,7 +310,10 @@ func (h *SettingHandler) NewMcp(w http.ResponseWriter, r *http.Request) {
 			JsonResp(w, fmt.Errorf("server existed: %v", server.Name))
 			return
 		}
-		// need load package first
+		if err := server.Preload(); err != nil {
+			err = JsonResp(w, err)
+			return
+		}
 		if err := service.ServerStatus(server); err != nil {
 			JsonResp(w, fmt.Errorf("Status: %v", err))
 			return
@@ -319,7 +326,7 @@ func (h *SettingHandler) GetMcp(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
 	switch act {
 	case "get-mcp":
-		store, _ := h.manager.GetStorage()
+		store, _ := storage.GetStorage()
 		service := amcp.GetMcpService(store)
 		mcpList := service.ListServers()
 		var tools, _ = store.LoadTool()
@@ -364,7 +371,7 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var found *amcp.McpServer
-	store, _ := h.manager.GetStorage()
+	store, _ := storage.GetStorage()
 	service := amcp.GetMcpService(store)
 	mcpList := service.ListServers()
 	uuid := r.URL.Query().Get("uuid")
@@ -432,7 +439,6 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 			err = JsonResp(w, err)
 			return
 		}
-		// need load package first
 		if err := service.ServerStatus(found); err == nil {
 			_ = service.EnableServer(found)
 			err = JsonResp(w, found.Status)
@@ -477,7 +483,7 @@ func (h *SettingHandler) McpSet(w http.ResponseWriter, r *http.Request) {
 // Purpose: list builtin tools and manage user-defined tool aliases.
 func (h *SettingHandler) ToolSet(w http.ResponseWriter, r *http.Request) {
 	act := r.URL.Query().Get("act")
-	store, _ := h.manager.GetStorage()
+	store, _ := storage.GetStorage()
 	var tools, _ = store.LoadTool()
 	var manager = builtin.GetManager().Init(tools)
 	switch act {
