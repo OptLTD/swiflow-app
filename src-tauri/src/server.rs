@@ -62,14 +62,13 @@ impl WebServer {
     }
 
     fn start_with_retry(&mut self, app: &tauri::App, retries: usize, delay_ms: u64) -> Result<()> {
+        log::info!("[Server] Start with retry {} times", retries);
         let mut last_err: Option<anyhow::Error> = None;
         for attempt in 1..=retries {
             match self.start(app) {
                 Ok(()) => {
-                    if attempt > 1 {
-                        log::info!("[Server] Start succeeded on attempt {}", attempt);
-                    }
-                    return Ok(())
+                    log::info!("[Server] Start succeeded on attempt {}", attempt);
+                    return Ok(());
                 }
                 Err(e) => {
                     log::warn!("[Server] Start attempt {} failed: {}", attempt, e);
@@ -82,11 +81,8 @@ impl WebServer {
         }
 
         Err(anyhow::anyhow!(
-            "Server failed to start after {} attempts: {}",
-            retries,
-            last_err
-                .map(|e| e.to_string())
-                .unwrap_or_else(|| "unknown error".to_string())
+            "Server failed to start after {} attempts: {}", retries,
+            last_err.map(|e| e.to_string()).unwrap_or_else(|| "unknown error".to_string())
         ))
     }
 
@@ -122,8 +118,7 @@ lazy_static! {
 /// Initialize and run the server with the given mode and proper error handling
 pub async fn run(app: &tauri::App, mode: ServerMode) -> Result<()> {
     // Lock the mutex and initialize the server if not already initialized
-    let mut server_guard = SERVER
-        .lock()
+    let mut server_guard = SERVER.lock()
         .map_err(|e| anyhow::anyhow!("Failed to lock server: {}", e))?;
 
     if server_guard.is_none() {
@@ -141,12 +136,10 @@ pub async fn run(app: &tauri::App, mode: ServerMode) -> Result<()> {
 pub async fn shutdown() -> Result<()> {
     log::info!("[Server] Global shutdown function called");
     // Lock the mutex and shutdown the server
-    let mut server_guard = SERVER
-        .lock()
-        .map_err(|e| {
-            log::error!("[Server] Failed to lock server mutex: {}", e);
-            anyhow::anyhow!("Failed to lock server: {}", e)
-        })?;
+    let mut server_guard = SERVER.lock().map_err(|e| {
+        log::error!("[Server] Failed to lock server mutex: {}", e);
+        anyhow::anyhow!("Failed to lock server: {}", e)
+    })?;
 
     if let Some(server) = server_guard.as_mut() {
         log::info!("[Server] Server instance found, calling shutdown...");

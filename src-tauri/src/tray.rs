@@ -5,7 +5,8 @@
 #![cfg(all(desktop, not(test)))]
 
 use tauri::{
-    menu::{Menu, MenuItem}, image::Image,
+    image::Image,
+    menu::{Menu, MenuItem},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager, Runtime, WebviewUrl,
 };

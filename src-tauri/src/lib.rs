@@ -2,6 +2,7 @@ use server::ServerMode;
 use tauri::async_runtime::block_on;
 use tauri::{Manager, RunEvent};
 use tauri_plugin_decorum::WebviewWindowExt;
+// use tauri_plugin_log::{Target, TargetKind};
 
 mod notify;
 mod plugins;
@@ -17,18 +18,27 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_decorum::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(plugins::inject_js_plugin::init()) // 注册插件
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    // .target(Target::new(TargetKind::Stdout))
+                    // .target(Target::new(TargetKind::LogDir{
+                    //     file_name: Some("logs".to_string()),
+                    // }))
+                    .filter(|metadata| {
+                        !metadata.target().starts_with("tauri:")
+                    })
+                    .build(),
+            )?;
+            // if cfg!(debug_assertions) {
+                
+            // }
 
             #[cfg(all(desktop, not(test)))]
             {
@@ -89,9 +99,7 @@ pub fn run() {
                 api.prevent_close();
                 let _ = _app_handle
                     .get_webview_window(label)
-                    .unwrap()
-                    .hide()
-                    .unwrap();
+                    .unwrap().hide().unwrap();
                 #[cfg(target_os = "macos")]
                 let _ = _app_handle.set_dock_visibility(false);
             }

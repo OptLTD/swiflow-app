@@ -38,6 +38,8 @@
     "core:webview:allow-create-webview",
     "core:webview:allow-create-webview-window",
     "decorum:allow-show-snap-overlay",
+    "log:default",
+    "process:default",
     "shell:default",
     "shell:allow-spawn",
     "shell:allow-kill",
