@@ -164,7 +164,7 @@ export const parseHistory = (msgs: ActionMsg[]): ActionMsg[] => {
   return msgs;
 }
 
-export const getActDesc = (item: MsgAct): string => {
+export const getDisplayActDesc = (item: MsgAct): string => {
   switch (item.type) {
     case "complete": {
       return `结果展示`

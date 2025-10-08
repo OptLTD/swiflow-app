@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"swiflow/config"
 	"sync"
 	"time"
 )
@@ -46,7 +47,7 @@ func IsInternal(host string) bool {
 		return true
 	}
 
-	if IsPrivateIP(host) {
+	if IsPrivateIP(host) || config.Get("SWIFLOW_SERVER") != "" {
 		return true
 	}
 

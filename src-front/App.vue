@@ -145,10 +145,19 @@ const showDialog = async () => {
 }
 
 const listenEvent = async () => {
+  window.addEventListener('resize', onResize as EventListener);
   window.addEventListener('storage', (_: StorageEvent) => null);
   window.addEventListener('welcome', onWelcome as EventListener);
   window.addEventListener('dispatch', onDispatch as EventListener);
   window.addEventListener("hashchange", onHashChange as EventListener);
+
+}
+
+const onResize = (_: UIEvent) => {
+  const innerWidth = window.innerWidth
+  if (innerWidth < 960 && app.getContent) {
+    app.setContent(false)
+  }
 }
 
 const onSystemMsg = (socketMsg: SocketMsg) => {

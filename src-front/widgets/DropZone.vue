@@ -119,6 +119,29 @@ const handleRegularFiles = async (regularFiles: File[]) => {
 onMounted(() => {
   appContainer.value = document.querySelector('#app') as HTMLElement
 })
+
+// Handle hidden input change (click-to-upload)
+const onFileInputChange = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  if (!files.length) return
+
+  try {
+    // Reuse existing flow
+    const { agentFiles, regularFiles } = separateFiles(files)
+    if (agentFiles.length > 0) {
+      await handleAgentFiles(agentFiles, regularFiles)
+    } else if (regularFiles.length > 0) {
+      await handleRegularFiles(regularFiles)
+    }
+  } catch (error) {
+    console.error(t('dropzone.fileProcessError'), error)
+    toast.error(t('dropzone.fileProcessFailed'))
+  } finally {
+    // reset to allow re-select same files
+    input.value = ''
+  }
+}
 </script>
 
 <template>
@@ -130,6 +153,11 @@ onMounted(() => {
       </div>
     </div>
   </div>
+  <!-- hidden input for click-to-upload -->
+  <input id="global-file-input" type="file" 
+    multiple style="display:none" 
+    @change="onFileInputChange" 
+  />
 </template>
 
 <style scoped>

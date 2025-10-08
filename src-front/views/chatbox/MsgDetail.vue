@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { md } from '@/support';
 import { computed, PropType } from 'vue'
-import { useAppStore } from '@/stores/app'
-import { useViewStore } from '@/stores/view'
-import { getActDesc } from '@/logics/chat'
+import { getDisplayActDesc } from '@/logics/chat'
 import { canShowDisplayAct } from '@/logics/chat'
 
-const emit = defineEmits(["check", 'display'])
-const app = useAppStore()
-const view = useViewStore()
+const emit = defineEmits([
+  "check", 'display', 'browser',
+])
 const props = defineProps({
   loading: {
     type: Boolean as PropType<boolean>,
@@ -68,16 +66,7 @@ const getUpload = (item: MsgAct) => {
 
 const handleFileClick = (e: MouseEvent) => {
   const ele = e.target as HTMLLinkElement
-  const href = ele.getAttribute('href')
-  if (href) {
-    // Extract file path from markdown link format [filename](path)
-    // Decode the file path to prevent double encoding in Browser.vue
-    const filePath = decodeURIComponent(href)
-    const detail = { path: filePath }
-    app.setContent(true)
-    app.setAction('browser')
-    view.setChange(detail)
-  }
+  emit('browser', ele.getAttribute('href'))
 }
 
 const handleOptionCheck = (act: MakeAsk, m: number) => {
@@ -163,12 +152,12 @@ const hasMoreArgs = [
           <div class="rich-text" v-html="render(act)" />
         </template>
         <div v-else class="act-card" @click="$emit('display', act)">
-          {{ getActDesc(act) }}
+          {{ getDisplayActDesc(act) }}
         </div>
       </div>
       <div class="msg-act" v-else-if="toolsName.includes(act.type)">
         <div class="act-card" @click.stop="handleDisplayDirect(act)">
-          {{ getActDesc(act) }}
+          {{ getDisplayActDesc(act) }}
           <img v-if="$props.loading" class="loading-image" src="/assets/loading.svg" />
           <template v-if="!$props.loading && hasMoreArgs.includes(act.type)">
             <icon icon="icon-weather" class="btn-more"

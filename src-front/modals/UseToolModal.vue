@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { getActHtml } from '@/logics/chat'
-import { getActDesc } from '@/logics/chat'
+import { getDisplayActDesc } from '@/logics/chat'
 import { VueFinalModal } from 'vue-final-modal'
 
 const emit = defineEmits(['submit', 'cancel'])
@@ -16,7 +16,7 @@ const html = computed(() => {
 })
 
 const title = computed(() => {
-  return getActDesc(props.tool as MsgAct)
+  return getDisplayActDesc(props.tool as MsgAct)
 })
 </script>
 

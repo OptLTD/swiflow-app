@@ -1,4 +1,5 @@
 <script setup lang="ts">
+
 defineProps<{
   files: string[]
 }>()
@@ -7,6 +8,7 @@ const emit = defineEmits<{
   remove: [index: number]
   detail: [filePath: string]
 }>()
+
 
 const getFileName = (upload: string) => {
   // Extract filename from [filename](url) format
@@ -27,10 +29,18 @@ const handleFileClick = (upload: string) => {
     emit('detail', filePath)
   }
 }
+
+const handleUploadFile = () => {
+  const input = document.querySelector('#global-file-input') as HTMLInputElement | null
+  input?.click()
+}
 </script>
 <template>
   <div class="empty-files" v-if="!files.length">
-    拖拽文件到此处即可上传文件
+    <icon icon="icon-attach" size="mini" 
+      text="点击或拖拽文件到此处即可上传文件"
+      @click="() => handleUploadFile()"
+    />
   </div>
   <div class="upload-files" v-else>
     <span class="file-count">文件:</span>
@@ -52,6 +62,7 @@ const handleFileClick = (upload: string) => {
 }
 .empty-files{
   font-size: 13px;
+  padding: 5px 5px;
   color: var(--color-secondary);
 }
 

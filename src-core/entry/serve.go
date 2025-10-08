@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"slices"
 	"swiflow/agent"
+	"swiflow/config"
 	"swiflow/httpd"
 
 	"github.com/gorilla/websocket"
@@ -54,6 +55,10 @@ func StartWebServer(address string) (err error) {
 	mux.HandleFunc("/api/sign-in", handler.SignIn)
 	mux.HandleFunc("/api/sign-out", handler.SignOut)
 
+	if host := config.Get("SWIFLOW_ADDRESS"); host != "" {
+		address, allows = "0.0.0.0:11235", append(allows, host)
+	}
+
 	// 启动服务（在协程中运行）
 	server = &http.Server{Addr: address, Handler: middle(mux)}
 	log.Printf("[HTTP] Server is running on http://%s", address)
@@ -94,6 +99,10 @@ var upgrader = &websocket.Upgrader{
 		}
 		u, err := url.Parse(r.Header.Get("Origin"))
 		if err == nil && httpd.IsInternal(u.Hostname()) {
+			return true
+		}
+		// docker allow set server address
+		if slices.Contains(allows, u.Hostname()) {
 			return true
 		}
 		return false

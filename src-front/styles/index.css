@@ -480,6 +480,9 @@ span[data-v-tippy] {
     display: none;
   }
 
+  #main-panel{
+    display: none;
+  }
   /* 当屏幕宽度 ≤ 960px 时生效 */
 }
 

@@ -1,25 +1,24 @@
 <script setup lang="ts">
 import { nanoid } from 'nanoid'
-import { toast } from 'vue3-toastify'
 import { throttle } from 'lodash-es'
 import { ref, unref, watch } from 'vue'
-import {  onMounted, onUnmounted } from 'vue'
-import { request } from '@/support/index'
+import { onMounted, onUnmounted } from 'vue'
+import { request, toast } from '@/support'
 import { useAppStore } from '@/stores/app'
 import { useMsgStore } from '@/stores/msg'
 import { eventEmitter } from '@/stores/msg'
 import { useTaskStore } from '@/stores/task'
 import { useViewStore } from '@/stores/view'
+import { setBotTools } from '@/logics/chat'
+import { autoScrollToEnd } from '@/logics/chat'
+import { shouldAutoDisplay } from '@/logics/chat'
+import { canShowDisplayAct } from '@/logics/chat'
 import ChatInput from './chatbox/ChatInput.vue'
 import ChatHeader from './chatbox/ChatHeader.vue'
 import ChatMsgList from './chatbox/ChatMsgList.vue'
 import ShowSelect from './chatbox/ShowSelect.vue'
 import McpToolList from './chatbox/McpToolList.vue'
 import UploadFiles from './chatbox/UploadFiles.vue'
-import { setBotTools } from '@/logics/chat'
-import { autoScrollToEnd } from '@/logics/chat'
-import { shouldAutoDisplay } from '@/logics/chat'
-import { canShowDisplayAct } from '@/logics/chat'
 
 const app = useAppStore()
 const msg = useMsgStore()
@@ -149,6 +148,9 @@ const loadTaskMsgs = async (task: string) => {
 }
 
 const handleGoHome = () => {
+  if (shouldSkipMain()) {
+    return
+  }
   if (app.getContent && app.getAction != 'browser') {
     app.setAction('browser')
     return
@@ -164,7 +166,28 @@ const handleGoHome = () => {
   }
 }
 
+const pinToastId = ref();
+const shouldSkipMain = (showToast: boolean  = true) => {
+  const { innerWidth, innerHeight } = window
+  if (innerWidth < 960 || innerWidth < innerHeight) {
+    if (!showToast) {
+      return true
+    }
+    if (pinToastId.value) {
+      toast.update(pinToastId.value, {autoClose: 3000,})
+    } else {
+      pinToastId.value = toast.warn('暂不支持小屏显示', {
+        hideProgressBar: false, autoClose: 3000,
+      })
+    }
+    return true
+  }
+  return false
+}
 const handleDisplay = (act: MsgAct) => {
+  if (shouldSkipMain()) {
+    return
+  }
   const shouldDisplay = shouldAutoDisplay(act)
   const canShowComplete = canShowDisplayAct(act)
   if (shouldDisplay && !canShowComplete) {
@@ -208,6 +231,9 @@ const handleSwitch = (tid: string) => {
 
 const autoScroll = throttle(autoScrollToEnd, 500)
 const startPlayAction = (msg: ActionMsg, force: boolean = false) => {
+  if (shouldSkipMain(false)) {
+    return null
+  }
   if (!msg || !msg.actions?.length) {
     force && app.getContent && app.setContent(false)
     return null
@@ -231,7 +257,7 @@ const handleToolsChange = (tools: string[]) => {
 
 // Handle file click from UploadFiles component
 const handleViewUpload = (filePath: string) => {
-  if (filePath) {
+  if (filePath && !shouldSkipMain()) {
     // Decode the file path to prevent double encoding in Browser.vue
     const decodedPath = decodeURIComponent(filePath)
     const detail = { path: decodedPath }
@@ -329,6 +355,7 @@ defineExpose({
         :messages="messages"
         @check="handleCheck"
         @display="handleDisplay"
+        @browser="handleViewUpload"
       >
       <div class="img-box">
         <img src="/assets/here.png" />
