@@ -81,7 +81,7 @@ const buttonControl = computed(() => {
   return null
 })
 onMounted(async () => {
-  // Load MCP list when component mounts
+  await loadMcpEnv()
   await loadMcpList()
   await startMcpEnv()
 })
@@ -92,6 +92,18 @@ watch(() => props.tools, (val) => {
 watch(() => app.getMcpEnv, () => {
   startMcpEnv()
 }, {deep: true})
+
+
+const loadMcpEnv = async () => {
+  try {
+    const url = '/toolenv?act=mcp-env'
+    const resp = await request.get(url)
+    resp && app.setMcpEnv(resp as McpEnvMeta)
+    return resp
+  } catch (err) {
+    console.log('failed to load mcp env:', err)
+  }
+}
 
 const doActiveMcp = async (server: McpServer) => {
   try {

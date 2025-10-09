@@ -253,7 +253,6 @@ declare type GlobalResp = {
   bots: BotEntity[]
   setup: SetupMeta
   login: LoginMeta
-  mcpEnv: McpEnvMeta
   authGate: string
   epigraph?: string
   inDocker: string

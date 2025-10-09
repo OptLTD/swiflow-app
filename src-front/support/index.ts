@@ -15,8 +15,6 @@ import xml from 'highlight.js/lib/languages/xml'
 
 import { toast } from 'vue3-toastify'
 import 'highlight.js/styles/vs.min.css';
-// @ts-ignore
-import textualUml from 'markdown-it-textual-uml';
 import { tasklist } from "@mdit/plugin-tasklist";
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -133,7 +131,7 @@ export const md = markdownit({
     const escape = md.utils.escapeHtml(str) as string
     return `<pre><code class="hljs">${escape}</code></pre>`;
   }
-}).use(textualUml).use(linkTargetBlank).use(tasklist, {});
+}).use(linkTargetBlank).use(tasklist, {});
 
 function linkTargetBlank(md: any) {
   // @ts-ignore

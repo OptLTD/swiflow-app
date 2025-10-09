@@ -64,15 +64,7 @@ defineExpose({ getFormModel })
       <code-mirror class="editor-input" 
         v-model="formModel.content" 
         :disabled="isDisabled"
-      >
-        <template #disabled-overlay>
-          <div class="disabled-overlay">
-            <div class="disabled-message">
-              <p>请先选择关联的 Bot</p>
-            </div>
-          </div>
-        </template>
-      </code-mirror>
+      />
     </div>
   </form>
 </template>

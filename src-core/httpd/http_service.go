@@ -23,6 +23,7 @@ import (
 	"swiflow/model"
 	"swiflow/storage"
 	"swiflow/support"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -81,36 +82,57 @@ func (h *HttpServie) GetMcpEnv() any {
 		python = "python"
 	}
 
-	dev := ability.DevCommandAbility{
-		Home: config.GetWorkPath(""),
-	}
-	// python env check
-	if data, err := dev.Run(python, 3*time.Second, "-V"); err == nil {
-		result["python"] = strings.TrimSpace(string(data))
-	}
-	// uvx env check
-	if data, err := dev.Run("uvx", 3*time.Second, "-V"); err == nil {
-		env := strings.TrimSpace(string(data))
-		result["uvx"] = strings.Split(env, "(")[0]
+	newDev := func() ability.DevCommandAbility {
+		return ability.DevCommandAbility{
+			Home: config.GetWorkPath(""),
+		}
 	}
 
-	// uv env check
-	if data, err := dev.Run("uv", 3*time.Second, "-V"); err == nil {
-		env := strings.TrimSpace(string(data))
-		result["uv"] = strings.Split(env, "(")[0]
+	type checkItem struct {
+		key   string
+		cmd   string
+		args  []string
+		label string
+	}
+	items := []checkItem{
+		{key: "uv", cmd: "uv", args: []string{"-V"}, label: "uv -V"},
+		{key: "uvx", cmd: "uvx", args: []string{"-V"}, label: "uvx -V"},
+		{key: "npx", cmd: "npx", args: []string{"-v"}, label: "npx -v"},
+		{key: "nodejs", cmd: "node", args: []string{"-v"}, label: "node -v"},
+		{key: "python", cmd: python, args: []string{"-V"}, label: python + " -V"},
 	}
 
-	// node.js env check
-	if data, err := dev.Run("node", 3*time.Second, "-v"); err == nil {
-		result["nodejs"] = strings.TrimSpace(string(data))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	timeout := 1 * time.Second
+	for _, it := range items {
+		wg.Add(1)
+		go func(it checkItem) {
+			defer wg.Done()
+			dev := newDev()
+			data, err := dev.Run(
+				it.cmd, timeout, it.args...,
+			)
+			if err == nil && len(data) > 0 {
+				val := strings.TrimSpace(string(data))
+				// normalize uv/uvx outputs (strip trailing parentheses)
+				if it.key == "uv" || it.key == "uvx" {
+					val = strings.Split(val, "(")[0]
+					val = strings.TrimSpace(val)
+				}
+				mu.Lock()
+				result[it.key] = val
+				mu.Unlock()
+			}
+		}(it)
 	}
+	wg.Wait()
 
-	// npx env check
-	if data, err := dev.Run("npx", 3*time.Second, "-v"); err == nil {
-		result["npx"] = strings.TrimSpace(string(data))
-	}
 	if config.IsWindows() {
 		result["windows"] = true
+	}
+	if config.InContainer() {
+		result["in-docker"] = true
 	}
 	return result
 }
@@ -259,7 +281,7 @@ func (h *HttpServie) InitMcpEnv(name string, env string) any {
 	// bin, err := initial.GetScript(file.Path)
 	if bin, err := initial.GetScript(file.Path); len(bin) > 0 {
 		log.Printf("Script content retrieved, size: %d bytes", len(bin))
-		if err := file.Write(string(bin)); err != nil {
+		if err = file.Write(string(bin)); err != nil {
 			log.Printf("Failed to write script file: %v", err)
 			return err
 		}
@@ -298,7 +320,7 @@ func (h *HttpServie) LoadGlobal() map[string]any {
 	}
 
 	// default bot config
-	if list, err := h.store.LoadCfg(); err == nil { // Call without parameters to maintain existing behavior
+	if list, err := h.store.LoadCfg(); err == nil {
 		for _, item := range list {
 			switch item.Type {
 			case entity.KEY_LOGIN_USER:
@@ -314,7 +336,7 @@ func (h *HttpServie) LoadGlobal() map[string]any {
 			}
 		}
 	}
-	result["mcpEnv"] = h.GetMcpEnv()
+
 	result["authGate"] = config.GetAuthGate()
 	result["inDocker"] = config.InContainer()
 	return result

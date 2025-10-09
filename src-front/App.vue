@@ -110,9 +110,6 @@ const loadGlobal = async () => {
         localStorage.setItem('last-shown', today)
       }
     }
-    if (info.mcpEnv) {
-      app.setMcpEnv(info.mcpEnv)
-    }
   } catch (err) {
     console.log('failed to load global:', err)
   } finally {
