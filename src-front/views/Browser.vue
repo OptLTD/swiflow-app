@@ -7,16 +7,16 @@ import { useAppStore } from '@/stores/app'
 import { useTaskStore } from '@/stores/task'
 import { useViewStore } from '@/stores/view'
 import DocViewer from './browser/DocViewer.vue'
-import PdfViewer from './browser/PdfViewer.vue'
 import TextViewer from './browser/TextViewer.vue'
 import ImageViewer from './browser/ImageViewer.vue'
 import { ref, onMounted, nextTick } from 'vue'
 import { watch, defineAsyncComponent } from 'vue'
 
 // 按需加载 Excel 查看器，避免初始加载 xlsx 库
-const XlsViewerAsync = defineAsyncComponent(() => {
-  return import('./browser/XlsViewer.vue')
-})
+const XlsViewerAsync = defineAsyncComponent(() => import('./browser/XlsViewer.vue'))
+
+// 按需加载 PDF 查看器，避免初始加载 pdfjs/vue-pdf
+const PdfViewerAsync = defineAsyncComponent(() => import('./browser/PdfViewer.vue'))
 
 const { t } = useI18n()
 const app = useAppStore()
@@ -205,7 +205,7 @@ const getViewerComponent = (fileName: string) => {
   switch (fileType) {
     case 'doc': return DocViewer
     case 'xls': return XlsViewerAsync
-    case 'pdf': return PdfViewer
+    case 'pdf': return PdfViewerAsync
     case 'image': return ImageViewer
     case 'text':
     case 'code':

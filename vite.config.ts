@@ -52,6 +52,8 @@ export default defineConfig({
           if (id.includes('node_modules/xlsx')) return 'xlsx'
           if (id.includes('node_modules/vue-final-modal')) return 'vfm'
           if (id.includes('node_modules/@vueuse')) return 'vueuse'
+          // PDF viewer stack
+          if (id.includes('node_modules/pdfjs-dist') || id.includes('node_modules/@tato30/vue-pdf')) return 'pdfjs'
           // UI tooltip stack
           if (id.includes('node_modules/vue-tippy') || id.includes('node_modules/tippy.js')) return 'tippy'
           if (id.includes('node_modules/@popperjs/core')) return 'popper'
