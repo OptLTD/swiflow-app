@@ -1,5 +1,17 @@
 import markdownit from 'markdown-it'
-import highlight from 'highlight.js'
+import hljs from 'highlight.js/lib/core'
+import javascript from 'highlight.js/lib/languages/javascript'
+import typescript from 'highlight.js/lib/languages/typescript'
+import markdown from 'highlight.js/lib/languages/markdown'
+import python from 'highlight.js/lib/languages/python'
+import bash from 'highlight.js/lib/languages/bash'
+import json from 'highlight.js/lib/languages/json'
+import yaml from 'highlight.js/lib/languages/yaml'
+import sql from 'highlight.js/lib/languages/sql'
+import php from 'highlight.js/lib/languages/php'
+import java from 'highlight.js/lib/languages/java'
+import css from 'highlight.js/lib/languages/css'
+import xml from 'highlight.js/lib/languages/xml'
 
 import { toast } from 'vue3-toastify'
 import 'highlight.js/styles/vs.min.css';
@@ -94,10 +106,27 @@ export const textType = (str: string) => {
 
 export const md = markdownit({
   highlight: function (str: string, lang: string) {
-    if (lang && highlight.getLanguage(lang)) {
+    if (lang) {
+      // lazy register common languages once
+      if (!hljs.listLanguages().length) {
+        hljs.registerLanguage('javascript', javascript)
+        hljs.registerLanguage('typescript', typescript)
+        hljs.registerLanguage('python', python)
+        hljs.registerLanguage('bash', bash)
+        hljs.registerLanguage('json', json)
+        hljs.registerLanguage('markdown', markdown)
+        hljs.registerLanguage('yaml', yaml)
+        hljs.registerLanguage('sql', sql)
+        hljs.registerLanguage('php', php)
+        hljs.registerLanguage('java', java)
+        hljs.registerLanguage('css', css)
+        hljs.registerLanguage('xml', xml)
+      }
+    }
+    if (lang && hljs.getLanguage(lang)) {
       try {
         const conf = { language: lang, ignoreIllegals: true }
-        const html = highlight.highlight(str, conf).value
+        const html = hljs.highlight(str, conf).value
         return `<pre><code class="hljs">${html}</code></pre>`;
       } catch (__) {}
     }

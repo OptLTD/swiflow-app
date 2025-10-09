@@ -6,6 +6,7 @@ import { useAppStore } from '@/stores/app'
 import HistoryTasks from './HistoryTasks.vue'
 
 const app = useAppStore()
+defineEmits(['new-chat'])
 const showWelcome = () => {
   app.setShowEpigraph(true)
 }

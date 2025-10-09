@@ -2,7 +2,7 @@
 import MsgDetail from './MsgDetail.vue'
 import MsgHeader from './MsgHeader.vue'
 defineProps(['messages', 'errmsg', 'loading'])
-defineEmits(['check', 'replay', 'display'])
+defineEmits(['check', 'replay', 'display', 'browser'])
 </script>
 <template>
     <div class="error-tips" v-if="errmsg">
@@ -15,6 +15,7 @@ defineEmits(['check', 'replay', 'display'])
         @check="$emit('check', $event)"
         @replay="$emit('replay', $event)"
         @display="$emit('display', $event)"
+        @browser="$emit('browser', $event)"
         :is-last="i+1 === messages.length"
       >
         <template #header>
@@ -22,7 +23,9 @@ defineEmits(['check', 'replay', 'display'])
         </template>
       </MsgDetail>
       <template v-if="loading && loading!.actions">
-      <MsgDetail :detail="loading" :loading="true">
+      <MsgDetail 
+        :detail="loading" :loading="true" 
+        @browser="$emit('browser', $event)">
         <template #header v-if="messages.length == 1">
           <MsgHeader :detail="loading"/>
         </template>
@@ -74,4 +77,4 @@ defineEmits(['check', 'replay', 'display'])
 .empty-result{
   height: calc(100vh - 260px);
 }
-</style> 
+</style>

@@ -57,7 +57,6 @@
 </template>
 
 <script setup lang="ts">
-import { read, utils } from 'xlsx'
 import { toast } from 'vue3-toastify'
 import { ref, onMounted, computed } from 'vue'
 
@@ -76,6 +75,7 @@ const currentSheet = ref('')
 const sheetNames = ref<string[]>([])
 const tableData = ref<any[][]>([])
 const tableHeaders = ref<string[]>([])
+let xlsxLib: any = null
 
 // 计算属性 - 为 FormKit select 生成选项
 const sheetOptions = computed(() => {
@@ -90,6 +90,9 @@ const loadFile = async () => {
   try {
     loading.value = true
     error.value = ''
+    if (!xlsxLib) {
+      xlsxLib = await import('xlsx')
+    }
     
     // 获取文件数据
     const response = await fetch(props.fileUrl)
@@ -100,7 +103,7 @@ const loadFile = async () => {
     const arrayBuffer = await response.arrayBuffer()
     
     // 解析 Excel 文件
-    workbook.value = read(arrayBuffer)
+    workbook.value = xlsxLib.read(arrayBuffer)
     sheetNames.value = workbook.value.SheetNames
     
     if (sheetNames.value.length === 0) {
@@ -123,12 +126,16 @@ const loadFile = async () => {
 // 切换工作表
 const switchSheet = async () => {
   if (!workbook.value || !currentSheet.value) return
+  if (!xlsxLib) {
+    // 安全兜底：若未加载，执行一次动态加载
+    xlsxLib = await import('xlsx')
+  }
   
   try {
     const worksheet = workbook.value.Sheets[currentSheet.value]
     
     // 将工作表转换为数组格式
-    const data = utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
+    const data = xlsxLib.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
     
     if (data.length === 0) {
       tableData.value = []
@@ -208,4 +215,4 @@ onMounted(() => {
 .btn-retry:hover {
   background: #e0a800;
 }
-</style> 
+</style>

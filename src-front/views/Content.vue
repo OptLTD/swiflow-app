@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import mermaid from 'mermaid'
 import { request } from '@/support'
 import { getActHtml } from '@/logics/chat'
 import { useAppStore } from '@/stores/app'
@@ -25,12 +24,14 @@ const isCopied = computed(() => {
 })
 
 onMounted(async() => {
-  mermaid.initialize({
-    startOnLoad: true,
-  });
+  const m = await import('mermaid')
+  const mermaid = (m as any).default || m
+  mermaid.initialize({ startOnLoad: true })
   await mermaid.run()
 })
 onUpdated(async() => {
+  const m = await import('mermaid')
+  const mermaid = (m as any).default || m
   await mermaid.run()
 })
 
@@ -56,11 +57,14 @@ const copyContent = async () => {
 
   // 根据 app.setup.useCopy 配置决定复制格式
   const useCopy = app.getSetup?.useCopyMode || 'display'
-
   if (useCopy === 'source') {
     const data = view.getAction
     if (data.result) {
-      await copy(data.result)
+      return await copy(data.result)
+    }
+    const act = data as Complete
+    if (act.content) {
+      return await copy(act.content)
     }
     return
   }

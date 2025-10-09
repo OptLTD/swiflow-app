@@ -23,8 +23,8 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue3-toastify'
-import { ref, onMounted, computed } from 'vue'
-import CodeMirror from '@/widgets/CodeMirror.vue'
+import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
+const CodeMirror = defineAsyncComponent(() => import('@/widgets/CodeMirror.vue'))
 
 const { t } = useI18n()
 const props = defineProps<{
@@ -76,4 +76,4 @@ onMounted(() => {
 
 <style scoped>
 @import url('@/styles/viewer.css');
-</style> 
+</style>

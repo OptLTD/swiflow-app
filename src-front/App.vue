@@ -1,27 +1,42 @@
 <script setup lang="ts">
-import { watch, ref } from 'vue'
-import { onMounted, onUnmounted } from 'vue'
+import { watch, defineAsyncComponent } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ModalsContainer } from 'vue-final-modal';
 import { useAppStore } from '@/stores/app'
 import { useMsgStore } from '@/stores/msg'
 import { useWebSocket } from '@/hooks/index'
 import { request, toast } from '@/support/index';
 import { getWebSocketUrl } from '@/support/consts';
-
+import { showWelcomeModal } from '@/logics/index';
 import Default from '@/layouts/Default.vue'
-import Setting from '@/views/Setting.vue'
-import SetBot from '@/views/SetBot.vue'
-import SetMem from '@/views/SetMem.vue'
-import SetMcp from '@/views/SetMcp.vue'
-import SetTodo from '@/views/SetTodo.vue'
-import SetTool from '@/views/SetTool.vue'
 import NavBar from '@/views/NavBar.vue'
 import ChatBox from '@/views/ChatBox.vue'
-import Content from '@/views/Content.vue'
-import Browser from '@/views/Browser.vue'
 import DropZone from '@/widgets/DropZone.vue'
 import Fireworks from '@/widgets/Fireworks.vue'
-import { showWelcomeModal } from './logics/index';
+const Content = defineAsyncComponent(() => {
+  return import('@/views/Content.vue')
+})
+const Browser = defineAsyncComponent(() => {
+  return import('@/views/Browser.vue')
+})
+const Setting = defineAsyncComponent(() => {
+  return import('@/views/Setting.vue')
+})
+const SetBot = defineAsyncComponent(() => {
+  return import('@/views/SetBot.vue')
+})
+const SetMcp = defineAsyncComponent(() => {
+  return import('@/views/SetMcp.vue')
+})
+const SetMem = defineAsyncComponent(() => {
+  return import('@/views/SetMem.vue')
+})
+const SetTodo = defineAsyncComponent(() => {
+  return import('@/views/SetTodo.vue')
+})
+const SetTool = defineAsyncComponent(() => {
+  return import('@/views/SetTool.vue')
+})
 
 const app = useAppStore()
 const msg = useMsgStore()

@@ -1,12 +1,5 @@
 <script setup>
-import { basicSetup } from "codemirror";
-import { EditorState } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
-import { defaultKeymap } from '@codemirror/commands';
-import { markdown } from '@codemirror/lang-markdown';
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
-import { githubDark } from '@fsegurai/codemirror-theme-github-dark';
-import { githubLight } from '@fsegurai/codemirror-theme-github-light';
 
 const props = defineProps({
   modelValue: {
@@ -29,37 +22,54 @@ const emit = defineEmits(['update:modelValue'])
 
 const editorContainer = ref(null)
 let editorView = null
+let cmModulesReady = false
+let cm, State, View, keymapMod, commandsMod, mdLang, themeDark, themeLight
 
 // 创建编辑器状态
 const createEditorState = (content, disabled = false) => {
-  const extensions = [
-    markdown(),
-    isDark() ? githubDark : githubLight,
-    EditorView.lineWrapping,
-    EditorView.updateListener.of((update) => {
+  const extensions = []
+  if (mdLang) extensions.push(mdLang())
+  if (themeDark && themeLight) extensions.push(isDark() ? themeDark : themeLight)
+  if (View) {
+    extensions.push(View.lineWrapping)
+    extensions.push(View.updateListener.of((update) => {
       if (update.docChanged && !disabled) {
         emit('update:modelValue', update.state.doc.toString())
       }
-    })
-  ]
-  
-  // 如果禁用，添加只读扩展并移除键盘映射
-  if (disabled) {
-    extensions.push(EditorState.readOnly.of(true))
-    // 不添加键盘映射，这样就不会响应任何键盘输入
-  } else {
-    extensions.push(keymap.of(defaultKeymap))
+    }))
   }
-  
-  return EditorState.create({
+  if (disabled && State) {
+    extensions.push(State.readOnly.of(true))
+  } else if (keymapMod && commandsMod) {
+    extensions.push(keymapMod.of(commandsMod))
+  }
+  return State.create({
     doc: content,
     extensions
   })
 }
 
 // 初始化编辑器
-onMounted(() => {
-  editorView = new EditorView({
+onMounted(async () => {
+  const [codemirror, state, view, commands, md, dark, light] = await Promise.all([
+    import('codemirror'),
+    import('@codemirror/state'),
+    import('@codemirror/view'),
+    import('@codemirror/commands'),
+    import('@codemirror/lang-markdown'),
+    import('@fsegurai/codemirror-theme-github-dark'),
+    import('@fsegurai/codemirror-theme-github-light')
+  ])
+  cm = codemirror
+  State = state.EditorState
+  View = view.EditorView
+  keymapMod = view.keymap
+  commandsMod = commands.defaultKeymap
+  mdLang = md.markdown
+  themeDark = dark.githubDark
+  themeLight = light.githubLight
+  cmModulesReady = true
+  editorView = new View({
     state: createEditorState(props.modelValue, props.disabled),
     parent: editorContainer.value
   })
@@ -74,14 +84,14 @@ onBeforeUnmount(() => {
 
 // 监听 modelValue 变化
 watch(() => props.modelValue, (newValue) => {
-  if (editorView && newValue !== editorView.state.doc.toString()) {
+  if (editorView && cmModulesReady && newValue !== editorView.state.doc.toString()) {
     editorView.setState(createEditorState(newValue, props.disabled))
   }
 })
 
 // 监听 disabled 变化
 watch(() => props.disabled, (disabled) => {
-  if (editorView) {
+  if (editorView && cmModulesReady) {
     editorView.setState(createEditorState(editorView.state.doc.toString(), disabled))
   }
 })
