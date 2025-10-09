@@ -233,27 +233,41 @@ func (r *Executor) Handle() *action.SuperAction {
 }
 
 func (r *Executor) PlayAction(super *action.SuperAction) string {
-	// 并行执行 IAct.Handle，并保持结果顺序
-	// 通过有界并发控制最大并发数，避免资源过载
-	maxWorkers := config.GetInt("CONCURRENCY", 4)
-	sem := make(chan struct{}, maxWorkers)
+	// 问题：
+	// - 本地文件操作可能是串行的命令
+	// - 但对于网络操作，串行执行会耗时
+	// - 需要慢操作并行、快操作串行
+	// 以“最多0.2s间隔”启动各个 IAct：
+	// - 若前一个在0.2s内执行完毕，则立刻启动下一个（保持尽快串行）
+	// - 若超过0.2s未完成，则启动下一个（形成可控并发，不限制并行/串行）
 	wg, replyMsgs := sync.WaitGroup{}, []string{}
 	replies := make([]string, len(super.UseTools))
 	for idx, tool := range super.UseTools {
 		if act, ok := tool.(action.IAct); ok {
 			wg.Add(1)
-			sem <- struct{}{}
-			go func(i int, a action.IAct) {
+			done := make(chan struct{})
+			go func(i int, a action.IAct, done chan struct{}) {
 				defer wg.Done()
-				defer func() { <-sem }()
 				result := a.Handle(super)
 				if support.Bool(result) {
 					reply := support.ToXML(a, nil)
 					replies[i] = reply
 				}
-			}(idx, act)
+				close(done)
+			}(idx, act, done)
+
+			// 等待前一个的完成或最多0.2s后启动下一个
+			timer := time.NewTimer(200 * time.Millisecond)
+			select {
+			case <-done: // 前一个在0.2s内完成，立即开始下一个
+				if !timer.Stop() {
+					<-timer.C // 若定时器已触发，清理其通道
+				}
+			case <-timer.C: // 超过0.2s仍未完成，启动下一个形成并发
+			}
 		}
 	}
+	// 等待所有已启动的动作完成
 	wg.Wait()
 
 	for _, rpl := range replies {
