@@ -256,6 +256,7 @@ declare type GlobalResp = {
   mcpEnv: McpEnvMeta
   authGate: string
   epigraph?: string
+  inDocker: string
 }
 
 declare type LoginMeta = {

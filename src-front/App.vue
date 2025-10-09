@@ -74,6 +74,7 @@ const loadGlobal = async () => {
     const info = (resp || {}) as GlobalResp
     app.setLogin(info.login || {})
     app.setAuthGate(info.authGate)
+    app.setInDocker(info.inDocker)
     if (info.active) {
       app.setActive(info.active)
     }

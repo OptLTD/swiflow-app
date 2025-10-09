@@ -9,6 +9,7 @@ export const useAppStore = defineStore('app', {
     version: '1.0.0',
     action: 'default',
     layout: 'default',
+    inDocker: 'no',
     chatbar: true,
     menubar: false,
     history: false,
@@ -85,7 +86,9 @@ export const useAppStore = defineStore('app', {
     setAuthGate(text: string) {
       this.gateway = text
     },
-
+    setInDocker(val: string) {
+      this.inDocker = val
+    },
     useModel(name: string) {
       this.model = name
     },
@@ -129,6 +132,7 @@ export const useAppStore = defineStore('app', {
     getUseModel: (state) => state.model,
     getVersion: (state) => state.version,
     getRelease: (state) => state.release,
+    getInDocker: (state) => state.inDocker,
     authGateway: (state) => state.gateway,
     useIsolated: (state) => state.setup.useIsolated,
     useSubAgent: (state) => state.setup.useSubAgent,

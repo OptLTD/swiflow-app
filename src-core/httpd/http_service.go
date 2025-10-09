@@ -316,6 +316,7 @@ func (h *HttpServie) LoadGlobal() map[string]any {
 	}
 	result["mcpEnv"] = h.GetMcpEnv()
 	result["authGate"] = config.GetAuthGate()
+	result["inDocker"] = config.InContainer()
 	return result
 }
 

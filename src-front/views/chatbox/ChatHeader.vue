@@ -17,6 +17,9 @@ const hasNewVer = computed(() => {
   if (!app.getRelease) {
     return false
   }
+  if (app.getInDocker === 'yes') {
+    return false
+  }
   return app.getRelease['url']
 })
 const newFeature = computed(() => {
@@ -33,6 +36,9 @@ const downloadUrl = computed(() => {
 })
 const showEpigraph = computed(() => {
   if (hasNewVer.value) {
+    return false
+  }
+  if (app.getInDocker === 'yes') {
     return false
   }
   return !!app.getDisplay.epigraphText
