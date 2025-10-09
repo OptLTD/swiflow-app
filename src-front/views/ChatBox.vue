@@ -250,6 +250,7 @@ const startPlayAction = (msg: ActionMsg, force: boolean = false) => {
 }
 
 const handleToolsChange = (tools: string[]) => {
+  // ref to app.getBotList object
   currWorker.value!.tools = tools
   const uuid = unref(currWorker)?.uuid
   setBotTools(uuid as string, tools.join())
@@ -273,11 +274,20 @@ const handleRemoveUpload = (index: number) => {
   app.setUploads(uploads)
 }
 
+const getCurrentWorker = (uuid: string) => {
+  return app.getBotList.find((item) => {
+    return item.uuid == uuid
+  })
+}
+
 watch(() => task.getActive, (uuid) => {
   handleSwitch(uuid)
 })
+watch(() => app.getActive, (current) => {
+  currWorker.value = getCurrentWorker(current?.uuid)
+})
 onMounted(() => {
-  currWorker.value = app.getActive
+  currWorker.value = getCurrentWorker(app.getActive?.uuid)
   eventEmitter.on('respond', (socketMsg: SocketMsg) => {
     if (socketMsg.taskid != task.getActive) {
       console.log('Respond message not match:', socketMsg)

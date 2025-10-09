@@ -131,8 +131,10 @@ const hasMoreArgs = [
           <dt>{{ (act as MakeAsk).question }}</dt>
           <dd v-for="(option, m) in (act as MakeAsk).options">
             <label>
-              <input type="checkbox" :value="option" @click="handleOptionCheck(act as MakeAsk, m)"
-                :disabled="isLast == false" :checked="m == act.checked" />
+              <input type="checkbox" :value="option" 
+                @click="handleOptionCheck(act as MakeAsk, m)"
+                :disabled="isLast == false" :checked="m == act.checked" 
+              />
               {{ option }}
             </label>
           </dd>

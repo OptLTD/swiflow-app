@@ -181,11 +181,13 @@ const getGroupChecked = () => {
   const result = {} as Record<string, boolean>
   servers.value.forEach((server) => {
     const tools = server.status.tools || []
-    const items = tools.map((x: any) => x.name)
+    const items = tools.map((x: any) => {
+      return `${server.uuid}:${x.name}`
+    })
     const values = checked.value.filter(x => {
       return items.includes(x)
     })
-    result[server.uuid] = values.length === items.length
+    result[server.uuid] = values.length >= items.length
   })
   return result
 }
@@ -194,32 +196,35 @@ const toggleCheck = (item: any, server: McpServer) => {
   if (!props.enable || !server.status.enable) return
   const groupKey = `${server.uuid}:*`
   const tools = server.status.tools || []
-  const toolNames = tools.map((x: any) => x.name)
+  const items = tools.map((x: any) => {
+    return `${server.uuid}:${x.name}`
+  })
   let newChecked = [...checked.value]
 
   // 如果 groupKey 存在，先拆成所有 tool name
   if (newChecked.includes(groupKey)) {
     newChecked = newChecked.filter(x => x !== groupKey)
-    newChecked.push(...toolNames.filter(name => !newChecked.includes(name)))
+    newChecked.push(...items.filter(name => !newChecked.includes(name)))
   }
 
   // toggle 当前 tool
-  const idx = newChecked.indexOf(item.name)
+  const key = `${server.uuid}:${item.name}`
+  const idx = newChecked.indexOf(key)
   if (idx === -1 && !item.enable) {
-    newChecked.push(item.name)
+    newChecked.push(key)
   } else if (idx !== -1) {
     newChecked.splice(idx, 1)
   }
 
   // 如果所有 tool 都被选中，则只保留 groupKey
-  if (toolNames.every(name => newChecked.includes(name))) {
-    newChecked = newChecked.filter(x => !toolNames.includes(x))
+  if (items.every(name => newChecked.includes(name))) {
+    newChecked = newChecked.filter(x => !items.includes(x))
     newChecked.push(groupKey)
   } else {
     // 否则移除 groupKey，只保留当前 group 的已选 tool name
     newChecked = [
-      ...newChecked.filter(x => !toolNames.includes(x) && x !== groupKey),
-      ...toolNames.filter(name => newChecked.includes(name))
+      ...newChecked.filter(x => !items.includes(x) && x !== groupKey),
+      ...items.filter(name => newChecked.includes(name))
     ]
   }
 
@@ -231,8 +236,12 @@ const toggleGroup = (server: McpServer) => {
   if (!props.enable || !server.status.enable) return
   const groupKey = `${server.uuid}:*`
   const tools = server.status.tools || []
-  const toolNames = tools.map((x: any) => x.name)
-  let newChecked = checked.value.filter(x => x !== groupKey && !toolNames.includes(x))
+  const items = tools.map((x: any) => {
+    return `${server.uuid}:${x.name}`
+  })
+  let newChecked = checked.value.filter(x => {
+    return x !== groupKey && !items.includes(x)
+  })
   // 之前没选则追加groupKey，否则取消
   if (!checked.value.includes(groupKey)) {
     newChecked.push(groupKey)
@@ -246,8 +255,9 @@ const isGroupChecked = (server: McpServer) => {
 }
 const isToolChecked = (tool: any, server: McpServer) => {
   const groupKey = `${server.uuid}:*`
+  const tookKey = `${server.uuid}:${tool.name}`
   if (checked.value.includes(groupKey)) return true
-  return checked.value.includes(tool.name)
+  return checked.value.includes(tookKey)
 }
 
 const getCheckboxId = (val: string) => `select-${val}`

@@ -12,10 +12,10 @@ defineEmits(['check', 'replay', 'display'])
       <MsgDetail
         v-for="(item, i) in messages"
         :key="i" :detail="item"
-        :is-last="i+1 === messages.length"
         @check="$emit('check', $event)"
         @replay="$emit('replay', $event)"
         @display="$emit('display', $event)"
+        :is-last="i+1 === messages.length"
       >
         <template #header>
           <MsgHeader :detail="item"/>

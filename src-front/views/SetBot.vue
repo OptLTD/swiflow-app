@@ -111,23 +111,24 @@ const resetItems = () => {
     return 0
   }
 }
-const resetBots = (act: string, {uuid, name, leader}: BotEntity) => {
+const resetBots = (act: string, bot: BotEntity) => {
   try {
     const bots = app.getBotList
     for(var i in bots) {
-      if (bots[i].uuid == uuid) {
-        bots[i].name = name
+      if (bots[i].uuid == bot.uuid) {
+        Object.assign(bots[i], bot)
         if (act == 'del-bot') {
           bots[i].name = ''
         }
       }
     }
     if (act == 'add-bot') {
-      bots.push({uuid, name, leader} as BotEntity)
+      bots.push(bot as BotEntity)
     }
+    // remove after del-bot
     app.setBotList(bots.filter(x => x.name))
     if (resetItems() > 0 && act == 'add-bot') {
-      active.value = uuid
+      active.value = bot.uuid
     }
   } catch (error) {
     console.error('Error in resetBots:', error)

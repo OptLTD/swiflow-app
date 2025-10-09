@@ -7,32 +7,32 @@ const emit = defineEmits<{
 // Sample tasks configuration with enhanced data structure
 const sampleTasks = [
   {
-    title: '网页数据抓取',
+    title: '制作工资单',
     botKey: 'office-bot',
     botName: 'Office Bot',
-    brief: '抓取指定网站的数据并进行分析',
-    prompt: '请帮我抓取指定网站的数据，包括商品信息、价格、评论等，并进行数据清洗和分析处理。'
+    brief: '请帮我用Excel制作一份工资单',
+    prompt: '请帮我用Excel制作一份工资单，包括员工姓名、工资、扣款项、扣款金额、扣款日期等, 每个员工的工资单之间用空行隔开。'
   },
   {
-    title: '代码审查助手',
+    title: '单据识别',
     botKey: 'office-bot',
-    botName: 'CodeReview Bot',
-    brief: '请对我的代码进行全面审查，检查代码规范、性能问题、安全漏洞，并提供具体的改进建议。',
-    prompt: '请对我的代码进行全面审查，检查代码规范、性能问题、安全漏洞，并提供具体的改进建议。'
+    botName: 'Office Bot',
+    brief: '请帮我把单据整理成Excel表格',
+    prompt: '请帮我识别我的单据，包括工资单、发票、订单等，并将结果以Excel表格的形式返回。'
   },
   {
     title: '数据分析报告',
     botKey: 'office-bot',
     botName: 'DataAnalyst Bot',
-    brief: '从CSV文件生成数据分析报告',
-    prompt: '请分析我提供的CSV数据文件，生成包含统计图表、趋势分析和洞察结论的完整数据报告。'
+    brief: '从Excel文件生成数据分析报告',
+    prompt: '请分析我提供的Excel数据文件，生成包含统计图表、趋势分析和洞察结论的完整数据报告。'
   },
   {
-    title: 'API接口测试',
+    title: '更多玩法',
     botKey: 'office-bot',
-    botName: 'APITester Bot',
-    brief: '请帮我设计和执行API接口的自动化测试，包括功能测试、性能测试和边界条件测试。',
-    prompt: '请帮我设计和执行API接口的自动化测试，包括功能测试、性能测试和边界条件测试。'
+    botName: 'Office Bot',
+    brief: '更多玩法敬请期待',
+    prompt: '你都会点什么？'
   }
 ]
 

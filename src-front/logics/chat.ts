@@ -22,6 +22,10 @@ export const canShowDisplayAct = (msg: MsgAct) => {
   if (!shouldAutoDisplay(msg)) {
     return false;
   }
+  const { innerWidth } = window
+  if (innerWidth < 960) {
+    return false
+  }
   const data = (msg as Complete).content
   return data && data.split('\n').length > 5
 }
@@ -167,7 +171,13 @@ export const parseHistory = (msgs: ActionMsg[]): ActionMsg[] => {
 export const getDisplayActDesc = (item: MsgAct): string => {
   switch (item.type) {
     case "complete": {
-      return `结果展示`
+      const act = (item as Complete)
+      const data = act.content?.trim()
+      if (!data) {
+        return '结果展示'
+      }
+      const rows = data.split('\n')
+      return `结果展示: ${rows[0].trim()}`
     }
     case "execute-command": {
       const act = (item as ExecuteCommand)

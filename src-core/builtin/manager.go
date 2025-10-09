@@ -118,23 +118,23 @@ func (a *BuiltinManager) Query(name string) (BuiltinTool, error) {
 func (a *BuiltinManager) GetPrompt(checked []string) string {
 	var b strings.Builder
 	buildin := []string{
-		"command", "python3",
-		"chat2llm", "image-ocr",
+		"builtin:command", "builtin:python3",
+		"builtin:chat2llm", "builtin:image-ocr",
 	}
 	// checked builtin:*, includes all
 	if slice.Contain(checked, "builtin:*") {
 		checked = append(checked, buildin...)
 	}
-	if slice.Contain(checked, "command") {
+	if slice.Contain(checked, "builtin:command") {
 		b.WriteString((&CommandTool{}).Prompt())
 	}
-	if slice.Contain(checked, "python3") {
+	if slice.Contain(checked, "builtin:python3") {
 		b.WriteString((&Python3Tool{}).Prompt())
 	}
-	if slice.Contain(checked, "chat2llm") {
+	if slice.Contain(checked, "builtin:chat2llm") {
 		b.WriteString((&Chat2LLMTool{}).Prompt())
 	}
-	if slice.Contain(checked, "image-ocr") {
+	if slice.Contain(checked, "builtin:image-ocr") {
 		b.WriteString((&ImageOCRTool{}).Prompt())
 	}
 	// Alias prompts derived from tool entities
