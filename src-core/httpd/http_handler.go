@@ -72,6 +72,21 @@ func (h *HttpHandler) Static(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// 根据请求路径设置缓存策略
+	p := r.URL.Path
+	switch {
+	case p == "/" || strings.HasSuffix(p, ".html"):
+		// index.html 等入口文档：协商缓存，避免强缓存导致无法更新入口
+		w.Header().Set("Cache-Control", "no-cache")
+	case strings.HasSuffix(p, ".js") || strings.HasSuffix(p, ".css") ||
+		strings.HasSuffix(p, ".png") || strings.HasSuffix(p, ".jpg") ||
+		strings.HasSuffix(p, ".jpeg") || strings.HasSuffix(p, ".svg") ||
+		strings.HasSuffix(p, ".webp") || strings.HasSuffix(p, ".gif") ||
+		strings.HasSuffix(p, ".ico") || strings.HasSuffix(p, ".woff") ||
+		strings.HasSuffix(p, ".woff2") || strings.HasSuffix(p, ".ttf") ||
+		strings.HasSuffix(p, ".eot"): // 构建产物与静态资源：强缓存，文件名通常带内容哈希
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	}
 	http.FileServer(http.FS(subfs)).ServeHTTP(w, r)
 }
 
