@@ -13,10 +13,14 @@ import { ref, onMounted, nextTick } from 'vue'
 import { watch, defineAsyncComponent } from 'vue'
 
 // 按需加载 Excel 查看器，避免初始加载 xlsx 库
-const XlsViewerAsync = defineAsyncComponent(() => import('./browser/XlsViewer.vue'))
+const XlsViewerAsync = defineAsyncComponent(() => {
+  return import('./browser/XlsViewer.vue')
+})
 
 // 按需加载 PDF 查看器，避免初始加载 pdfjs/vue-pdf
-const PdfViewerAsync = defineAsyncComponent(() => import('./browser/PdfViewer.vue'))
+const PdfViewerAsync = defineAsyncComponent(() => {
+  return import('./browser/PdfViewer.vue')
+})
 
 const { t } = useI18n()
 const app = useAppStore()
@@ -93,6 +97,9 @@ const doRefresh = () => {
 // Launch current directory or file in system explorer
 const doLaunch = async () => {
   try {
+    if (app.getInDocker) {
+      return window.open(getFileUrl(currDir.value, selected.value))
+    }
     const uuid = app.getActive.uuid || ''
     const path = selected.value || currDir.value
     const url = `/launch?uuid=${uuid}&path=${encodeURIComponent(path)}`
@@ -280,7 +287,8 @@ const forceUpdateComponent = () => {
         />
       </svg>
     </button>
-    <button class="btn-refresh" @click="doLaunch" :title="$t('common.openInExplorer')">
+    <button v-if="!app.getInDocker" class="btn-refresh" 
+      @click="doLaunch" :title="$t('common.openInExplorer')">
       <svg class="icon" viewBox="0 0 24 24">
         <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 
           2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"

@@ -141,8 +141,8 @@ const PLATFORM_CONFIGS = {
       x86_64: { goarch: 'amd64', target: 'x86_64-apple-darwin' }
     },
     buildTags: '!windows',
-    ldflags: (version, epigraph) => {
-      return `-X 'main.Version=${version}' -X 'main.Epigraph=${epigraph}' -s -w`
+    ldflags: (version) => {
+      return `-X 'main.Version=${version}' -s -w`
     } 
   },
   
@@ -152,8 +152,8 @@ const PLATFORM_CONFIGS = {
       x86_64: { goarch: 'amd64', target: 'x86_64-pc-windows-msvc' }
     },
     buildTags: 'windows',
-    ldflags: (version, epigraph) => {
-      return `-X 'main.Version=${version}' -X 'main.Epigraph=${epigraph}' -s -w` // -H windowsgui
+    ldflags: (version) => {
+      return `-X 'main.Version=${version}' -s -w` // -H windowsgui
     }
   }
 };
@@ -295,7 +295,7 @@ function buildGoBinary(platform, arch, version) {
   }
   
   const { goarch, target } = archConfig;
-  const ldflags = platformConfig.ldflags(version, BUILD_CONFIG.app.version.epigraphInfo);
+  const ldflags = platformConfig.ldflags(version);
   
   const outputFile = platform === 'mac' 
     ? join(BUILD_CONFIG.paths.bin, `${BUILD_CONFIG.app.name}-${target}`)

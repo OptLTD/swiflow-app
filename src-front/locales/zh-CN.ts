@@ -44,7 +44,8 @@ export default {
     setDoneTip: '置为完成',
     setDoneMsg: '该待办后续计划会被清除且不可恢复. 确认完成么?',
 
-    browserTips: '点击查看当前目录下文件内容'
+    browserTips: '查看目录详情',
+    openInBrowser: '直接打开文件',
   },
   common: {
     view: '查看',
@@ -94,13 +95,13 @@ export default {
     loginRecommend: '登录后享受更多功能',
 
     // 文件浏览器相关
-    browser: '文件浏览器',
-    refresh: '刷新',
     back: '返回',
-    rootDirectory: '根目录',
+    refresh: '刷新',
     loading: '加载中...',
+    browser: '文件浏览器',
+    rootDirectory: '根目录',
     emptyDirectory: '当前目录为空',
-    emptyFile: '文件内容为空',
+    emptyFileContent: '文件内容为空',
     loadFileListFailed: '加载文件列表失败',
     loadFileContentFailed: '加载文件内容失败',
   },

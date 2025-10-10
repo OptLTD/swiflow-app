@@ -72,7 +72,7 @@ const doSwitch = (provider: string) => {
     Object.assign(formModel.value, {
       apiUrl: config.apiUrl,
       apiKey: config.apiKey,
-      useModel: config.default,
+      useModel: config.useModel,
     })
   } else if (provider && !config) {
     Object.assign(formModel.value, {

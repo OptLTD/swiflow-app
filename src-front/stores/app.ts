@@ -9,7 +9,7 @@ export const useAppStore = defineStore('app', {
     version: '1.0.0',
     action: 'default',
     layout: 'default',
-    inDocker: 'no',
+    inDocker: false,
     chatbar: true,
     menubar: false,
     history: false,
@@ -86,7 +86,7 @@ export const useAppStore = defineStore('app', {
     setAuthGate(text: string) {
       this.gateway = text
     },
-    setInDocker(val: string) {
+    setInDocker(val: boolean) {
       this.inDocker = val
     },
     useModel(name: string) {

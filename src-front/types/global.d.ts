@@ -254,8 +254,8 @@ declare type GlobalResp = {
   setup: SetupMeta
   login: LoginMeta
   authGate: string
+  inDocker: boolean
   epigraph?: string
-  inDocker: string
 }
 
 declare type LoginMeta = {
@@ -310,7 +310,7 @@ declare type ModelInfo = {
   apiKey: string
   apiUrl: string
   models: string[]
-  default: string
+  useModel: string
   provider: string
 }
 

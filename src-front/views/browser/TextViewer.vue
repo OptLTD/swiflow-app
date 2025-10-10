@@ -15,7 +15,7 @@
       <pre v-else class="file-content">{{ content }}</pre>
     </div>
     <div v-else class="empty-content">
-      <p>{{ $t('common.emptyFile') }}</p>
+      <p>{{ $t('common.emptyFileContent') }}</p>
     </div>
   </div>
 </template>

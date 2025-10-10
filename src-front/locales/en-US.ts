@@ -40,6 +40,9 @@ export default {
     openHomeTip: 'Please enter the absolute path of the working directory',
     setDoneTip: 'Set as Complete',
     setDoneMsg: 'The follow-up plan for this todo will be cleared and cannot be recovered. Are you sure to complete it?',
+
+    browserTips: 'View Directory Details',
+    openInBrowser: 'Open File in Browser',
   },
   common: {
     view: 'View',
@@ -87,6 +90,17 @@ export default {
     logout: 'Logout',
     pleaseLogin: 'Please Login',
     loginRecommend: 'Login to enjoy more features',
+
+    // 文件浏览器相关
+    back: 'Back',
+    refresh: 'Refresh',
+    loading: 'Loading...',
+    browser: 'File Browser',
+    rootDirectory: 'Root Directory',
+    emptyDirectory: 'Current directory is empty',
+    emptyFileContent: 'File content is empty',
+    loadFileListFailed: 'Failed to load file list',
+    loadFileContentFailed: 'Failed to load file content',
   },
   dropzone: {
     fileProcessError: 'File processing error:',

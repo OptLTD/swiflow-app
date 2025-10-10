@@ -409,8 +409,8 @@ func (s *SQLiteStorage) SaveTool(tool *ToolEntity) error {
 
 	// 构建更新数据
 	updates := map[string]any{
-		"uuid": tool.UUID, "type": tool.Type,
-		"name": tool.Name, "desc": tool.Desc,
+		"name": tool.Name, "type": tool.Type,
+		"desc": tool.Desc, "data": tool.Data,
 	}
 
 	clauses := clause.OnConflict{

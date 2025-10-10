@@ -15,37 +15,31 @@ const toggleHistory = () => {
 }
 
 const hasNewVer = computed(() => {
-  if (!app.getRelease) {
-    return false
-  }
-  if (app.getInDocker === 'yes') {
+  if (!app.getRelease || app.getInDocker) {
     return false
   }
   return app.getRelease['url']
 })
 const newFeature = computed(() => {
-  if (!app.getRelease) {
+  if (!app.getRelease || app.getInDocker) {
     return ''
   }
   return app.getRelease['body']
 })
 const downloadUrl = computed(() => {
-  if (!app.getRelease) {
+  if (!app.getRelease || app.getInDocker) {
     return ''
   }
   return app.getRelease['url']
 })
 const showEpigraph = computed(() => {
-  if (hasNewVer.value) {
-    return false
-  }
-  if (app.getInDocker === 'yes') {
+  if (hasNewVer.value || app.getInDocker) {
     return false
   }
   return !!app.getDisplay.epigraphText
 })
 const goDownload = () => {
-  if (!app.getRelease) {
+  if (!app.getRelease || app.getInDocker) {
     return
   }
   const url = app.getRelease['url'];
