@@ -131,9 +131,6 @@ func (h *HttpServie) GetMcpEnv() any {
 	if config.IsWindows() {
 		result["windows"] = true
 	}
-	if config.InContainer() {
-		result["in-docker"] = true
-	}
 	return result
 }
 

@@ -23,7 +23,10 @@ func (act *UseMcpTool) Handle(super *SuperAction) any {
 	var client *amcp.McpClient
 	var server = &amcp.McpServer{UUID: act.Name}
 	if client = amcp.NewMcpClient(server); client == nil {
-		act.Result = fmt.Errorf("server unservice")
+		act.Result = fmt.Errorf(
+			"mcp server[%s][%s] not in service, err: %s",
+			act.Name, act.Tool, server.Status.ErrMsg,
+		)
 		return act.Result
 	}
 	var args = map[string]any{}
