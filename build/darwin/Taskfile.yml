@@ -31,22 +31,6 @@ tasks:
       MACOSX_DEPLOYMENT_TARGET: "10.15"
       PRODUCTION: '{{.PRODUCTION | default "false"}}'
 
-  build:universal:
-    summary: Builds darwin universal binary (arm64 + amd64)
-    deps:
-      - task: build
-        vars:
-          ARCH: amd64
-          # Build runs in dir: app, so output must escape to project root
-          OUTPUT: "../{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
-      - task: build
-        vars:
-          ARCH: arm64
-          # Build runs in dir: app, so output must escape to project root
-          OUTPUT: "../{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
-    cmds:
-      - lipo -create -output "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
-      - rm "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
 
   package:
     summary: Packages a production build of the application into a `.app` bundle
@@ -54,37 +38,10 @@ tasks:
       - task: build
         vars:
           PRODUCTION: "true"
+      - task: update:build-assets
     cmds:
       - task: bundle
 
-  package:universal:
-    summary: Packages darwin universal binary (arm64 + amd64)
-    deps:
-      - task: build:universal
-    cmds:
-      - task: bundle
-        vars:
-          BUNDLE_SUFFIX: "-universal"
-
-  package:all:
-    summary: Packages both amd64 and arm64 `.app` bundles (no universal)
-    cmds:
-      - task: build
-        vars:
-          PRODUCTION: "true"
-          ARCH: amd64
-          OUTPUT: "../{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
-      - task: bundle
-        vars:
-          ARCH: "amd64"
-      - task: build
-        vars:
-          PRODUCTION: "true"
-          ARCH: arm64
-          OUTPUT: "../{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
-      - task: bundle
-        vars:
-          ARCH: "arm64"
 
   # ----------------------------
   # Bundle (.app)
@@ -92,17 +49,14 @@ tasks:
   bundle:
     summary: Creates an `.app` bundle
     vars:
-      ARCH: '{{.ARCH | default ""}}'
-      SUFFIX: '{{if .ARCH}}-{{.ARCH}}{{end}}'
-      BINARY_SUFFIX: '{{ .BINARY_SUFFIX | default .SUFFIX }}'
-      BUNDLE_SUFFIX: '{{ .BUNDLE_SUFFIX | default .SUFFIX }}'
+      BINARY_SUFFIX: '{{ .BINARY_SUFFIX | default "" }}'
     cmds:
-      - mkdir -p {{.BIN_DIR}}/{{.APP_NAME}}{{.BUNDLE_SUFFIX}}.app/Contents/{MacOS,Resources}
-      - cp build/darwin/Info.plist {{.BIN_DIR}}/{{.APP_NAME}}{{.BUNDLE_SUFFIX}}.app/Contents
-      - cp build/darwin/icons.icns {{.BIN_DIR}}/{{.APP_NAME}}{{.BUNDLE_SUFFIX}}.app/Contents/Resources
-      - mv {{.BIN_DIR}}/{{.APP_NAME}}{{.BINARY_SUFFIX}} {{.BIN_DIR}}/{{.APP_NAME}}{{.BUNDLE_SUFFIX}}.app/Contents/MacOS
-      - plutil -replace CFBundleExecutable -string '{{.APP_NAME}}{{.BINARY_SUFFIX}}' {{.BIN_DIR}}/{{.APP_NAME}}{{.BUNDLE_SUFFIX}}.app/Contents/Info.plist
-      - codesign --force --deep --sign - {{.BIN_DIR}}/{{.APP_NAME}}{{.BUNDLE_SUFFIX}}.app
+      - mkdir -p {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/{MacOS,Resources}
+      - cp build/darwin/Info.plist {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents
+      - cp build/darwin/icons.icns {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources
+      - mv {{.BIN_DIR}}/{{.APP_NAME}}{{.BINARY_SUFFIX}} {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/{{.APP_NAME}}
+      - plutil -replace CFBundleExecutable -string '{{.APP_NAME}}' {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Info.plist
+      - codesign --force --deep --sign - {{.BIN_DIR}}/{{.APP_NAME}}.app
 
   # ----------------------------
   # Signing (Developer ID)
@@ -112,22 +66,16 @@ tasks:
     preconditions:
       - sh: test -n "$APPLE_SIGNING_IDENTITY"
         msg: "Missing required env: APPLE_SIGNING_IDENTITY"
-    vars:
-      ARCH: '{{.ARCH | default ""}}'
-      SUFFIX: '{{if .ARCH}}-{{.ARCH}}{{end}}'
     cmds:
-      - codesign -s "$APPLE_SIGNING_IDENTITY" -f -v --timestamp --options runtime --deep "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.app"
+      - codesign -s "$APPLE_SIGNING_IDENTITY" -f -v --timestamp --options runtime --deep "{{.BIN_DIR}}/{{.APP_NAME}}.app"
 
   # ----------------------------
   # Zip (for notarization)
   # ----------------------------
   zip:
     summary: Create zip for app bundle using ditto
-    vars:
-      ARCH: '{{.ARCH | default ""}}'
-      SUFFIX: '{{if .ARCH}}-{{.ARCH}}{{end}}'
     cmds:
-      - ditto -c -k --keepParent "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.app" "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.zip"
+      - ditto -c -k --keepParent "{{.BIN_DIR}}/{{.APP_NAME}}.app" "{{.BIN_DIR}}/{{.APP_NAME}}{{if .ARCH}}-{{.ARCH}}{{end}}.zip"
 
   # ----------------------------
   # Notarization
@@ -143,35 +91,26 @@ tasks:
         msg: "Missing required env: APPLE_API_KEY_PATH"
       - sh: test -f "$APPLE_API_KEY_PATH"
         msg: "APPLE_API_KEY_PATH does not exist or is not a file"
-    vars:
-      ARCH: '{{.ARCH | default ""}}'
-      SUFFIX: '{{if .ARCH}}-{{.ARCH}}{{end}}'
     cmds:
-      - xcrun notarytool submit "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.zip" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
+      - xcrun notarytool submit "{{.BIN_DIR}}/{{.APP_NAME}}{{if .ARCH}}-{{.ARCH}}{{end}}.zip" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
 
   # ----------------------------
   # Staple (attach notarization ticket)
   # ----------------------------
   staple:
     summary: Staple notarization ticket to app bundle
-    vars:
-      ARCH: '{{.ARCH | default ""}}'
-      SUFFIX: '{{if .ARCH}}-{{.ARCH}}{{end}}'
     cmds:
-      - xcrun stapler staple "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.app"
+      - xcrun stapler staple "{{.BIN_DIR}}/{{.APP_NAME}}.app"
 
   # ----------------------------
   # Verify (codesign + Gatekeeper)
   # ----------------------------
   verify:
     summary: Verify app codesign and Gatekeeper
-    vars:
-      ARCH: '{{.ARCH | default ""}}'
-      SUFFIX: '{{if .ARCH}}-{{.ARCH}}{{end}}'
     cmds:
-      - codesign --display --verbose=2 "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.app"
-      - codesign --verify --deep --strict --verbose=2 "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.app"
-      - spctl -a -vv --type exec "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.app"
+      - codesign --display --verbose=2 "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+      - codesign --verify --deep --strict --verbose=2 "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+      - spctl -a -vv --type exec "{{.BIN_DIR}}/{{.APP_NAME}}.app"
 
   # ----------------------------
   # DMG creation
@@ -179,13 +118,16 @@ tasks:
   dmg:
     summary: Create DMG for app bundle
     vars:
-      ARCH: '{{.ARCH | default ""}}'
-      SUFFIX: '{{if .ARCH}}-{{.ARCH}}{{end}}'
-      VOLNAME: '{{if .ARCH}}{{.APP_NAME}} ({{.ARCH}}){{else}}{{.APP_NAME}}{{end}}'
       DIST_DMG: '{{.DIST_DMG | default "build/dmg"}}'
     cmds:
       - mkdir -p "{{.DIST_DMG}}"
-      - hdiutil create -volname "{{.VOLNAME}}" -srcfolder "{{.BIN_DIR}}/{{.APP_NAME}}{{.SUFFIX}}.app" -ov -format UDZO "{{.DIST_DMG}}/{{.APP_NAME}}{{.SUFFIX}}.dmg"
+      - rm -rf "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}"
+      - mkdir -p "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}"
+      - cp -R "{{.BIN_DIR}}/{{.APP_NAME}}.app" "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}"
+      - ln -s "/Applications" "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}/Applications"
+      # Use default Finder layout (no AppleScript customization)
+      - hdiutil create -volname "{{if .ARCH}}{{.APP_NAME}} ({{.ARCH}}){{else}}{{.APP_NAME}}{{end}}" -srcfolder "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}" -ov -format UDZO "{{.DIST_DMG}}/{{.APP_NAME}}{{if .ARCH}}-{{.ARCH}}{{end}}.dmg"
+      - rm -rf "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}"
 
   # ----------------------------
   # Release pipeline (build → sign → zip → notarize → staple → verify → dmg)
@@ -200,10 +142,8 @@ tasks:
           OUTPUT: "../{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
       - task: bundle
         vars:
-          ARCH: "amd64"
+          BINARY_SUFFIX: "-amd64"
       - task: sign
-        vars:
-          ARCH: "amd64"
       - task: zip
         vars:
           ARCH: "amd64"
@@ -211,14 +151,11 @@ tasks:
         vars:
           ARCH: "amd64"
       - task: staple
-        vars:
-          ARCH: "amd64"
       - task: verify
-        vars:
-          ARCH: "amd64"
       - task: dmg
         vars:
           ARCH: "amd64"
+      - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}.app"
 
   release:arm64:
     summary: Full release pipeline for arm64 (single arch)
@@ -230,10 +167,8 @@ tasks:
           OUTPUT: "../{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
       - task: bundle
         vars:
-          ARCH: "arm64"
+          BINARY_SUFFIX: "-arm64"
       - task: sign
-        vars:
-          ARCH: "arm64"
       - task: zip
         vars:
           ARCH: "arm64"
@@ -241,14 +176,11 @@ tasks:
         vars:
           ARCH: "arm64"
       - task: staple
-        vars:
-          ARCH: "arm64"
       - task: verify
-        vars:
-          ARCH: "arm64"
       - task: dmg
         vars:
           ARCH: "arm64"
+      - rm -rf "{{.BIN_DIR}}/{{.APP_NAME}}.app"
 
   release:all:
     summary: Full release pipeline for amd64 and arm64 (no universal)

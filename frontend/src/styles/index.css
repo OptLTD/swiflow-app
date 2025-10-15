@@ -150,7 +150,6 @@ body {
 
 #main-panel {
   flex: 2;
-  /* z-index: 999; */
   min-width: 0;
   display: flex;
   position: relative;

@@ -13,7 +13,6 @@ import (
 	"swiflow/entry"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/icons"
 )
 
 //go:embed html
@@ -32,12 +31,19 @@ func main() {
 
 	tray := app.SystemTray.New()
 	if runtime.GOOS == "darwin" {
-		tray.SetTemplateIcon(icons.SystrayMacTemplate)
+		data, _ := html.ReadFile(
+			"html/images/icon-light.png",
+		)
+		tray.SetTemplateIcon(data)
+	} else {
+		data, _ := html.ReadFile(
+			"html/images/icon-dark.png",
+		)
+		tray.SetTemplateIcon(data)
 	}
 
 	menu := start.GetMainMenu(app)
-	tray.SetMenu(menu)
-	tray.OnClick(func() {
+	tray.SetMenu(menu).OnClick(func() {
 		tray.OpenMenu()
 	})
 

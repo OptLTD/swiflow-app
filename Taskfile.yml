@@ -7,7 +7,8 @@ includes:
   windows: ./build/windows/Taskfile.yml
 
 vars:
-  BIN_DIR: "bin"
+  VERSION: "0.8.12"
+  BIN_DIR: "build/bin"
   APP_NAME: "Swiflow"
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
 
@@ -21,11 +22,6 @@ tasks:
     summary: Packages a production build of the application
     cmds:
       - task: "{{OS}}:package"
-
-  package:all:
-    summary: Packages all architecture-specific app bundles (no universal)
-    cmds:
-      - task: "{{OS}}:package:all"
 
   run:
     summary: Runs the application
