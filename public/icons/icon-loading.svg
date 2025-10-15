@@ -1,7 +1,0 @@
-<?xml version="1.0" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="10" stroke-dasharray="31.415, 31.415" stroke-dashoffset="0">
-    <animate attributeName="stroke-dashoffset" repeatCount="indefinite" dur="1.5s" keyTimes="0;1" values="0;62.83"/>
-  </circle>
-</svg>

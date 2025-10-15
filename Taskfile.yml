@@ -1,0 +1,59 @@
+version: '3'
+
+includes:
+  common: ./build/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+
+vars:
+  BIN_DIR: "bin"
+  APP_NAME: "Swiflow"
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+
+tasks:
+  build:
+    summary: Builds the application
+    cmds:
+      - task: "{{OS}}:build"
+
+  package:
+    summary: Packages a production build of the application
+    cmds:
+      - task: "{{OS}}:package"
+
+  package:all:
+    summary: Packages all architecture-specific app bundles (no universal)
+    cmds:
+      - task: "{{OS}}:package:all"
+
+  run:
+    summary: Runs the application
+    cmds:
+      - task: "{{OS}}:run"
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  release:all:
+    summary: Full release pipeline on current OS (build → sign → zip → notarize → staple → verify → dmg)
+    cmds:
+      - task: "{{OS}}:release:all"
+
+  release:amd64:
+    summary: Full release pipeline on current OS for amd64
+    cmds:
+      - task: "{{OS}}:release:amd64"
+
+  release:arm64:
+    summary: Full release pipeline on current OS for arm64
+    cmds:
+      - task: "{{OS}}:release:arm64"
+
+  release:win64:
+    summary: Full Windows x64 release pipeline (NSIS)
+    cmds:
+      - task: "windows:release:amd64"
+

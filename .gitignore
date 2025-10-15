@@ -7,6 +7,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# wails
+.task
+bin
+app/html/*
+frontend/dist
+frontend/node_modules
+build/dmg/**
+build/exe/**
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+
 node_modules
 bin
 dist
