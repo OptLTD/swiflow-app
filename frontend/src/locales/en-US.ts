@@ -48,6 +48,7 @@ export default {
     view: 'View',
     save: 'Save',
     cancel: 'Cancel',
+    confirm: 'Confirm',
     delete: 'Delete',
     result: 'Result',
     addNew: 'Add New',

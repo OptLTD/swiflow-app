@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, unref, watch, onMounted } from 'vue'
-import { useDraggable } from '@vueuse/core'
 import { useAppStore } from '@/stores/app'
-import { Window } from "@wailsio/runtime";
+import { useDraggable } from '@vueuse/core'
+import { ref, unref, watch } from 'vue'
 
 const app = useAppStore()
 
@@ -12,22 +11,6 @@ watch(() => app.getContent, (val) => {
   var list2 = unref(chatPanel)?.classList
   val ? list1!.add(clz) : list1!.remove(clz)
   val ? list2!.add(clz) : list2!.remove(clz)
-})
-
-onMounted(() => {
-  // Events.On('time', (timeValue: { data: string }) => {
-  //   console.log('time', timeValue.data)
-  // });
-  const header = unref(topHeader)
-  if (header && Window.Get('Swiflow')) {
-    header.addEventListener('dblclick', async () => {
-      if (await Window.IsMaximised()) {
-        await Window.UnMaximise()
-      } else {
-        await Window.Maximise()
-      }
-    })
-  }
 })
 
 const mouse = {

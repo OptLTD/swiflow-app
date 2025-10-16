@@ -8,6 +8,7 @@ import { useWebSocket } from '@/hooks/index'
 import { showWelcomeModal } from '@/logics/index';
 import { request, toast, } from '@/support/index';
 import { getWebSocketUrl } from '@/support/consts';
+import { setupWailsEvents } from '@/support/wails'
 import { isFromApp, getAppTags } from '@/support/consts';
 import Default from '@/layouts/Default.vue'
 import NavBar from '@/views/NavBar.vue'
@@ -119,6 +120,20 @@ const loadGlobal = async () => {
   } finally {
     app.setRefresh(false)
     app.setLoaded(true)
+    const wailsConfig = {
+      dialog: {
+        confirm: '确认',
+        cancel: '取消',
+      },
+      upload: {
+        title: '上传文件',
+        message: '上传文件到Swiflow',
+        handle: (files: string[]) => {
+          console.log('upload', files)
+        },
+      },
+    }
+    setupWailsEvents(wailsConfig)
   }
 }
 

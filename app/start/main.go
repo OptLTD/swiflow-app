@@ -24,8 +24,13 @@ func GetMainView(app *application.App) *application.WebviewWindow {
 		},
 		Linux: application.LinuxWindow{},
 	})
-	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		// 关闭主窗口时隐藏窗口并取消关闭事件
+	dropped := events.Common.WindowDropZoneFilesDropped
+	window.OnWindowEvent(dropped, func(event *application.WindowEvent) {
+		app.Event.Emit("app:FileDropped", event.Context().DroppedFiles())
+	})
+
+	closing := events.Common.WindowClosing
+	window.RegisterHook(closing, func(e *application.WindowEvent) {
 		docker.HideAppIcon()
 		window.Hide()
 		e.Cancel()

@@ -53,6 +53,7 @@ export default {
     edit: '修改',
     addNew: '新增',
     result: '结果',
+    confirm: '确认',
     cancel: '取消',
     delete: '删除',
     install: '安装',

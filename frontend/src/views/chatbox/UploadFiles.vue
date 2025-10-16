@@ -31,8 +31,10 @@ const handleFileClick = (upload: string) => {
 }
 
 const handleUploadFile = () => {
-  const input = document.querySelector('#global-file-input') as HTMLInputElement | null
-  input?.click()
+  const id = '#file-upload-input'
+  const ele = document.querySelector(id)
+  const input = ele as HTMLInputElement
+  input && input.click && input.click()
 }
 </script>
 <template>

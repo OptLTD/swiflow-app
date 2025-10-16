@@ -145,7 +145,7 @@ const onFileInputChange = async (e: Event) => {
 </script>
 
 <template>
-  <div v-if="isOverDropZone" id="file-container" class="file-drop-zone">
+  <div id="file-drop-zone" v-show="isOverDropZone">
     <div class="drop-content">
       <div class="drop-icon">📁</div>
       <div class="drop-text">
@@ -154,14 +154,14 @@ const onFileInputChange = async (e: Event) => {
     </div>
   </div>
   <!-- hidden input for click-to-upload -->
-  <input id="global-file-input" type="file" 
+  <input id="file-upload-input" type="file"
     multiple style="display:none" 
     @change="onFileInputChange" 
   />
 </template>
 
 <style scoped>
-.file-drop-zone {
+#file-drop-zone {
   display: flex;
   font-size: 1.75rem;
   align-items: center;

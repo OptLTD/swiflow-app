@@ -47,7 +47,7 @@ const goDownload = () => {
     return
   }
   const down = document.getElementById('downloadUrl')
-  return down && down.click && down.click()
+  return down && down.click() || window.open(url, '_blank')
 }
 </script>
 <template>

@@ -64,10 +64,10 @@ const handleLogin = () => {
     return
   }
   
-  const uri = 'authorization?from=swiflow-app'
+  const url = `${app.authGateway}/authorization`
   const loginLink = document.getElementById('loginUrl')
-  loginLink?.setAttribute('href', `${app.authGateway}/${uri}`)
-  return loginLink && loginLink.click && loginLink.click()
+  loginLink?.setAttribute('href', url+'?from=swiflow-app')
+  return loginLink && loginLink?.click() && window.open(url)
 }
 
 // 处理头像点击
@@ -75,9 +75,10 @@ const handleAvatarClick = () => {
   if (isLogin.value) {
     // 已登录，跳转到profile页面
     if (app.authGateway) {
-      const profileLink = document.getElementById('profileUrl')
-      profileLink?.setAttribute('href', `${app.authGateway}/profile`)
-      return profileLink && profileLink.click && profileLink.click()
+      const url = `${app.authGateway}/profile?from=swiflow`
+      const link = document.getElementById('profileUrl')
+      link && link?.setAttribute('href', url)
+      return link?.click() || window.open(url)
     }
   } else {
     // 未登录，执行登录
