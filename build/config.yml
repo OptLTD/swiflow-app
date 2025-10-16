@@ -13,6 +13,11 @@ info:
   comments: "Some Product Comments" # Comments
   version: "0.8.2" # The application version
 
+protocols:
+  - scheme: swiflow
+    description: Auth and quickly startup
+
+
 # Dev mode configuration
 dev_mode:
   root_path: app

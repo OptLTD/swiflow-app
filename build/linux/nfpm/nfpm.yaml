@@ -3,26 +3,26 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "mydemo"
+name: "Swiflow"
 arch: ${GOARCH}
 platform: "linux"
-version: "0.1.0"
+version: "0.8.12"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "My Product Description"
-vendor: "My Company"
+description: "Swiflow, 定制属于你的 AI 助理"
+vendor: "Option.LTD"
 homepage: "https://wails.io"
 license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/mydemo"
-    dst: "/usr/local/bin/mydemo"
+  - src: "./bin/Swiflow"
+    dst: "/usr/local/bin/Swiflow"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/mydemo.png"
-  - src: "./build/linux/mydemo.desktop"
-    dst: "/usr/share/applications/mydemo.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/Swiflow.png"
+  - src: "./build/linux/Swiflow.desktop"
+    dst: "/usr/share/applications/Swiflow.desktop"
 
 # Default dependencies for Debian 12/Ubuntu 22.04+ with WebKit 4.1
 depends:

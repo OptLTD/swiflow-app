@@ -6,15 +6,15 @@
         <key>CFBundleName</key>
             <string>Swiflow</string>
         <key>CFBundleExecutable</key>
-            <string>swiflow</string>
+            <string>Swiflow</string>
         <key>CFBundleIdentifier</key>
             <string>com.option.swiflow</string>
         <key>CFBundleVersion</key>
-            <string>0.8.2</string>
+            <string>0.8.12</string>
         <key>CFBundleGetInfoString</key>
-            <string>This is a comment</string>
+            <string>Some Product Comments</string>
         <key>CFBundleShortVersionString</key>
-            <string>0.8.2</string>
+            <string>0.8.12</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>LSMinimumSystemVersion</key>
@@ -22,6 +22,17 @@
         <key>NSHighResolutionCapable</key>
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
-            <string>© now, Option.LTD</string>
+            <string>(c) 2025, Option.LTD</string>
+        <key>CFBundleURLTypes</key>
+        <array>
+            <dict>
+                <key>CFBundleURLName</key>
+                <string>wails.com.swiflow</string>
+                <key>CFBundleURLSchemes</key>
+                <array>
+                    <string>swiflow</string>
+                </array>
+            </dict>
+        </array>
     </dict>
 </plist>

@@ -16,6 +16,7 @@ tasks:
           PRODUCTION:
             ref: .PRODUCTION
       - task: common:generate:icons
+      - task: common:update:build-assets
     cmds:
       - task: generate:syso
       - go build {{.BUILD_FLAGS}} -o ../{{.BIN_DIR}}/{{.APP_NAME}}.exe

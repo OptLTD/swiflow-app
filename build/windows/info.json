@@ -1,15 +1,15 @@
 {
 	"fixed": {
-		"file_version": "0.1.0"
+		"file_version": "0.8.12"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "0.1.0",
-			"CompanyName": "My Company",
-			"FileDescription": "My Product Description",
-			"LegalCopyright": "© now, My Company",
-			"ProductName": "My Product",
-			"Comments": "This is a comment"
+			"ProductVersion": "0.8.12",
+			"CompanyName": "Option.LTD",
+			"FileDescription": "Swiflow, 定制属于你的 AI 助理",
+			"LegalCopyright": "(c) 2025, Option.LTD",
+			"ProductName": "Swiflow",
+			"Comments": "Some Product Comments"
 		}
 	}
 }

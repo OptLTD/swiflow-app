@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"swiflow/config"
 
@@ -16,15 +17,19 @@ import (
 var docker = dock.New()
 
 func GetMainView(app *application.App) *application.WebviewWindow {
+	var frameless = false
+	if runtime.GOOS == "windows" {
+		frameless = true
+	}
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Width: 1200, Height: 800, Name: app.Config().Name,
 		StartState: application.WindowStateMaximised,
 
-		Frameless: false, AlwaysOnTop: false,
-		DisableResize: false, Hidden: false,
+		Frameless: frameless, Hidden: false,
+		AlwaysOnTop: false, DisableResize: false,
 		DevToolsEnabled: true, EnableDragAndDrop: true,
 		Windows: application.WindowsWindow{
-			HiddenOnTaskbar: false,
+			HiddenOnTaskbar: true, DisableIcon: true,
 		},
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarHiddenInset,

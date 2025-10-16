@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=My Product Description
+Name=Swiflow
+Comment=Swiflow, 定制属于你的 AI 助理
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/mydemo %u
+Exec=/usr/local/bin/Swiflow %u
 Terminal=false
 Type=Application
-Icon=mydemo
+Icon=Swiflow
 Categories=Utility;
-StartupWMClass=mydemo
+StartupWMClass=Swiflow
 
- 
+MimeType=x-scheme-handler/swiflow; 

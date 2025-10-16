@@ -5,7 +5,9 @@ import (
 	"context"
 	"embed"
 	_ "embed"
+	"io/fs"
 	"log"
+	"net/http"
 	"runtime"
 	"time"
 
@@ -19,12 +21,14 @@ import (
 var html embed.FS
 
 func main() {
+	engine := start.GetGinEngine()
+	subfs, _ := fs.Sub(html, "html")
+	engine.StaticFS("/", http.FS(subfs))
+
 	app := application.New(application.Options{
 		Name: "Swiflow", Description: "定制属于你的 AI 助理",
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(html),
-			// disable logging
-			DisableLogging: true,
+			Handler: engine, DisableLogging: false,
 		},
 		// Services: []application.Service{
 		// 	application.NewService(&hello.Hello{}),

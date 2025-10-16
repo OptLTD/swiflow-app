@@ -5,19 +5,19 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "mydemo"
+    !define INFO_PROJECTNAME ""
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "My Company"
+    !define INFO_COMPANYNAME "Option.LTD"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "My Product"
+    !define INFO_PRODUCTNAME "Swiflow"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "0.1.0"
+    !define INFO_PRODUCTVERSION "0.8.12"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "© now, My Company"
+    !define INFO_COPYRIGHT "(c) 2025, Option.LTD"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"
@@ -228,9 +228,13 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 !macro wails.associateCustomProtocols
     ; Create custom protocols associations
     
+      !insertmacro CUSTOM_PROTOCOL_ASSOCIATE "swiflow" "Auth and quickly startup" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    
 !macroend
 
 !macro wails.unassociateCustomProtocols
     ; Delete app custom protocol associations
+    
+      !insertmacro CUSTOM_PROTOCOL_UNASSOCIATE "swiflow"
     
 !macroend
