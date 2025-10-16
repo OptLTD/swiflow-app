@@ -157,14 +157,14 @@ func copyFile(src, dst string) error {
 }
 
 // toStringSlice converts arbitrary event data into a []string safely.
-// Supports []string and []interface{} (each element string or fmt-printable).
+// Supports []string and []any (each element string or fmt-printable).
 func toStringSlice(data any) []string {
 	switch v := data.(type) {
 	case nil:
 		return []string{}
 	case []string:
 		return v
-	case []interface{}:
+	case []any:
 		out := make([]string, 0, len(v))
 		for _, item := range v {
 			if s, ok := item.(string); ok {

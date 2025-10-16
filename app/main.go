@@ -23,12 +23,13 @@ func main() {
 		Name: "Swiflow", Description: "定制属于你的 AI 助理",
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(html),
+			// disable logging
+			DisableLogging: true,
 		},
 		// Services: []application.Service{
 		// 	application.NewService(&hello.Hello{}),
 		// },
 	})
-
 	tray := app.SystemTray.New()
 	if runtime.GOOS == "darwin" {
 		data, _ := html.ReadFile(
@@ -54,16 +55,14 @@ func main() {
 
 	// 启动 Web 服务与定时任务
 	go entry.StartWebServer("127.0.0.1:11235")
-	scheduleCtx, cancelSchedule := context.WithCancel(context.Background())
-	go entry.StartSchedule(scheduleCtx)
-
-	// 应用退出时优雅关闭 Web 服务
+	go entry.StartSchedule(context.Background())
 	defer func() {
-		cancelSchedule()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(
+			context.Background(), 5*time.Second,
+		)
 		defer cancel()
 		if err := entry.StopWebServer(ctx); err != nil {
-			log.Println("Server shutdown:", err)
+			log.Println("Server shutdown err:", err)
 		} else {
 			log.Println("Server stopped gracefully")
 		}
