@@ -129,7 +129,7 @@ const loadGlobal = async () => {
         title: '上传文件',
         message: '上传文件到Swiflow',
         handle: (files: string[]) => {
-          console.log('upload', files)
+          handleFilesUploaded(files)
         },
       },
     }
@@ -182,7 +182,6 @@ const listenEvent = async () => {
   window.addEventListener('welcome', onWelcome as EventListener);
   window.addEventListener('dispatch', onDispatch as EventListener);
   window.addEventListener("hashchange", onHashChange as EventListener);
-
 }
 
 const onResize = (_: UIEvent) => {

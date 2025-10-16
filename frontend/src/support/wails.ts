@@ -71,14 +71,30 @@ const setupUpload = (config: WailsUpload) => {
     const result = await Dialogs.OpenFile({
       CanChooseFiles: true,
       AllowsMultipleSelection: true,
-      Message: config.message || "上传文件", Title: upload,
-      ButtonText: '开始上传',
+      Message: config.message || "上传文件", 
+      Title: upload, ButtonText: upload,
     })
-    console.log(result, 'ddddd')
-    config.handle && config.handle(result)
+    Events.Emit('app:FileSelected', result)
   })
-  Events.On('app:FileDropped', (data: any) => {
-    config.handle && config.handle(data?.data)
+  Events.On('app:Uploaded', ({ data }: any) => {
+    if (!data || !data.length) {
+      return
+    }
+    const {result, errors} = data[0] || {}
+    if (result && result.length > 0) {
+      config.handle && config.handle(result)
+    }
+    if (errors && errors.length > 0) {
+      Dialogs.Error({
+        Title: '上传失败', 
+        Message: errors.join('\n'), 
+        Buttons: [
+          { Label: '确认', IsDefault: true },
+        ] as Dialogs.Button[],
+      })
+      return
+    }
+    console.log(result, errors, 'upload info')
   });
 }
 
@@ -90,13 +106,32 @@ const setupDragDrop = () => {
   const id = '#file-drop-zone'
   const ele = document.querySelector(id)
   const dropzone = ele as HTMLInputElement
-  Events.On(Events.Types.Mac.WindowFileDraggingEntered, (_) => {
+  const { Mac, Windows, Common } = Events.Types
+  Events.On(Mac.WindowFileDraggingEntered, (_) => {
     dropzone.style.display = 'flex'
   })
-  Events.On(Events.Types.Mac.WindowFileDraggingPerformed, (_) => {
+  Events.On(Mac.WindowFileDraggingPerformed, (_) => {
     dropzone.style.display = 'none'
   })
-  Events.On(Events.Types.Mac.WindowFileDraggingExited, (_) => {
+  Events.On(Mac.WindowFileDraggingExited, (_) => {
     dropzone.style.display = 'none'
+  })
+  // windows
+  Events.On(Windows.WindowDragEnter, (_) => {
+    dropzone.style.display = 'flex'
+  })
+  Events.On(Windows.WindowDragOver, (_) => {
+    dropzone.style.display = 'flex'
+  })
+  Events.On(Windows.WindowDragLeave, (_) => {
+    dropzone.style.display = 'none'
+  })
+  Events.On(Windows.WindowDragDrop, (_) => {
+    dropzone.style.display = 'none'
+  })
+
+  // common
+  Events.On(Common.WindowFilesDropped, (_) => {
+    // dropzone.style.display = 'flex'
   })
 }
