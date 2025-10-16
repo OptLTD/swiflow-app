@@ -43,6 +43,8 @@ const setupAutoZoom = () => {
       await Window.Maximise()
     }
   })
+  var app = document.querySelector('#app') as HTMLElement
+  app.style.setProperty('--default-contextmenu', 'show')
 }
 
 const setupDialogs = (config: WailsConfirm) => {
