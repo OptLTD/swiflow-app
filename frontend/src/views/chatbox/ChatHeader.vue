@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Tippy } from 'vue-tippy'
-import { md } from '@/support/index'
+import { md, isFromApp } from '@/support'
 import { useAppStore } from '@/stores/app'
 import HistoryTasks from './HistoryTasks.vue'
 
@@ -15,19 +15,19 @@ const toggleHistory = () => {
 }
 
 const hasNewVer = computed(() => {
-  if (!app.getRelease || app.getInDocker) {
+  if (!app.getRelease) {
     return false
   }
   return app.getRelease['url']
 })
 const newFeature = computed(() => {
-  if (!app.getRelease || app.getInDocker) {
+  if (!app.getRelease) {
     return ''
   }
   return app.getRelease['body']
 })
 const downloadUrl = computed(() => {
-  if (!app.getRelease || app.getInDocker) {
+  if (!app.getRelease) {
     return ''
   }
   return app.getRelease['url']
@@ -36,10 +36,16 @@ const showEpigraph = computed(() => {
   if (hasNewVer.value || app.getInDocker) {
     return false
   }
+  if (!isFromApp()) {
+    return
+  }
   return !!app.getDisplay.epigraphText
 })
 const goDownload = () => {
   if (!app.getRelease || app.getInDocker) {
+    return
+  }
+  if (!isFromApp()) {
     return
   }
   const url = app.getRelease['url'];

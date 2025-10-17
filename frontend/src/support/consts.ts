@@ -14,7 +14,7 @@ if (!fromApp && webSchema.includes(location.protocol)) {
 export const BASE_HOST = base_host
 export const BASE_ADDR = base_addr
 export const isFromApp = () => {
-  return fromApp
+  return fromApp || location.hostname === 'wails.localhost'
 }
 export const getAppTags = () => {
   if (!fromApp) {
@@ -32,11 +32,8 @@ export const getAppTags = () => {
 export const getWebSocketUrl = () => {
   const isSsl = location.protocol == 'https:'
   const wsProto = isSsl && !fromApp ? 'wss' : 'ws'
-  // When running under Wails dev host, connect directly to backend port
-  const isWailsHost = location.hostname === 'wails.localhost'
-  const finalHost = isWailsHost ? 'localhost:11235' : base_host
-  const source = (fromApp || isWailsHost) ? 'browser' : 'client'
+  const source = fromApp ? 'browser' : 'client'
   const sessid = localStorage.getItem('sessid') || ''
   const query = `source=${source}&sessid=${sessid}`
-  return `${wsProto}://${finalHost}/socket?${query}`;
+  return `${wsProto}://${base_host}/socket?${query}`;
 }

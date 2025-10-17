@@ -18,19 +18,18 @@ import 'highlight.js/styles/vs.min.css';
 import { tasklist } from "@mdit/plugin-tasklist";
 
 import { BASE_ADDR } from './consts' 
+import { isFromApp } from  './consts'
 import { XMLParser } from './parser'
 import { HttpRequest } from './request'
 
+
 export * as errors from './errors'
-export { toast }
+export { toast, isFromApp }
 
 export const parser = new XMLParser()
 
 export const request = new HttpRequest(BASE_ADDR);
 
-export const isTauri = () => {
-  return !!((globalThis as any) || window).isTauri
-}
 export const isHTML = (str: string) =>  {
   try {
     const parser = new DOMParser();
