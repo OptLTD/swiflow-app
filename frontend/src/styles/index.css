@@ -648,6 +648,9 @@ span[data-v-tippy] {
 .in-macos .history-header {
   text-indent: 4rem;
 }
+.in-windows #new-version {
+  right: 125px!important;
+}
 
 @media (max-width: 960px) {
   .in-macos #set-header,

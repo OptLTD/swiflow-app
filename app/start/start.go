@@ -18,24 +18,26 @@ var docker = dock.New()
 
 func GetMainView(app *application.App) *application.WebviewWindow {
 	var frameless = false
+	var name = app.Config().Name
 	if runtime.GOOS == "windows" {
 		frameless = true
 	}
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Width: 1200, Height: 800, Name: app.Config().Name,
+		Width: 1200, Height: 800, Title: name, Name: name,
 		StartState: application.WindowStateMaximised,
 
 		Frameless: frameless, Hidden: false,
 		AlwaysOnTop: false, DisableResize: false,
 		DevToolsEnabled: true, EnableDragAndDrop: true,
 		Windows: application.WindowsWindow{
-			HiddenOnTaskbar: true, DisableIcon: true,
+			HiddenOnTaskbar: false, DisableIcon: true,
 		},
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarHiddenInset,
 		},
 		Linux: application.LinuxWindow{},
 	})
+	window.SetTitle(app.Config().Name)
 	dropped := events.Common.WindowDropZoneFilesDropped
 	window.OnWindowEvent(dropped, func(event *application.WindowEvent) {
 		detail := UploadFiles(event.Context().DroppedFiles())

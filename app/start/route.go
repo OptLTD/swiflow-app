@@ -31,7 +31,8 @@ func ProxyApiMiddleware() gin.HandlerFunc {
 			c.Next() // 非 /api/ 请求，继续后续处理
 			return
 		}
-		// 仅转发以 /api/ 开头的请求
+
+		// Clone request to avoid consuming original body
 		request := c.Request.Clone(c.Request.Context())
 		request.Header.Set("X-Forwarded-Proto", "http")
 		request.Header.Set("X-Forwarded-Host", c.Request.Host)

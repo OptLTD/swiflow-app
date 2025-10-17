@@ -1,12 +1,7 @@
-import { Window, Browser } from "@wailsio/runtime";
+import { Window, Browser, System } from "@wailsio/runtime";
 import { Dialogs, Events } from "@wailsio/runtime";
 
-const { location } = window || {}
-export const isWails = () => {
-  return location.protocol === 'wails:'
-}
-
-type WailsConfirm = {
+type WailsDialog = {
   confirm: string
   cancel: string
 }
@@ -16,38 +11,25 @@ type WailsUpload = {
   handle: (files: string[]) => void
 }
 type WailsConfig = {
-  dialog: WailsConfirm
+  dialog: WailsDialog
   upload: WailsUpload
 }
 
-export const setupWailsEvents = (config: WailsConfig) => {
-  if (!isWails()) {
+export const setupWailsEvents = async (config: WailsConfig) => {
+  const env = await System.Environment()
+  console.log('env', env, env.PlatformInfo)
+  if (!env || !env.OSInfo) {
     return
   }
 
-  setupAutoZoom()
   setupDragDrop()
+  setupPageHeader()
+  setupWinControl()
   setupDialogs(config.dialog)
   setupUpload(config.upload)
 }
 
-const setupAutoZoom = () => {
-  const header = document.querySelector('#top-header')
-  if (!header || !Window.Get('Swiflow')) {
-    return
-  }
-  header.addEventListener('dblclick', async () => {
-    if (await Window.IsMaximised()) {
-      await Window.UnMaximise()
-    } else {
-      await Window.Maximise()
-    }
-  })
-  var app = document.querySelector('#app') as HTMLElement
-  app.style.setProperty('--default-contextmenu', 'show')
-}
-
-const setupDialogs = (config: WailsConfirm) => {
+const setupDialogs = (config: WailsDialog) => {
   // @ts-ignore
   window.open = Browser.OpenURL
   // @ts-ignore
@@ -136,4 +118,109 @@ const setupDragDrop = () => {
   Events.On(Common.WindowFilesDropped, (_) => {
     // dropzone.style.display = 'flex'
   })
+}
+
+const setupPageHeader = () => {
+  const header = document.querySelector('#top-header') as HTMLElement | null
+  if (!header || !Window.Get('Swiflow')) {
+    return
+  }
+  header.addEventListener('dblclick', async () => {
+    if (await Window.IsMaximised()) {
+      await Window.UnMaximise()
+    } else {
+      await Window.Maximise()
+    }
+  })
+  var app = document.querySelector('#app') as HTMLElement
+  app?.style.setProperty('--default-contextmenu', 'show')
+}
+
+const setupWinControl = () => {
+  const header = document.querySelector('#top-header') as HTMLElement
+  if (!header || !System.IsWindows()) {
+    return
+  }
+  document.body.classList.add('in-windows')
+  if (!header.querySelector('.win-controls')) {
+    const controls = document.createElement('div')
+    controls.className = 'win-controls'
+    controls.style.cssText = [
+      'position:absolute',
+      'right:8px',
+      'top:0',
+      'height:var(--nav-height)',
+      'display:flex',
+      'align-items:center',
+      'gap:8px',
+      'padding:0 8px',
+      'z-index:10',
+      '--wails-draggable:no-drag'
+    ].join(';')
+
+    const mkBtn = (clz: string, title: string, label: string) => {
+      const btn = document.createElement('button')
+      btn.className = `win-btn ${clz}`
+      btn.title = title
+      btn.textContent = label
+      btn.style.cssText = [
+        'width:28px',
+        'height:22px',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'border:none',
+        'border-radius:4px',
+        'background:var(--bg-menu)',
+        'color:var(--text-color)',
+        'cursor:pointer',
+        'outline:none',
+        'font-size:12px',
+        '--wails-draggable:no-drag'
+      ].join(';')
+      btn.onmouseenter = () => btn.style.background = 'var(--bg-dark)'
+      btn.onmouseleave = () => btn.style.background = 'var(--bg-menu)'
+      return btn
+    }
+
+    // 最小化
+    const btnMin = mkBtn('win-min', '最小化', '—')
+    btnMin.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      try {
+        await Window.Minimise()
+      } catch (err) {
+        console.error('Minimise error:', err)
+      }
+    })
+
+    // 最大化 / 还原
+    const btnMax = mkBtn('win-max', '最大化', '▢')
+    btnMax.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      try {
+        if (await Window.IsMaximised()) {
+          await Window.UnMaximise()
+        } else {
+          await Window.Maximise()
+        }
+      } catch (err) {
+        console.error('Maximise error:', err)
+      }
+    })
+
+    // 关闭
+    const btnClose = mkBtn('win-close', '关闭', '✕')
+    btnClose.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      try {
+        await Window.Close()
+      } catch (err) {
+        console.error('Close error:', err)
+      }
+    })
+
+    controls.append(btnMin, btnMax, btnClose)
+    header.appendChild(controls)
+  }
 }

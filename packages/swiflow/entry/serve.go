@@ -19,6 +19,7 @@ var allows = []string{
 	"tauri://localhost",
 	"wails://localhost",
 	"http://localhost:5173",
+	"http://wails.localhost",
 }
 
 func StopWebServer(ctx context.Context) error {

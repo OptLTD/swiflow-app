@@ -32,8 +32,11 @@ export const getAppTags = () => {
 export const getWebSocketUrl = () => {
   const isSsl = location.protocol == 'https:'
   const wsProto = isSsl && !fromApp ? 'wss' : 'ws'
-  const source = fromApp ? 'browser' : 'client'
+  // When running under Wails dev host, connect directly to backend port
+  const isWailsHost = location.hostname === 'wails.localhost'
+  const finalHost = isWailsHost ? 'localhost:11235' : base_host
+  const source = (fromApp || isWailsHost) ? 'browser' : 'client'
   const sessid = localStorage.getItem('sessid') || ''
   const query = `source=${source}&sessid=${sessid}`
-  return `${wsProto}://${base_host}/socket?${query}`;
+  return `${wsProto}://${finalHost}/socket?${query}`;
 }
