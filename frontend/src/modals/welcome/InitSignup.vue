@@ -18,7 +18,7 @@ const gotoSignUp = async () => {
     waitingSignin.value = true
     const path = 'authorization?from=swiflow-app'
     const signup = document.getElementById('signupUrl')
-    const gateway = props.gateway || 'https://auth.swiflow.com'
+    const gateway = props.gateway || 'https://auth.swiflow.cc'
     
     signup?.setAttribute('href', `${gateway}/${path}`)
     const result = signup && signup.click && signup.click()

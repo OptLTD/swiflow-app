@@ -25,7 +25,7 @@ interface WizardState {
 const props = defineProps({
   gateway: {
     type: String,
-    default: 'https://auth.swiflow.com'
+    default: 'https://auth.swiflow.cc'
   },
   initialState: {
     type: Object,
