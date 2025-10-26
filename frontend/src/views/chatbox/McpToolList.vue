@@ -365,7 +365,7 @@ defineExpose({
             :key="tool.value" class="dropdown-item" :class="{'disabled': isDisabled(server)}">
             <input type="checkbox" :id="getCheckboxId(tool.name)" :disabled="isDisabled(server)"
               :checked="isToolChecked(tool, server)" @mouseup.prevent @mousedown.prevent />
-            <span class="dropdown-label">{{ tool.name }}</span>
+            <span class="dropdown-label">{{ tool.title || tool.name }}</span>
           </div>
         </template>
       </div>

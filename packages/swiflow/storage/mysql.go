@@ -416,8 +416,9 @@ func (s *MySQLStorage) SaveTool(tool *ToolEntity) error {
 
 	// 构建更新数据
 	updates := map[string]any{
-		"name": tool.Name, "type": tool.Type,
-		"desc": tool.Desc, "data": tool.Data,
+		"uuid": tool.UUID, "type": tool.Type,
+		"desc": tool.Desc, "text": tool.Text,
+		"name": tool.Name, "data": tool.Data,
 	}
 
 	clauses := clause.OnConflict{

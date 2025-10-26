@@ -173,9 +173,10 @@ export const showInputModal = (data: any, callback: CallableFunction) => {
     component: TextInputModal,
     attrs: {
       input: '', title: '', tips: '',
-      onSubmit: (text: string) => {
-        theInputModal.close()
-        callback && callback(text)
+      onSubmit: async (text: string) => {
+        if (await callback(text)) {
+          theInputModal.close()
+        }
       },
       onCancel: () => {
         theInputModal.close()

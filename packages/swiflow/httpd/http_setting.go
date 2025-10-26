@@ -490,6 +490,32 @@ func (h *SettingHandler) ToolSet(w http.ResponseWriter, r *http.Request) {
 	case "get-tools", "":
 		JsonResp(w, manager.AllTools())
 		return
+	case "gen-code":
+		// Save or update a user-defined tool alias
+		tool := new(entity.ToolEntity)
+		if err := h.service.ReadTo(r.Body, tool); err != nil {
+			_ = JsonResp(w, err)
+			return
+		}
+		if strings.TrimSpace(tool.Desc) == "" {
+			_ = JsonResp(w, fmt.Errorf("desc is empty"))
+			return
+		}
+		// prefer default LLM configuration; if not available, static extraction will be used
+		var client model.LLMClient
+		if cfg := h.manager.GetLLMConfig(""); cfg == nil {
+			_ = JsonResp(w, fmt.Errorf("LLM config is empty"))
+			return
+		} else {
+			client = model.GetClient(cfg)
+		}
+		code, err := manager.GenerateCode(client, tool.Desc)
+		if err == nil && code != "" {
+			_ = JsonResp(w, code)
+		} else {
+			_ = JsonResp(w, err)
+		}
+		return
 	case "set-tool":
 		// Save or update a user-defined tool alias
 		tool := new(entity.ToolEntity)
@@ -503,6 +529,27 @@ func (h *SettingHandler) ToolSet(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.TrimSpace(tool.UUID) == "" {
 			tool.UUID, _ = support.UniqueID(12)
+		}
+		if tool.Type == "py3-alias" {
+			alias := &builtin.Py3AliasTool{
+				UUID: tool.UUID, Name: tool.Name,
+				Desc: tool.Desc, Code: tool.Text,
+			}
+			// prefer default LLM configuration; if not available, static extraction will be used
+			if cfg := h.manager.GetLLMConfig(""); cfg != nil {
+				alias.SetClient(model.GetClient(cfg))
+			}
+			deps, args := alias.Analyze()
+			// merge analyzed fields into tool.Data
+			var data map[string]any
+			if tool.Data != nil {
+				data = tool.Data
+			} else {
+				data = map[string]any{}
+			}
+			data["deps"] = deps
+			data["args"] = args
+			tool.Data = data
 		}
 		if err := store.SaveTool(tool); err != nil {
 			_ = JsonResp(w, err)

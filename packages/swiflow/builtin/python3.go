@@ -54,6 +54,7 @@ func (a *Python3Tool) Handle(args string) (string, error) {
 	if err := os.WriteFile(fullpath, []byte(code), 0644); err != nil {
 		return "", fmt.Errorf("write file: %v", err)
 	}
+	defer os.Remove(fullpath)
 
 	// Default timeout
 	timeout := 30 * time.Second

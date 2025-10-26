@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { toast } from 'vue3-toastify'
 import { request } from '@/support/index'
 import BasicMenu from './widgets/BasicMenu.vue'
 import SetHeader from './widgets/SetHeader.vue'
-import { useI18n } from 'vue-i18n'
+import { computed, onMounted, ref } from 'vue'
 import { getProviders } from '@/config/models'
 // @ts-ignore
 import CodeMirror from '@/widgets/CodeMirror.vue'
+import { showInputModal } from '@/logics/popup'
 import { showLLMConfigPopup } from '@/logics/popup'
-
 
 const items = ref<ToolEntity[]>([])
 const active = ref('' as string)
 const current = ref({} as ToolEntity)
 
-// Use global i18n to translate builtin tool labels when available
+// @ts-ignore
 const { t, te } = useI18n({ 
   inheritLocale: true, 
   useScope: 'global' 
@@ -79,6 +79,10 @@ const onSubmitConfig = async () => {
   await doSubmitTool(current.value)
 }
 
+const onCreatePy3Alias = async () => {
+  await doSubmitTool(current.value)
+}
+
 const doSubmitTool = async (item: ToolEntity) => {
   try {
     const url = `/tool?act=set-tool&uuid=${item.uuid}`
@@ -86,20 +90,63 @@ const doSubmitTool = async (item: ToolEntity) => {
     if (resp && (resp as any)['errmsg']) {
       return toast((resp as any)['errmsg'])
     }
-    return toast('TOOL SAVE SUCCESS')
+    return toast('SUCCESS')
   } catch (err) {
     console.error('get mcp:', err)
     return toast('ERROR:' + err)
   }
 }
 
+const newPy3Alias = () => {
+  const item = {
+    uuid: '', name: '',
+    type: 'py3-alias', desc: '',
+  } as ToolEntity
+  active.value = item.uuid
+  current.value = item
+}
+
+const editPy3Alias = (tool: ToolEntity) => {
+  const props = {
+    input: tool?.desc || '',
+    tips: t('builtin.editDescTips'),
+    title: t('builtin.editDescTitle'),
+  }
+  showInputModal(props, async (text: string) => {
+    tool.desc = text
+    await doSubmitTool(tool)
+    return true
+  })
+}
+const handleGenerate = async () => {
+  const props = {
+    tips: t('builtin.editDescTips'),
+    title: t('builtin.editDescTitle'),
+  }
+  showInputModal(props, async (desc: string) => {
+    const url = `/tool?act=gen-code`
+    const resp = await request.post<any>(url, { desc })
+    if (!resp || resp.errmsg) {
+      return false
+    }
+    current.value.text = resp.result
+    return true
+  })
+}
+
 const builtin = [
   `chat2llm`, `image-ocr`,
   `command`, `python3`, `get-intent`
 ]
+const isBuiltin = computed(() => {
+  return builtin.includes(current.value?.name)
+})
 const isBaseLLM = computed(() => {
   const llmBaseType = [`chat2llm`, `image-ocr`, `get-intent`]
   return llmBaseType.includes(current.value?.uuid)
+})
+const isPy3Alias = computed(() => {
+  return current.value?.type === 'py3-alias'
 })
 </script>
 
@@ -118,40 +165,76 @@ const isBaseLLM = computed(() => {
             ? $t('common.builtin')
             : $t('common.custom')
             }}
+            <a  v-if="item.type == 'py3-alias'"
+              class="btn-modify" @click="editPy3Alias(item)">
+              {{ $t('common.edit') }}
+            </a>
           </div>
         </template>
       </BasicMenu>
+      <button class="btn-add-new" @click="newPy3Alias">
+        {{ $t('builtin.addPy3Alias') }}
+      </button>
     </div>
     <div id="tool-panel" class="set-main">
-      <div v-if="!active" class="tool-empty">
-        {{ $t('common.noTools') }}
-      </div>
-      <div v-else class="tool-detail">
-        <h3>{{ labelOf(current).name }}</h3>
-        <p class="tool-kind" v-if="!isBaseLLM">
-          {{ labelOf(current).desc }}
-        </p>
+      <div class="tool-detail">
         <div v-if="isBaseLLM" class="tool-config">
+          <h3>{{ labelOf(current).name }}</h3>
           <div class="form-group">
-            <FormKit type="select" name="provider" :label="$t('setting.provider')" :disabled="true"
+            <FormKit type="select" name="provider" 
+              :label="$t('setting.provider')" :disabled="true"
               v-model="toolProvider" :options="getProviders()">
               <template #suffixIcon>
                 <Icon icon="icon-setting" size="small" 
                   color="var(--fk-bg-button)" 
-                  @click="onChangeProvider"
+                  @click="onChangeProvider" 
                 />
               </template>
             </FormKit>
-            <FormKit type="button" @click="onSubmitConfig">
-              {{ $t('common.saveCfg') }}
-            </FormKit>
+            <FormKit type="button" 
+              @click="onSubmitConfig"
+              :label="$t('common.save')"
+            />
           </div>
           <!-- Default prompt editor -->
           <div class="editor-group">
-            <code-mirror class="editor-input" v-model="current.desc" />
+            <code-mirror class="editor-input" 
+              v-model="current.text" text-lang="md" 
+            />
           </div>
         </div>
-        <pre v-else class="tool-prompt">{{ current.desc }}</pre>
+        <div v-else-if="isPy3Alias" class="py3-alias">
+          <h3>{{ $t('builtin.py3aliasName') }}</h3>
+          <div class="form-group">
+            <FormKit type="text" label="Name" 
+              name="name" v-model="current.name" 
+            />
+            <FormKit type="button" 
+              :label="$t('common.save')" 
+              @click="onCreatePy3Alias"
+            />
+            <div class="flex-stretch"></div>
+            <FormKit type="button"  
+              label="Generate Code"
+              @click="handleGenerate"
+            />
+          </div>
+          <!-- Default prompt editor -->
+          <div class="editor-group">
+            <code-mirror class="editor-input" 
+              v-model="current.text" text-lang="python" 
+            />
+          </div>
+        </div>
+        <div v-else-if="isBuiltin">
+          <h3>{{ labelOf(current).name }}</h3>
+          <p class="tool-kind">
+            {{ labelOf(current).desc }}
+          </p>
+          <pre class="tool-prompt">
+            {{ current.desc }}
+          </pre>
+        </div>
       </div>
     </div>
   </div>
@@ -188,7 +271,7 @@ const isBaseLLM = computed(() => {
 }
 
 /* Config section should take remaining height for editor to fill */
-.tool-config {
+.tool-config, .py3-alias {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -237,5 +320,10 @@ const isBaseLLM = computed(() => {
 .set-provider .icon{
   width: 24px; 
   height: 24px;
+}
+#tool-menu .btn-add-new {
+  margin: 5px auto;
+  font-weight: normal;
+  width: -webkit-fill-available;
 }
 </style>

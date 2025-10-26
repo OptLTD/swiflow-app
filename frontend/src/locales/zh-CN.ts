@@ -8,8 +8,15 @@ export default {
     getintentDesc: '根据用户输入识别意图',
     commandName: '系统命令执行',
     commandDesc: '在受控环境中执行命令',
-    python3Name: 'Python3 运行环境',
+    python3Name: 'Python 代码执行',
     python3Desc: '运行 Python 脚本与代码片段',
+    py3aliasName: 'Python 工具名称',
+    py3aliasDesc: 'Python 工具代码片段',
+
+    addPy3Alias: '添加 Python 工具',
+
+    editDescTitle: '修改工具描述',
+    editDescTips: '描述信息用于介绍此工具的能力，Worker 会根据此描述决定是否使用此工具',
   },
   login: {
     login: '登陆',

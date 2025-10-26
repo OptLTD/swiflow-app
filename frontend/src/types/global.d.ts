@@ -191,6 +191,7 @@ declare type ToolEntity = {
   uuid: string
   name: string
   desc: string
+  text: string
   type: string
   data: any
 }

@@ -17,7 +17,7 @@ type WailsConfig = {
 
 export const setupWailsEvents = async (config: WailsConfig) => {
   const env = await System.Environment()
-  console.log('env', env, env.PlatformInfo)
+  console.log('env', env?.OSInfo)
   if (!env || !env.OSInfo) {
     return
   }

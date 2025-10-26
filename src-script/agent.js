@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { execSync } from 'child_process';
 import { existsSync, readFileSync, rmSync } from 'fs';
 import { join, resolve, basename } from 'path';
 import { createWriteStream } from 'fs';

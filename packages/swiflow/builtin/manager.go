@@ -145,11 +145,20 @@ func (a *BuiltinManager) GetPrompt(checked []string) string {
 		}
 		selfChecked := slice.Contain(checked, ent.UUID)
 		if allChecked || selfChecked {
-			alias := &CmdAliasTool{
-				UUID: ent.UUID, Name: ent.Name,
-				Desc: ent.Desc, Args: "",
+			switch ent.Type {
+			case "cmd_alias":
+				cmdAlias := &CmdAliasTool{
+					UUID: ent.UUID, Name: ent.Name,
+					Desc: ent.Desc, Args: "",
+				}
+				b.WriteString(cmdAlias.Prompt())
+			case "py3_alias":
+				py3Alias := &Py3AliasTool{
+					UUID: ent.UUID, Name: ent.Name,
+					Desc: ent.Desc, Code: ent.Text,
+				}
+				b.WriteString(py3Alias.Prompt())
 			}
-			b.WriteString(alias.Prompt())
 		}
 	}
 	pompt := strings.TrimSpace(b.String())
@@ -264,6 +273,31 @@ func (a *BuiltinManager) GetIntent(req *IntentRequest, history []model.Message) 
 	return res, err
 }
 
+func (a *BuiltinManager) GenerateCode(client model.LLMClient, desc string) (string, error) {
+	if strings.TrimSpace(desc) == "" {
+		return "", fmt.Errorf("desc is empty")
+	}
+
+	prompt := "你要根据用户的诉求，生成对应的Python3代码。"
+	prompt += "不要输出其他额外内容，只输出Python3代码。"
+	prompt += "Python代码中的相关数据要从参数中读取，建议使用typer库。"
+	choices, err := client.Respond(
+		"gen-code", []model.Message{
+			{Role: "system", Content: prompt},
+			{Role: "user", Content: desc},
+		},
+	)
+	if err == nil && len(choices) > 0 {
+		data := choices[0].Message.Content
+		text := strings.TrimSpace(data)
+		text = strings.TrimPrefix(text, "```python")
+		text = strings.TrimPrefix(text, "```")
+		text = strings.TrimSuffix(text, "```")
+		return strings.TrimSpace(text), nil
+	}
+	return "", err
+}
+
 func (a *BuiltinManager) findTool(name string) *entity.ToolEntity {
 	for _, t := range a.tools {
 		if strings.EqualFold(t.UUID, name) {
@@ -284,5 +318,5 @@ func (a *BuiltinManager) getLLMClient(name string) (model.LLMClient, string) {
 	if strings.TrimSpace(cfg.Provider) != "" {
 		client = model.GetClient(&cfg)
 	}
-	return client, tool.Desc
+	return client, tool.Text
 }

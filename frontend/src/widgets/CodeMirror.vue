@@ -9,6 +9,10 @@ const props = defineProps({
   disabled: {
     type: Boolean,
     default: false
+  },
+  textLang: {
+    type: String,
+    default: 'md'
   }
 })
 
@@ -23,12 +27,16 @@ const emit = defineEmits(['update:modelValue'])
 const editorContainer = ref(null)
 let editorView = null
 let cmModulesReady = false
-let cm, State, View, keymapMod, commandsMod, mdLang, themeDark, themeLight
+let cm, State, View, keymapMod, commandsMod, mdLang, pyLang, themeDark, themeLight
 
 // 创建编辑器状态
 const createEditorState = (content, disabled = false) => {
   const extensions = []
-  if (mdLang) extensions.push(mdLang())
+  if (props.textLang === 'python') {
+    extensions.push(pyLang())
+  } else if (mdLang) {
+    extensions.push(mdLang())
+  }
   if (themeDark && themeLight) extensions.push(isDark() ? themeDark : themeLight)
   if (View) {
     extensions.push(View.lineWrapping)
@@ -51,20 +59,22 @@ const createEditorState = (content, disabled = false) => {
 
 // 初始化编辑器
 onMounted(async () => {
-  const [codemirror, state, view, commands, md, dark, light] = await Promise.all([
+  const [codemirror, view, state, commands, py, md, dark, light] = await Promise.all([
     import('codemirror'),
-    import('@codemirror/state'),
     import('@codemirror/view'),
+    import('@codemirror/state'),
     import('@codemirror/commands'),
+    import('@codemirror/lang-python'),
     import('@codemirror/lang-markdown'),
     import('@fsegurai/codemirror-theme-github-dark'),
     import('@fsegurai/codemirror-theme-github-light')
   ])
   cm = codemirror
-  State = state.EditorState
   View = view.EditorView
+  State = state.EditorState
   keymapMod = view.keymap
   commandsMod = commands.defaultKeymap
+  pyLang = py.python
   mdLang = md.markdown
   themeDark = dark.githubDark
   themeLight = light.githubLight
@@ -93,6 +103,13 @@ watch(() => props.modelValue, (newValue) => {
 watch(() => props.disabled, (disabled) => {
   if (editorView && cmModulesReady) {
     editorView.setState(createEditorState(editorView.state.doc.toString(), disabled))
+  }
+})
+
+// 监听语言变化
+watch(() => props.textLang, () => {
+  if (editorView && cmModulesReady) {
+    editorView.setState(createEditorState(editorView.state.doc.toString(), props.disabled))
   }
 })
 </script>

@@ -12,6 +12,7 @@ import (
 	"swiflow/ability"
 	"swiflow/action"
 	"swiflow/amcp"
+	"swiflow/builtin"
 	"swiflow/config"
 	"swiflow/entry"
 	"swiflow/httpd"
@@ -94,6 +95,21 @@ func main() {
 		} else {
 			log.Println("data:", err, string(data))
 		}
+	case "alias":
+		if err := config.LoadEnv(); err != nil {
+			log.Println("load env fail:", err)
+		}
+		py3_alias := builtin.Py3AliasTool{
+			UUID: "read-time", Name: "Read Time",
+			Args: "no args", Code: `
+import datetime
+print(datetime.datetime.now())
+			`,
+		}
+		prompt := py3_alias.Prompt()
+		log.Println("prompt", prompt)
+		res, err := py3_alias.Handle("")
+		log.Println("res", res, err)
 	case "serve":
 		if err := config.LoadEnv(); err != nil {
 			log.Println("load env fail: ", err)
