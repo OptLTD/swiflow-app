@@ -32,7 +32,7 @@ export const getAppTags = () => {
 export const getWebSocketUrl = () => {
   const isSsl = location.protocol == 'https:'
   const wsProto = isSsl && !fromApp ? 'wss' : 'ws'
-  const source = fromApp ? 'browser' : 'client'
+  const source = !fromApp ? 'browser' : 'client'
   const sessid = localStorage.getItem('sessid') || ''
   const query = `source=${source}&sessid=${sessid}`
   return `${wsProto}://${base_host}/socket?${query}`;

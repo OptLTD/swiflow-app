@@ -247,7 +247,7 @@ export const getActHtml = (data: MsgAct) => {
     const parts = [] as string[]
     const type = textType(result)
     const { args, more } = (data as UseMcpTool)
-    if (args.trim() && more === true) {
+    if (args && args.trim() && more === true) {
       const trim = args.replace(/(\n\s{4})/ig, '\n').trim()
       parts.push('```json', trim, '```', '---')
     }

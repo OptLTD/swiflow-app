@@ -112,6 +112,25 @@ func (a *BuiltinManager) Query(name string) (BuiltinTool, error) {
 		client, prompt := a.getLLMClient("image-ocr")
 		return &ImageOCRTool{client: client, prompt: prompt}, nil
 	}
+	for _, tool := range a.tools {
+		if tool.UUID != name {
+			continue
+		}
+		switch tool.Type {
+		case "cmd-alias":
+			cmdAlias := &CmdAliasTool{
+				UUID: tool.UUID, Name: tool.Name,
+				Desc: tool.Desc, Args: "",
+			}
+			return cmdAlias, nil
+		case "py3-alias":
+			py3Alias := &Py3AliasTool{
+				UUID: tool.UUID, Name: tool.Name,
+				Desc: tool.Desc, Code: tool.Text,
+			}
+			return py3Alias, nil
+		}
+	}
 	return nil, fmt.Errorf("no tool found")
 }
 
@@ -139,23 +158,23 @@ func (a *BuiltinManager) GetPrompt(checked []string) string {
 	}
 	// Alias prompts derived from tool entities
 	allChecked := slice.Contain(checked, "builtin:*")
-	for _, ent := range a.tools {
-		if slice.Contain(buildin, ent.Type) {
+	for _, tool := range a.tools {
+		if slice.Contain(buildin, tool.Type) {
 			continue
 		}
-		selfChecked := slice.Contain(checked, ent.UUID)
+		selfChecked := slice.Contain(checked, tool.UUID)
 		if allChecked || selfChecked {
-			switch ent.Type {
-			case "cmd_alias":
+			switch tool.Type {
+			case "cmd-alias":
 				cmdAlias := &CmdAliasTool{
-					UUID: ent.UUID, Name: ent.Name,
-					Desc: ent.Desc, Args: "",
+					UUID: tool.UUID, Name: tool.Name,
+					Desc: tool.Desc, Args: "",
 				}
 				b.WriteString(cmdAlias.Prompt())
-			case "py3_alias":
+			case "py3-alias":
 				py3Alias := &Py3AliasTool{
-					UUID: ent.UUID, Name: ent.Name,
-					Desc: ent.Desc, Code: ent.Text,
+					UUID: tool.UUID, Name: tool.Name,
+					Desc: tool.Desc, Code: tool.Text,
 				}
 				b.WriteString(py3Alias.Prompt())
 			}
