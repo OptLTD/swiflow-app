@@ -6,6 +6,7 @@ import BasicMenu from './widgets/BasicMenu.vue'
 import SetHeader from './widgets/SetHeader.vue'
 import { computed, onMounted, ref } from 'vue'
 import { getProviders } from '@/config/models'
+import { getLabel } from '@/config/builtin.ts'
 // @ts-ignore
 import CodeMirror from '@/widgets/CodeMirror.vue'
 import { showInputModal } from '@/logics/popup'
@@ -23,12 +24,7 @@ const { t, te } = useI18n({
 
 // Intent: Provide localized name/description for specific builtin tools
 const labelOf = (item: ToolEntity) => {
-  const key = item.uuid.replace('-', '')
-  const keyName = `builtin.${key}Name`
-  const keyDesc = `builtin.${key}Desc`
-  const name =  te(keyName) ? t(keyName) : item.name 
-  const desc = te(keyDesc) ? t(keyDesc) : item?.desc 
-  return { name, desc }
+  return getLabel(item.uuid, item.name, item?.desc)
 }
 
 onMounted(async () => {

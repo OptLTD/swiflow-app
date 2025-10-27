@@ -6,6 +6,7 @@ import { useAppStore } from '@/stores/app'
 import { request, alert } from '@/support/index';
 import { showSetupEnvModal } from '@/logics/popup'
 import SwitchInput from '@/widgets/SwitchInput.vue'
+import { getTitle, setTitle } from '@/config/builtin'
 
 const app = useAppStore()
 const props = defineProps({
@@ -159,6 +160,7 @@ const startMcpEnv = async () => {
       continue
     }
     if (item.uuid === 'builtin') {
+      setToolTitle(item.status)
       continue
     }
     // @ts-ignore
@@ -187,6 +189,15 @@ const startMcpEnv = async () => {
   }
   groupChecked.value = getGroupChecked()
   lossCmd.value = [...new Set(loss)] // Remove duplicates from loss array
+}
+
+const setToolTitle = (status: McpStatus) => {
+  status.tools?.forEach((tool) => {
+    if (getTitle(tool.name)) {
+      tool.title = getTitle(tool.name)
+    }
+    setTitle(tool.name, tool.title)
+  })
 }
 
 const getGroupChecked = () => {
@@ -348,6 +359,9 @@ defineExpose({
   <tippy interactive :theme="app.getTheme" arrow placement="top-start" trigger="click">
     <slot name="default" v-if="$slots['default']" />
     <template #content>
+      <h3 class="tools-header">
+        {{ $t('common.switchTools') }}
+      </h3>
       <div class="tools-panel">
         <template v-for="(server, i) in servers" :key="i">
           <div  :class="{'disabled': isDisabled(server)}" 
@@ -383,6 +397,14 @@ defineExpose({
 <style scoped>
 .btn-tools{
   margin-right: 10px;
+}
+.tools-header {
+  margin: 0 0;
+  margin-top: 5px;
+  padding: 5px 10px;
+  font-size: small;
+  border-radius: 5px;
+  background-color: var(--bg-menu);
 }
 .tools-panel {
   margin: 4px 0 0 0;

@@ -1,3 +1,5 @@
+import { t } from '@/config/i18n'
+import { getTitle } from '@/config/builtin'
 import { isEmpty } from 'lodash-es';
 import { toast } from 'vue3-toastify';
 import { md, textType } from '@/support';
@@ -226,7 +228,7 @@ export const getDisplayActDesc = (item: MsgAct): string => {
     }
     case "use-builtin-tool": {
       const act = (item as UseBuiltinTool)
-      return `内置工具(${act.tool}): ${act.desc}`
+      return `${getTitle(act.tool) }: ${act.desc}`
     }
   }
   return `undefined ${item.type}`

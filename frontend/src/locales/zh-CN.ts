@@ -85,6 +85,7 @@ export default {
     mcpList: 'Mcp Tool 列表',
     tryAsk: '你可以试下这些问题',
     noTools: '暂无可用工具',
+    switchTools: '切换工具',
     notAvailable: '暂不可用',
     toolsAvailable: '个工具可用',
     empty: 'EMPTY LIST',

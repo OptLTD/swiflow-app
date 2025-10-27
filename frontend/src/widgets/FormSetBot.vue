@@ -79,9 +79,9 @@ const mcpTools = computed(() => {
     }
     const list = tools!.map(x => {
       return {
-        group: item.uuid, label: x.name,
+        label: x.title || x.name,
         value:`${item.uuid}:${x.name}`,
-        disabled: !enable,
+        group: item.uuid, disabled: !enable,
       }
     })
     result.push(...list)

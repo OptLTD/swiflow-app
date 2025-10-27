@@ -9,21 +9,13 @@ import VueTippy from 'vue-tippy'
 import '@formkit/themes/genesis'
 import 'vue-final-modal/style.css'
 import { createVfm } from 'vue-final-modal'
+import { i18n } from '@/config/i18n'
 import 'vue3-toastify/dist/index.css';
 import Vue3Toastify from 'vue3-toastify';
 import {ToastContainerOptions} from 'vue3-toastify';
 import { plugin, defaultConfig } from '@formkit/vue'
 import IconButton from '@/widgets/IconButton.vue'
 
-import zhCN from '@/locales/zh-CN'
-import enUS from '@/locales/en-US'
-import { createI18n } from 'vue-i18n'
-
-const getLang = () => {
-  const language = (navigator.language || 'en').toLocaleLowerCase()
-  const locale = localStorage.getItem('lang') || language.split('-')[0]
-  return locale || 'en'
-}
 
 const app = createApp(App)
 app.use(createPinia())
@@ -45,14 +37,5 @@ app.use(VueTippy, {
     allowHTML: true,
   },
 })
-app.use(createI18n({
-  messages: {
-    zh: zhCN,
-    en: enUS,
-  },
-  legacy: false,
-  locale: getLang(),
-  fallbackLocale: 'zh',
-  globalInjection: true,
-}));
+app.use(i18n)
 app.mount('#app')

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { computed, PropType } from 'vue'
+import { getTitle } from '@/config/builtin'
 
 const props = defineProps({
   uuid: {
@@ -46,7 +47,7 @@ const title = computed(() => {
     }
     case "use-builtin-tool": {
       const act = (props.item as UseBuiltinTool)
-      return `${t('common.usetool')}: ${act.desc}`
+      return `${getTitle(act.tool) }: ${act.desc}`
     }
   }
 })

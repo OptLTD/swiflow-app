@@ -70,6 +70,7 @@ export default {
     addBot: 'Add New Bot',
     addMcp: 'Add Mcp Server',
     mcpList: 'Mcp Tool List',
+    switchTools: 'Switch Tools',
     noTools: 'No available tools',
     notAvailable: 'Not available',
     toolsAvailable: 'tools available',

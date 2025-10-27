@@ -28,7 +28,7 @@ func main() {
 	app := application.New(application.Options{
 		Name: "Swiflow", Description: "定制属于你的 AI 助理",
 		Assets: application.AssetOptions{
-			Handler: engine, DisableLogging: false,
+			Handler: engine, DisableLogging: true,
 		},
 		// Services: []application.Service{
 		// 	application.NewService(&hello.Hello{}),
