@@ -12,26 +12,11 @@
     "excel-server": {
       "command": "uvx",
       "args": [
-        "excel-mcp-server",
+        "mcp-excel-tools",
         "stdio"
       ],
       "env": {
-        "EXCEL_FILES_PATH": "$SWIFLOW_HOME"
-      }
-    },
-    "mysql-server": {
-      "args": [
-        "--from",
-        "mysql-mcp-server",
-        "mysql_mcp_server"
-      ],
-      "command": "uvx",
-      "env": {
-        "MYSQL_DATABASE": "demo",
-        "MYSQL_HOST": "localhost",
-        "MYSQL_PASSWORD": "123456",
-        "MYSQL_PORT": "3306",
-        "MYSQL_USER": "root"
+        "EXCEL_FILES_PATH": "$CURRENT_HOME"
       }
     }
   }

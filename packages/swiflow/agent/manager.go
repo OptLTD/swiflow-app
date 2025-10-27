@@ -418,6 +418,10 @@ func (m *Manager) ResetWorker(worker *Worker) {
 }
 
 func (h *Manager) UpdateEnv(cfg *entity.CfgEntity) error {
+	// set default current home
+	baseHome := config.GetWorkPath("secrets")
+	config.Set("CURRENT_HOME", baseHome)
+
 	var result error
 	for key, val := range cfg.Data {
 		var err error
@@ -440,8 +444,6 @@ func (h *Manager) UpdateEnv(cfg *entity.CfgEntity) error {
 			}
 		case "useWorkPath":
 			if path, _ := val.(string); path == "" {
-				baseHome := config.GetWorkPath("secrets")
-				config.Set("CURRENT_HOME", baseHome)
 				continue
 			}
 

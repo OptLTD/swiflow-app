@@ -38,7 +38,7 @@ tasks:
       - task: build
         vars:
           PRODUCTION: "true"
-      - task: update:build-assets
+      - task: common:update:build-assets
     cmds:
       - task: bundle
 
