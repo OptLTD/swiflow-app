@@ -64,7 +64,7 @@ func (a *BuiltinManager) Init(tools []*entity.ToolEntity) *BuiltinManager {
 	}
 	ensure("command", "command tool")
 	ensure("python3", "python3 tool")
-	ensure("chat2llm", "chat2llm tool")
+	// ensure("chat2llm", "chat2llm tool")
 	ensure("image-ocr", "image-ocr tool")
 	ensure("get-intent", "image-ocr tool")
 
