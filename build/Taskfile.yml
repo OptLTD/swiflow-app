@@ -20,6 +20,8 @@ tasks:
       - sh: pnpm --version
         msg: "Looks like pnpm isn't installed. pnpm is part of the Node installer: https://nodejs.org/en/download/"
     cmds:
+      - '[ -n "{{.VERSION}}" ] || (echo "ERROR: VERSION env is required" && exit 1)'
+      - pnpm version {{.VERSION}} --no-git-tag-version --allow-same-version # Set package.json version
       - pnpm install
 
   build:frontend:
