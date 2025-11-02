@@ -57,6 +57,10 @@ func main() {
 		log.SetOutput(file)
 	}
 
+	if err := start.FixVars(nil); err != nil {
+		log.Printf("fix env failed: %v", err)
+	}
+
 	// 启动 Web 服务与定时任务
 	go entry.StartWebServer("127.0.0.1:11235")
 	go entry.StartSchedule(context.Background())
