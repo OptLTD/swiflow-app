@@ -10,11 +10,11 @@
         <key>CFBundleIdentifier</key>
             <string>com.option.swiflow</string>
         <key>CFBundleVersion</key>
-            <string>0.8.12</string>
+            <string>0.8.2</string>
         <key>CFBundleGetInfoString</key>
             <string>Some Product Comments</string>
         <key>CFBundleShortVersionString</key>
-            <string>0.8.12</string>
+            <string>0.8.2</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>LSMinimumSystemVersion</key>

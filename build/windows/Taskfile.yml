@@ -127,9 +127,10 @@ tasks:
           {{if .PFX_PATH}}/f "{{.PFX_PATH}}"{{end}}
           {{if .PFX_PASSWORD}}/p "{{.PFX_PASSWORD}}"{{end}}
           {{if .TIMESTAMP_URL}}/tr "{{.TIMESTAMP_URL}}" /td SHA256{{end}}
-          "build/exe/{{.APP_NAME}}-{{.ARCH}}-installer.exe"
+          "build/exe/{{.APP_NAME}}_{{.VERSION}}_{{.ARCH}}-installer.exe"
         platforms: [windows]
     vars:
+      # Include version in installer filename to match NSIS OutFile naming
       ARCH: '{{.ARCH | default ARCH}}'
       PFX_PATH: '{{.PFX_PATH | default ""}}'
       PFX_PASSWORD: '{{.PFX_PASSWORD | default ""}}'

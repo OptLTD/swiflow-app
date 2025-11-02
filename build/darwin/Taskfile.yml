@@ -126,7 +126,8 @@ tasks:
       - cp -R "{{.BIN_DIR}}/{{.APP_NAME}}.app" "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}"
       - ln -s "/Applications" "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}/Applications"
       # Use default Finder layout (no AppleScript customization)
-      - hdiutil create -volname "{{if .ARCH}}{{.APP_NAME}} ({{.ARCH}}){{else}}{{.APP_NAME}}{{end}}" -srcfolder "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}" -ov -format UDZO "{{.DIST_DMG}}/{{.APP_NAME}}{{if .ARCH}}-{{.ARCH}}{{end}}.dmg"
+      # Include version and architecture in DMG filename
+      - hdiutil create -volname "{{if .ARCH}}{{.APP_NAME}} ({{.ARCH}}){{else}}{{.APP_NAME}}{{end}}" -srcfolder "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}" -ov -format UDZO "{{.DIST_DMG}}/{{.APP_NAME}}_{{.VERSION}}{{if .ARCH}}_{{.ARCH}}{{end}}.dmg"
       - rm -rf "{{.DIST_DMG}}/.staging{{if .ARCH}}-{{.ARCH}}{{end}}"
 
   # ----------------------------

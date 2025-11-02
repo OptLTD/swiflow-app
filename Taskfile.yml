@@ -7,7 +7,7 @@ includes:
   windows: ./build/windows/Taskfile.yml
 
 vars:
-  VERSION: "0.8.12"
+  VERSION: "0.8.2"
   BIN_DIR: "build/bin"
   APP_NAME: "Swiflow"
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'

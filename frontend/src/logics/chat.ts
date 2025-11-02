@@ -1,4 +1,3 @@
-import { t } from '@/config/i18n'
 import { getTitle } from '@/config/builtin'
 import { isEmpty } from 'lodash-es';
 import { toast } from 'vue3-toastify';

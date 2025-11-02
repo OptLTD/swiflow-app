@@ -1,10 +1,10 @@
 {
 	"fixed": {
-		"file_version": "0.8.12"
+		"file_version": "0.8.2"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "0.8.12",
+			"ProductVersion": "0.8.2",
 			"CompanyName": "Option.LTD",
 			"FileDescription": "Swiflow, 定制属于你的 AI 助理",
 			"LegalCopyright": "(c) 2025, Option.LTD",
