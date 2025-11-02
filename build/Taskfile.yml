@@ -20,8 +20,6 @@ tasks:
       - sh: pnpm --version
         msg: "Looks like pnpm isn't installed. pnpm is part of the Node installer: https://nodejs.org/en/download/"
     cmds:
-      - '[ -n "{{.VERSION}}" ] || (echo "ERROR: VERSION env is required" && exit 1)'
-      - pnpm version {{.VERSION}} --no-git-tag-version --allow-same-version # Set package.json version
       - pnpm install
 
   build:frontend:
@@ -90,3 +88,5 @@ tasks:
     dir: build
     cmds:
       - wails3 update build-assets  -productversion={{.VERSION}} -binaryname "{{.APP_NAME}}" -config config.yml -dir .
+      - cd ../frontend && pnpm version "{{.VERSION}}" --no-git-tag-version --allow-same-version # Ensure package.json version matches env VERSION'
+

@@ -11,7 +11,7 @@ info:
   description: "Swiflow, 定制属于你的 AI 助理" # The application description
   copyright: "(c) 2025, Option.LTD" # Copyright text
   comments: "Some Product Comments" # Comments
-  version: "0.8.2" # The application version
+  # version: "0.8.2" # The application version
 
 protocols:
   - scheme: swiflow
