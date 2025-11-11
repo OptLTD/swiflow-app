@@ -129,31 +129,6 @@ func (a *McpClient) ListTools() ([]*McpTool, error) {
 	return tools, nil
 }
 
-func (a *McpClient) Resources() ([]*Resource, error) {
-	log.Println("[MCP] List Resources:", a.server.UUID)
-	if a.session == nil {
-		if err := a.Initialize(); err != nil {
-			return nil, err
-		}
-	}
-	ctx := context.Background()
-	param := &mcp.ListResourcesParams{}
-	result, err := a.session.ListResources(ctx, param)
-	if result == nil || err != nil {
-		return nil, err
-	}
-
-	list := make([]*Resource, 0)
-	for _, res := range result.Resources {
-		list = append(list, &Resource{
-			Meta: res.Meta, MIMEType: res.MIMEType,
-			Name: res.Name, URI: res.URI, Title: res.Title,
-			Size: res.Size, Description: res.Description,
-		})
-	}
-	return list, nil
-}
-
 func (a *McpClient) Close() error {
 	if a.session != nil {
 		err := a.session.Close()
@@ -194,6 +169,31 @@ func (a *McpClient) Execute(toolName string, args map[string]any) (string, error
 	return "", nil
 }
 
+func (a *McpClient) Resources() ([]*Resource, error) {
+	log.Println("[MCP] List Resources:", a.server.UUID)
+	if a.session == nil {
+		if err := a.Initialize(); err != nil {
+			return nil, err
+		}
+	}
+	ctx := context.Background()
+	param := &mcp.ListResourcesParams{}
+	result, err := a.session.ListResources(ctx, param)
+	if result == nil || err != nil {
+		return nil, err
+	}
+
+	list := make([]*Resource, 0)
+	for _, res := range result.Resources {
+		list = append(list, &Resource{
+			Meta: res.Meta, MIMEType: res.MIMEType,
+			Name: res.Name, URI: res.URI, Title: res.Title,
+			Size: res.Size, Description: res.Description,
+		})
+	}
+	return list, nil
+}
+
 func (a *McpClient) Resource(uri string) (string, error) {
 	log.Println("[MCP] Get Resource:", uri)
 	duration := time.Duration(EXECUTE_TIMEOUT)
@@ -204,9 +204,7 @@ func (a *McpClient) Resource(uri string) (string, error) {
 			return "", err
 		}
 	}
-	// params := &mcp.CallToolParams{
-	// 	Name: toolName, Arguments: args,
-	// }
+
 	params := &mcp.ReadResourceParams{URI: uri}
 	res, err := a.session.ReadResource(ctx, params)
 	if err != nil || res == nil {

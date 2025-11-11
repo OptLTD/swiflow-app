@@ -179,3 +179,58 @@ func (a *McpClient) Execute(toolName string, args map[string]any) (string, error
 	}
 	return "", nil
 }
+
+func (a *McpClient) Resources() ([]*Resource, error) {
+	log.Println("[MCP] List Resources:", a.server.UUID)
+	if a.client == nil {
+		if err := a.Initialize(); err != nil {
+			return nil, err
+		}
+	}
+	ctx := context.Background()
+	param := mcp.ListResourcesRequest{}
+	result, err := a.client.ListResources(ctx, param)
+	if result == nil || err != nil {
+		return nil, err
+	}
+
+	list := make([]*Resource, 0)
+	for _, res := range result.Resources {
+		list = append(list, &Resource{
+			Name: res.Name, MIMEType: res.MIMEType,
+			URI: res.URI, Description: res.Description,
+		})
+	}
+	return list, nil
+}
+
+func (a *McpClient) Resource(uri string) (string, error) {
+	log.Println("[MCP] Get Resource:", uri)
+	duration := time.Duration(EXECUTE_TIMEOUT)
+	ctx, cancel := context.WithTimeout(context.Background(), duration*time.Second)
+	defer cancel()
+	if a.client == nil {
+		if err := a.Initialize(); err != nil {
+			return "", err
+		}
+	}
+
+	req := mcp.ReadResourceRequest{}
+	req.Params = mcp.ReadResourceParams{URI: uri}
+	res, err := a.client.ReadResource(ctx, req)
+	if err != nil || res == nil {
+		return "", fmt.Errorf("MCP工具调用失败: %v", err)
+	}
+	if len(res.Contents) > 0 {
+		data := res.Contents[0]
+		switch data := data.(type) {
+		case *mcp.TextResourceContents:
+			return data.Text, nil
+		case *mcp.BlobResourceContents:
+			return string(data.Blob), nil
+		default:
+			return "", nil
+		}
+	}
+	return "", nil
+}
