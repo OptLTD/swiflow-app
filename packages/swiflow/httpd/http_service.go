@@ -217,13 +217,12 @@ func (h *HttpServie) GetRelease() any {
 }
 
 func (h *HttpServie) ReadTo(r io.Reader, v any) error {
-	val, err := io.ReadAll(r)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(val, &v)
-	if err != nil {
-		return err
+	if val, err := io.ReadAll(r); err != nil {
+		log.Println("read body failed:", string(val), err)
+		return fmt.Errorf("read body failed: %v", err)
+	} else if err = json.Unmarshal(val, v); err != nil {
+		log.Println("read json failed:", string(val), err)
+		return fmt.Errorf("read json failed: %v", err)
 	}
 	return nil
 }

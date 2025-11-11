@@ -203,6 +203,18 @@ func ToXML(action any, result any) string {
 	return s.String()
 }
 
+func MaskMiddle(s string) string {
+	if s == "" {
+		return ""
+	}
+	n := len(s)
+	if n <= 6 {
+		return strings.Repeat("*", n)
+	}
+	head, tail := 4, 4
+	return s[:head] + strings.Repeat("*", n-head-tail) + s[n-tail:]
+}
+
 // IsNewVer 版本比较函数：比较两个版本号，返回v1是否高于v2
 func IsNewVer(v1, v2 string) bool {
 	// 移除版本号前缀"v"

@@ -5,9 +5,11 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"swiflow/ability"
 	"swiflow/config"
 	"swiflow/entity"
+	"swiflow/support"
 
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/duke-git/lancet/v2/structs"
@@ -237,6 +239,26 @@ func (s *McpServer) Preload() error {
 		return err
 	}
 	return nil
+}
+
+func (s *McpServer) GetHeaders() map[string]string {
+	headers := map[string]string{}
+	token := ""
+	for key, val := range s.Env {
+		switch strings.ToUpper(key) {
+		case "API_TOKEN", "API_KEY",
+			"TOKEN", "BEARER_TOKEN":
+			token = val
+			continue
+		}
+		if support.Bool(val) {
+			headers["X-"+key] = val
+		}
+	}
+	if token != "" {
+		headers["Authorization"] = fmt.Sprintf("Bearer %s", token)
+	}
+	return headers
 }
 
 func (s *McpServer) GetCmd() (*exec.Cmd, error) {

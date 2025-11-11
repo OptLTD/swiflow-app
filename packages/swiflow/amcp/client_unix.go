@@ -45,6 +45,12 @@ type McpClient struct {
 func (a *McpClient) buildTransport() (mcp.Transport, error) {
 	// 只支持 command/stdio
 	switch a.server.Type {
+	case "streamable", "stream":
+		headers := a.server.GetHeaders()
+		client := support.NewHttpClient(headers)
+		return &mcp.StreamableClientTransport{
+			HTTPClient: client, Endpoint: a.server.Url,
+		}, nil
 	case "memory":
 		memTransport, _ := mcp.NewInMemoryTransports()
 		return memTransport, nil

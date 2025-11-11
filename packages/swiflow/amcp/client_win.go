@@ -49,6 +49,15 @@ func (a *McpClient) Initialize() error {
 	// Create client based on server type
 	var mcpClient *client.Client
 	switch a.server.Type {
+	case "streamable", "stream":
+		var err error
+		headers := a.server.GetHeaders()
+		mcpClient, err = client.NewStreamableHttpClient(
+			a.server.Url, transport.WithHTTPHeaders(headers),
+		)
+		if err != nil {
+			return fmt.Errorf("启动MCP客户端失败: %v", err)
+		}
 	case "debug":
 		cmdPath, err := config.GetMcpEnv(a.server.Cmd)
 		mcpClient, err = client.NewStdioMCPClient(

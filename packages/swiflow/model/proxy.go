@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"swiflow/config"
+	"swiflow/support"
 
 	"golang.org/x/net/proxy"
 )
@@ -21,7 +22,8 @@ func (h *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	req = req.Clone(req.Context())
 	for key, value := range h.headers {
 		req.Header.Set(key, value)
-		log.Printf("[PROXY] header: %s = %s\n", key, value)
+		val := support.MaskMiddle(value)
+		log.Printf("[PROXY] header: %s = %s\n", key, val)
 	}
 	return h.rt.RoundTrip(req)
 }

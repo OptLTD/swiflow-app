@@ -300,7 +300,7 @@ func (h *SettingHandler) NewMcp(w http.ResponseWriter, r *http.Request) {
 			err = JsonResp(w, err)
 		}
 	case "test-mcp":
-		server.Type = "debug"
+		// server.Type = "debug"
 		if server.Name == "" && server.UUID != "" {
 			server.Name = server.UUID
 		}
