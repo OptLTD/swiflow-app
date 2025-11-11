@@ -34,7 +34,8 @@ const (
 	ABORT_SUBTASK = "abort-subtask"
 
 	// MCP工具
-	USE_MCP_TOOL = "use-mcp-tool"
+	USE_MCP_TOOL     = "use-mcp-tool"
+	GET_MCP_RESOURCE = "get-mcp-resource"
 	// builtin
 	USE_BUILTIN_TOOL = "use-builtin-tool"
 )

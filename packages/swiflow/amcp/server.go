@@ -44,6 +44,38 @@ type McpTool struct {
 	// otherwise Name.
 	Title string `json:"title,omitempty"`
 }
+type Resource struct {
+	// See [specification/2025-06-18/basic/index#general-fields] for notes on _meta
+	// usage.
+	Meta map[string]any `json:"_meta,omitempty"`
+	// Optional annotations for the client.
+	// Annotations *Annotations `json:"annotations,omitempty"`
+	// A description of what this resource represents.
+	//
+	// This can be used by clients to improve the LLM's understanding of available
+	// resources. It can be thought of like a "hint" to the model.
+	Description string `json:"description,omitempty"`
+	// The MIME type of this resource, if known.
+	MIMEType string `json:"mimeType,omitempty"`
+	// Intended for programmatic or logical use, but used as a display name in past
+	// specs or fallback (if title isn't present).
+	Name string `json:"name"`
+	// The size of the raw resource content, in bytes (i.e., before base64 encoding
+	// or any tokenization), if known.
+	//
+	// This can be used by Hosts to display file sizes and estimate context window
+	// usage.
+	Size int64 `json:"size,omitempty"`
+	// Intended for UI and end-user contexts — optimized to be human-readable and
+	// easily understood, even by those unfamiliar with domain-specific terminology.
+	//
+	// If not provided, the name should be used for display (except for Tool, where
+	// Annotations.Title should be given precedence over using name, if
+	// present).
+	Title string `json:"title,omitempty"`
+	// The URI of this resource.
+	URI string `json:"uri"`
+}
 
 type McpStatus struct {
 	// collect error message
@@ -55,7 +87,8 @@ type McpStatus struct {
 	// then check tools enable, zero means all
 	Checked []string `json:"checked,omitempty"`
 	// query all mcp tool infomation
-	McpTools []*McpTool `json:"tools,omitempty"`
+	McpTools  []*McpTool  `json:"tools,omitempty"`
+	Resources []*Resource `json:"resources,omitempty"`
 }
 
 func (s *McpStatus) ToMap() map[string]any {

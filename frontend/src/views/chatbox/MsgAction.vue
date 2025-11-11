@@ -45,6 +45,10 @@ const title = computed(() => {
       const act = (props.item as UseMcpTool)
       return `${t('common.usemcp')}: ${act.desc}`
     }
+    case "get-mcp-resource": {
+      const act = (props.item as UseMcpTool)
+      return `${t('common.usemcp')}: ${act.desc}`
+    }
     case "use-builtin-tool": {
       const act = (props.item as UseBuiltinTool)
       return `${getTitle(act.tool) }: ${act.desc}`

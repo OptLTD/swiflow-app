@@ -62,6 +62,13 @@ func (m *McpService) ServerStatus(server *McpServer) error {
 		server.Status.McpTools = append(server.Status.McpTools, tool)
 		server.Status.Checked = append(server.Status.Checked, tool.Name)
 	}
+	// mcp resources
+	resources, err := client.Resources()
+	for _, res := range resources {
+		server.Status.Resources = append(server.Status.Resources, res)
+		server.Status.Checked = append(server.Status.Checked, res.Name)
+	}
+
 	server.Status.Active = true
 	return nil
 }
@@ -115,8 +122,9 @@ func (m *McpService) GetPrompt(worker *entity.BotEntity) string {
 			continue
 		}
 		prompt.WriteString("### " + server.UUID + "\n")
+		prompt.WriteString("#### Available Tools:\n")
 		for _, tool := range checked {
-			prompt.WriteString(fmt.Sprintf("#### **%s**\n", tool.Name))
+			prompt.WriteString(fmt.Sprintf("- **%s**: \n", tool.Name))
 			prompt.WriteString(fmt.Sprintf("- 描述： %s\n", tool.Description))
 			if input := tool.InputSchema; input == nil {
 				continue
@@ -126,6 +134,12 @@ func (m *McpService) GetPrompt(worker *entity.BotEntity) string {
 				prompt.WriteString(string(data))
 				prompt.WriteString("\n```\n\n\n")
 			}
+		}
+
+		prompt.WriteString("#### Direct Resources:\n")
+		for _, res := range server.Status.Resources {
+			prompt.WriteString(fmt.Sprintf("- **%s(%s)**\n", res.Name, res.URI))
+			prompt.WriteString(fmt.Sprintf("- 描述： %s\n", res.Description))
 		}
 	}
 	if prompt.Len() == 0 {

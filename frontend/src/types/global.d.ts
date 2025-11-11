@@ -101,6 +101,12 @@ declare type UseMcpTool = {
   more: boolean // 详细展示
 }
 
+declare type GetMcpResource = {
+  desc?: string;
+  uri: string;
+  name: string;
+}
+
 declare type UseBuiltinTool = {
   desc?: string;
   args?: Record;
@@ -125,8 +131,9 @@ declare type DefaultProps = {
 
 declare type MsgAct = (
    Annotate | Thinking | UserInput | BotReply
-  | ExecuteCommand | DefaultAction | MakeAsk | Complete
-  | UseMcpTool | StartAsyncCmd | StartSubtask | QuerySubtask | AbortSubtask
+  | DefaultAction | MakeAsk | Complete
+  | ExecuteCommand | UseMcpTool | GetMcpResource | UseBuiltinTool
+  | StartAsyncCmd | StartSubtask | QuerySubtask | AbortSubtask
   | FileGetContent | FilePutContent | FileReplaceText | PathListFiles
 ) & DefaultResult & DefaultProps
 

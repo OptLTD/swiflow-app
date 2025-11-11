@@ -98,6 +98,7 @@ const handleDisplayDirect = (act: MsgAct) => {
 
 const toolsName = [
   'use-mcp-tool',
+  'get-mcp-resource',
   'use-builtin-tool',
   'execute-command',
   'path-list-files',

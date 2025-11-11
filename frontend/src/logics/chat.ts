@@ -225,6 +225,10 @@ export const getDisplayActDesc = (item: MsgAct): string => {
       const act = (item as UseMcpTool)
       return `Use Mcp: ${act.desc}`
     }
+    case "get-mcp-resource": {
+      const act = (item as GetMcpResource)
+      return `Use Mcp: ${act.desc}`
+    }
     case "use-builtin-tool": {
       const act = (item as UseBuiltinTool)
       return `${getTitle(act.tool) }: ${act.desc}`

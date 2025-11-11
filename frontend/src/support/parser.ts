@@ -23,6 +23,7 @@ export class XMLParser {
 
 
   private static readonly USE_MCP_TOOL = 'use-mcp-tool';
+  private static readonly GET_MCP_RESOURCE = 'get-mcp-resource';
   private static readonly USE_BUILTIN_TOOL = 'use-builtin-tool';
 
 
@@ -151,9 +152,18 @@ export class XMLParser {
       }
       case XMLParser.USE_MCP_TOOL: {
         if (!result['tool']) { return null }
-        if (!result['server']) { return null }
+        if (!result['name']) { return null }
         const detail = new UseMcpTool(
-          result['tool'], result['server']
+          result['tool'], result['name']
+        )
+        detail.desc = result['desc']
+        return detail as MsgAct
+      }
+      case XMLParser.GET_MCP_RESOURCE: {
+        if (!result['uri']) { return null }
+        if (!result['name']) { return null }
+        const detail = new GetMcpResource(
+          result['uri'], result['name']
         )
         detail.desc = result['desc']
         return detail as MsgAct
@@ -276,6 +286,16 @@ class UseMcpTool {
   constructor(a: string, b: string) {
     this.tool = a
     this.name = b
+  }
+}
+
+class GetMcpResource {
+  desc?: string;
+  name: string;
+  uri: string;
+  constructor(a: string, b: string) {
+    this.name = a
+    this.uri = b
   }
 }
 

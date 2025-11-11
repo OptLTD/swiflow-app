@@ -241,6 +241,8 @@ func (act *SuperAction) Hash() []string {
 		case *UseMcpTool:
 			identifier = act.XMLName.Local + ":" + act.Desc + ":" + act.Tool
 			identifier += act.Desc + ":" + cryptor.Sha1(act.Args)
+		case *GetMcpResource:
+			identifier = act.XMLName.Local + ":" + act.Desc + ":" + act.Uri
 		case *UseBuiltinTool:
 			identifier = act.XMLName.Local + ":" + act.Desc + ":" + act.Tool
 			identifier += act.Desc + ":" + cryptor.Sha1(act.Args)
@@ -286,7 +288,9 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 		// MCP工具
 		case *UseMcpTool:
 			result[hash] = res.Result
-		// MCP工具
+		case *GetMcpResource:
+			result[hash] = res.Result
+		// 内置工具
 		case *UseBuiltinTool:
 			result[hash] = res.Result
 		}
@@ -321,6 +325,8 @@ func (msg *SuperAction) Merge(act *SuperAction) {
 			res.Result, _ = result[hash]
 		// MCP工具
 		case *UseMcpTool:
+			res.Result, _ = result[hash]
+		case *GetMcpResource:
 			res.Result, _ = result[hash]
 		// 内置工具
 		case *UseBuiltinTool:
@@ -435,6 +441,8 @@ func parse(text string) any {
 	// MCP工具
 	case USE_MCP_TOOL:
 		detail = new(UseMcpTool)
+	case GET_MCP_RESOURCE:
+		detail = new(GetMcpResource)
 	case USE_BUILTIN_TOOL:
 		detail = new(UseBuiltinTool)
 	default:

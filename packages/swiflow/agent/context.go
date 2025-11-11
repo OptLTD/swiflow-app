@@ -309,7 +309,7 @@ func (c *Context) UsePrompt() *string {
 		return &c.usePrompt
 	}
 	c.usePrompt = strings.ReplaceAll(
-		prompt, "${{MCP_TOOLS}}", mcpTools,
+		prompt, "${{ALL_MCP_TOOLS}}", mcpTools,
 	)
 	return &c.usePrompt
 }
