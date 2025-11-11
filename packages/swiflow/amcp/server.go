@@ -280,7 +280,9 @@ func (s *McpServer) GetHeaders() map[string]string {
 	for key, val := range s.Env {
 		switch strings.ToUpper(key) {
 		case "API_TOKEN", "API_KEY",
-			"TOKEN", "BEARER_TOKEN":
+			"TOKEN", "BEARER_TOKEN",
+			"AUTH_TOKEN", "ACCESS_TOKEN",
+			"X_API_KEY", "X-API-KEY":
 			token = val
 			continue
 		}
@@ -290,6 +292,7 @@ func (s *McpServer) GetHeaders() map[string]string {
 	}
 	if token != "" {
 		headers["Authorization"] = fmt.Sprintf("Bearer %s", token)
+		headers["X-API-KEY"] = token
 	}
 	return headers
 }

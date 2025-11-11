@@ -165,7 +165,8 @@ const startMcpEnv = async () => {
     }
     // @ts-ignore
     if (!app.getMcpEnv[item.command]) {
-      loss.push(item.command)
+      const command = item.command
+      command && loss.push(command)
       continue
     }
     const status = await doActiveMcp(item)

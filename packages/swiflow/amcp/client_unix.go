@@ -6,6 +6,7 @@ package amcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -43,7 +44,6 @@ type McpClient struct {
 }
 
 func (a *McpClient) buildTransport() (mcp.Transport, error) {
-	// 只支持 command/stdio
 	switch a.server.Type {
 	case "streamable", "stream":
 		headers := a.server.GetHeaders()
@@ -76,13 +76,14 @@ func (a *McpClient) buildTransport() (mcp.Transport, error) {
 
 func (a *McpClient) Initialize() error {
 	log.Println("[MCP] Start Init Mcp Server:", a.server.UUID)
-	transport, err := a.buildTransport()
-	if err != nil {
+	if transport, err := a.buildTransport(); err != nil {
 		return fmt.Errorf("创建MCP客户端失败: %v", err)
+	} else {
+		a.transport = transport
 	}
-	a.transport = transport
+
 	a.client = mcp.NewClient(&mcp.Implementation{
-		Name: "swiflow-app", Version: config.GetVersion(),
+		Name: "swiflow", Version: config.GetVersion(),
 	}, nil)
 
 	duration := time.Duration(CONNECT_TIMEOUT)
@@ -91,7 +92,7 @@ func (a *McpClient) Initialize() error {
 	)
 	defer cancel()
 
-	session, err := a.client.Connect(ctx, transport, nil)
+	session, err := a.client.Connect(ctx, a.transport, nil)
 	if err != nil {
 		return fmt.Errorf("启动MCP客户端失败: %v", err)
 	}
@@ -116,6 +117,7 @@ func (a *McpClient) ListTools() ([]*McpTool, error) {
 	param := &mcp.ListToolsParams{}
 	result, err := a.session.ListTools(ctx, param)
 	if result == nil || err != nil {
+		log.Println("[MCP] List Tools Failed:", err)
 		return nil, err
 	}
 
@@ -136,6 +138,7 @@ func (a *McpClient) Close() error {
 			log.Println("[MCP] mcp close error:", err)
 		}
 	}
+	log.Println("[MCP] mcp closed:", a.server.UUID)
 	delete(clients, a.server.UUID)
 	return nil
 }
@@ -143,7 +146,9 @@ func (a *McpClient) Close() error {
 func (a *McpClient) Execute(toolName string, args map[string]any) (string, error) {
 	log.Println("[MCP] Start Execute:", toolName, support.ToJson(args))
 	duration := time.Duration(EXECUTE_TIMEOUT)
-	ctx, cancel := context.WithTimeout(context.Background(), duration*time.Second)
+	ctx, cancel := context.WithTimeout(
+		context.Background(), duration*time.Second,
+	)
 	defer cancel()
 	if a.session == nil {
 		if err := a.Initialize(); err != nil {
@@ -154,8 +159,15 @@ func (a *McpClient) Execute(toolName string, args map[string]any) (string, error
 		Name: toolName, Arguments: args,
 	}
 	res, err := a.session.CallTool(ctx, params)
+	if errors.Is(err, mcp.ErrConnectionClosed) {
+		log.Println("[MCP] Closed & Retry:", toolName)
+		if err = a.Initialize(); err != nil {
+			return "", err
+		}
+		res, err = a.session.CallTool(ctx, params)
+	}
 	if err != nil || res == nil {
-		return "", fmt.Errorf("MCP工具调用失败: %v", err)
+		return "", fmt.Errorf("[MCP] 工具调用失败: %v", err)
 	}
 	if len(res.Content) > 0 {
 		switch v := res.Content[0].(type) {
@@ -178,26 +190,38 @@ func (a *McpClient) Resources() ([]*Resource, error) {
 	}
 	ctx := context.Background()
 	param := &mcp.ListResourcesParams{}
-	result, err := a.session.ListResources(ctx, param)
-	if result == nil || err != nil {
+	res, err := a.session.ListResources(ctx, param)
+	if errors.Is(err, mcp.ErrConnectionClosed) {
+		log.Println("[MCP] Closed & Retry:", param)
+		if err = a.Initialize(); err != nil {
+			return nil, err
+		}
+		res, err = a.session.ListResources(ctx, param)
+	}
+	if res == nil || err != nil {
+		log.Println("[MCP] List Resources Failed:", err)
 		return nil, err
 	}
 
-	list := make([]*Resource, 0)
-	for _, res := range result.Resources {
+	list, name := make([]*Resource, 0), []string{}
+	for _, res := range res.Resources {
+		name = append(name, res.Name)
 		list = append(list, &Resource{
 			Meta: res.Meta, MIMEType: res.MIMEType,
 			Name: res.Name, URI: res.URI, Title: res.Title,
 			Size: res.Size, Description: res.Description,
 		})
 	}
+	log.Println("[MCP] List Resources:", name)
 	return list, nil
 }
 
 func (a *McpClient) Resource(uri string) (string, error) {
-	log.Println("[MCP] Get Resource:", uri)
+	log.Println("[MCP] Get Resource:", a.server.Name, uri)
 	duration := time.Duration(EXECUTE_TIMEOUT)
-	ctx, cancel := context.WithTimeout(context.Background(), duration*time.Second)
+	ctx, cancel := context.WithTimeout(
+		context.Background(), duration*time.Second,
+	)
 	defer cancel()
 	if a.session == nil {
 		if err := a.Initialize(); err != nil {
@@ -205,10 +229,18 @@ func (a *McpClient) Resource(uri string) (string, error) {
 		}
 	}
 
-	params := &mcp.ReadResourceParams{URI: uri}
-	res, err := a.session.ReadResource(ctx, params)
+	param := &mcp.ReadResourceParams{URI: uri}
+	res, err := a.session.ReadResource(ctx, param)
+	if errors.Is(err, mcp.ErrConnectionClosed) {
+		log.Println("[MCP] Closed & Retry:", param)
+		if err = a.Initialize(); err != nil {
+			return "", err
+		}
+		res, err = a.session.ReadResource(ctx, param)
+	}
 	if err != nil || res == nil {
-		return "", fmt.Errorf("MCP工具调用失败: %v", err)
+		log.Println("[MCP] Read Resource Failed:", err)
+		return "", fmt.Errorf("[MCP] 资源读取失败: %v", err)
 	}
 	if len(res.Contents) > 0 {
 		data := res.Contents[0]

@@ -223,11 +223,11 @@ export const getDisplayActDesc = (item: MsgAct): string => {
     }
     case "use-mcp-tool": {
       const act = (item as UseMcpTool)
-      return `Use Mcp: ${act.desc}`
+      return `使用工具: ${act.desc}`
     }
     case "get-mcp-resource": {
       const act = (item as GetMcpResource)
-      return `Use Mcp: ${act.desc}`
+      return `获取资源: ${act.desc}`
     }
     case "use-builtin-tool": {
       const act = (item as UseBuiltinTool)
@@ -247,7 +247,7 @@ export const getActHtml = (data: MsgAct) => {
     return md.render(content.replace('{{ERRMSG}}', errmsg))
   }
   // mcp tool result
-  const tools = ['use-mcp-tool', 'use-builtin-tool']
+  const tools = ['use-mcp-tool', 'get-mcp-resource', 'use-builtin-tool']
   if (tools.includes(data.type) && !isEmpty(result)) {
     const parts = [] as string[]
     const type = textType(result)
