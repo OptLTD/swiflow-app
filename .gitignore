@@ -1,0 +1,32 @@
+# Go build
+/mira
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+
+# Local config (keep config.example.json)
+config.json
+
+# Runtime data (SQLite, workspace, user skills)
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+!.env.example

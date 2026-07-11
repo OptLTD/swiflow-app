@@ -1,0 +1,33 @@
+# Dependencies
+node_modules
+
+# Build output (embedded via web/embed.go at release build)
+dist
+dist-ssr
+
+# Local overrides
+*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env
+.env
+.env.*
+!.env.example
+
+# TypeScript / Vite cache
+*.tsbuildinfo
+.vite
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/

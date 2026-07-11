@@ -1,0 +1,15 @@
+{
+  "host": "127.0.0.1",
+  "port": 8000,
+  "db_path": "./data/mira.db",
+  "auth_token": "change-me",
+  "encryption_key": "change-me-at-least-16-chars",
+  "workspace_dir": "./data/workspace",
+  "init_skills_dir": "./skills",
+  "user_skills_dir": "./data/skills",
+  "allowed_origins": ["http://localhost:5173"],
+  "tools": {
+    "exec_enabled": false,
+    "web_search_provider": ""
+  }
+}
