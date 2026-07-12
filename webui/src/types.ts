@@ -47,6 +47,58 @@ export interface SkillInfo {
   enabled: boolean
 }
 
+export interface MCPCapabilities {
+  connected: boolean
+  tools: MCPToolCapability[]
+  resources: MCPResourceInfo[]
+  templates: MCPResourceTemplateInfo[]
+}
+
+export interface MCPToolCapability {
+  name: string
+  mcp_name: string
+  description: string
+  enabled: boolean
+}
+
+export interface MCPResourceInfo {
+  uri: string
+  name: string
+  title?: string
+  description?: string
+  mime_type?: string
+}
+
+export interface MCPResourceTemplateInfo {
+  uri_template: string
+  name: string
+  title?: string
+  description?: string
+  mime_type?: string
+}
+
+export interface MCPServer {
+  id: string
+  name: string
+  display_name?: string
+  transport: 'stdio' | 'sse' | 'streamable'
+  command?: string
+  args?: string[]
+  url?: string
+  env?: Record<string, string>
+  enabled: boolean
+}
+
+export interface CronJob {
+  id: string
+  name: string
+  agent_key: string
+  message: string
+  schedule: string
+  enabled: boolean
+  last_run_at?: string
+}
+
 export interface ChatEvent {
   type: string
   content?: string

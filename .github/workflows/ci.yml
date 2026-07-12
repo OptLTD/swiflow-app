@@ -25,14 +25,5 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Build webui
-        run: make web-build
-
-      - name: Go vet
-        run: go vet ./...
-
-      - name: Go test
-        run: go test ./...
-
-      - name: Go build
-        run: go build -o mira ./cmd/mira
+      - name: Test
+        run: make test

@@ -13,8 +13,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"mira/initial"
+	"mira/embed"
 	"mira/internal/agent"
+	"mira/internal/browser"
+	"mira/internal/schedule"
+	"mira/internal/sesshub"
+	"mira/internal/mcpclient"
 	"mira/internal/migrate"
 	"mira/internal/seed"
 	"mira/internal/server"
@@ -62,11 +66,11 @@ func runServe() error {
 	defer st.Close()
 
 	if autoMigrate {
-		upgrades, err := initial.UpgradesDir()
+		upgrades, err := embed.UpgradesDir()
 		if err != nil {
 			return fmt.Errorf("upgrades fs: %w", err)
 		}
-		if err := migrate.Apply(context.Background(), st.DB(), initial.SchemaSQL, upgrades); err != nil {
+		if err := migrate.Apply(context.Background(), st.DB(), embed.SchemaSQL, upgrades); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
 		if err := seed.EnsureDefaults(context.Background(), st); err != nil {
@@ -82,12 +86,35 @@ func runServe() error {
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
 
+	browserPool := browser.NewPool(cfg.Tools.BrowserHeadless)
+	defer browserPool.Close()
+	tool.RegisterBrowser(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, browserPool, tool.BrowserOptions{
+		Enabled:  cfg.Tools.BrowserEnabled,
+		Headless: cfg.Tools.BrowserHeadless,
+	})
+
 	// Apply persisted tool policy.
 	if pol, err := st.ListToolPolicy(context.Background()); err == nil {
 		for _, p := range pol {
 			toolsReg.SetEnabled(p.ToolName, p.Enabled)
 		}
 	}
+	if !cfg.Tools.ExecEnabled {
+		for _, name := range tool.RuntimeToolNames() {
+			toolsReg.SetEnabled(name, false)
+		}
+	}
+	if !cfg.Tools.BrowserEnabled {
+		for _, name := range tool.BrowserToolNames() {
+			toolsReg.SetEnabled(name, false)
+		}
+	}
+
+	mcpMgr := mcpclient.NewManager(st, toolsReg)
+	if err := mcpMgr.Sync(context.Background()); err != nil {
+		slog.Warn("mcp initial sync", "error", err)
+	}
+	defer mcpMgr.Close()
 
 	runner := agent.NewRunner(agent.RunnerDeps{
 		Store:              st,
@@ -97,7 +124,16 @@ func runServe() error {
 		MaxHistoryMessages: cfg.MaxHistoryMessages,
 	})
 
-	srv := server.New(cfg, st, runner, toolsReg, skillsCat)
+	events := sesshub.New()
+
+	cronSched := schedule.New(st, runner, events)
+	tool.RegisterSchedule(toolsReg, st, cronSched)
+	if err := cronSched.Start(context.Background()); err != nil {
+		slog.Warn("cron start", "error", err)
+	}
+	defer cronSched.Stop()
+
+	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events)
 	httpServer := &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           srv.Handler(),

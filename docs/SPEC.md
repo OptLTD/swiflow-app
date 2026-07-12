@@ -128,15 +128,15 @@ internal/skill        skill discovery + summary                   │
 internal/secure       SSRF guard, path sandbox, AES-GCM           │
 internal/store        Store interface                                             │
   internal/store/sqlite  SQLite implementation                    │
-internal/migrate      applies embedded initial/schema.sql                         │
+internal/migrate      applies embed/schema.sql + upgrades                          │
 internal/config       config loading (JSON + env)                                 │
-initial/              embedded schema.sql + upgrades/*.sql                      │
+embed/                embedded schema.sql + upgrades/*.sql + init-skills/         │
 webui/                Vue app (built to webui/dist, embedded into binary)
 ```
 
 **Module responsibilities & allowed dependencies:**
 - `config` — loads config; depends on nothing internal.
-- `migrate` — applies embedded `initial/schema.sql`; depends on `database/sql`.
+- `migrate` — applies embedded `embed/schema.sql`; depends on `database/sql`.
 - `store` — defines the `Store` interface and types; `store/sqlite` implements
   it. Depends on `database/sql`, `sqlx`. No dependency on `agent`/`server`.
 - `secure` — pure helpers (SSRF, sandbox, crypto); depends on nothing internal.
@@ -157,11 +157,11 @@ each layer substitutable and testable.
 
 ## 5. Data model
 
-Phase 1 schema lives in `initial/schema.sql` (also documented in
+Phase 1 schema lives in `embed/schema.sql` (also documented in
 `docs/schema.sql`). Summary and rationale:
 
 - `schema_migrations(version, applied_at)` — tracks applied files in
-  `initial/upgrades/`.
+  `embed/upgrades/`.
 - `providers(id, name, display_name, api_base, api_key_enc, enabled, created_at,
   updated_at)` — `name` unique; `api_key_enc` is `nonce || ciphertext` from
   AES-256-GCM; `enabled` is 0/1.
@@ -184,9 +184,9 @@ Phase 1 schema lives in `initial/schema.sql` (also documented in
 search, cheaper incremental appends, and per-message inspection in the UI
 without rewriting a whole history blob.
 
-**Schema initialization:** `initial/schema.sql` is embedded into the binary.
+**Schema initialization:** `embed/schema.sql` is embedded into the binary.
 All statements use `CREATE IF NOT EXISTS`, so the base schema is idempotent.
-Incremental changes go in `initial/upgrades/` as `0001_*.sql`, `0002_*.sql`, …;
+Incremental changes go in `embed/upgrades/` as `0001_*.sql`, `0002_*.sql`, …;
 `migrate.Apply` applies the base schema, then any unapplied upgrade files in
 order (recorded in `schema_migrations`). `mira migrate` applies both and exits;
 `mira serve --migrate` applies then serves.
@@ -331,9 +331,10 @@ holds the in-memory tool instances; enable/disable policy is persisted via
 `store` and mirrored into the registry at startup and on change.
 
 ### 6.6 `skill`
-Discovers skills from two directories: `InitSkillsDir` (built-in) and
-`UserSkillsDir` (user). A skill is a directory containing a `SKILL.md` (or
-`skill.md`) with YAML-ish front matter:
+Discovers built-in skills from an embedded FS (`embed/init-skills/`, compiled into
+the binary) and user skills from `UserSkillsDir`. Optionally `InitSkillsDir`
+overrides embedded builtins from disk (local development). A skill is a directory
+containing a `SKILL.md` (or `skill.md`) with YAML-ish front matter:
 ```
 ---
 slug: summarize
@@ -377,7 +378,7 @@ routes.
 ### 6.9 `migrate`
 `func Apply(ctx, db, schemaSQL string, upgradesFS fs.FS) error` — executes the
 embedded base schema, then applies unapplied `NNNN_*.sql` files from
-`initial/upgrades/` in order, recording each in `schema_migrations`.
+`embed/upgrades/` in order, recording each in `schema_migrations`.
 
 ---
 
@@ -531,11 +532,29 @@ patterns (`^[a-zA-Z0-9_-]+$`); dots are not permitted by OpenAI-compatible APIs.
   return titles+URLs+snippets. (Config key `Tools.WebSearchProvider` optional;
   Phase 1 default = disabled.)
 
-### `exec_run`
+### `cmd_run`
 - Description: "Run a shell command in the workspace."
 - Parameters: `command` (string, required), `timeout` (int seconds, default 30).
+- Behavior: same as `exec_run` (`sh -c` in workspace dir).
+
+### `python_run`
+- Description: "Run Python code or a script in the workspace."
+- Parameters: `code` (string) or `file` (workspace-relative path), optional `args`
+  (string array), `timeout` (default 30). Provide `code` or `file`, not both.
+- Behavior: uses `python3` or `python` from PATH; script paths are workspace-sandboxed.
+
+### `node_run`
+- Description: "Run JavaScript/Node code or a script in the workspace."
+- Parameters: `code` (string) or `file` (workspace-relative path), optional `args`,
+  `timeout` (default 30).
+- Behavior: uses `node` from PATH; script paths are workspace-sandboxed.
+
+### `exec_run`
+- Description: "Run a shell command in the workspace (alias of cmd_run)."
+- Parameters: `command` (string, required), `timeout` (int seconds, default 30).
 - Behavior: gated by `config.Tools.ExecEnabled` (default false). If disabled at
-  config level, the tool is not registered at all. When enabled, run with
+  config level, runtime tools (`cmd_run`, `exec_run`, `python_run`, `node_run`)
+  are not registered. When enabled, run with
   `sh -c` in the workspace dir, capture stdout+stderr, cap output 256 KB, enforce
   timeout via `context`. Returns combined output.
 
@@ -559,8 +578,11 @@ panic becomes a tool-error result (`"error: panic: <msg>"`), not a run crash.
 
 ## 9. Skill system
 
-- **Directories:** `InitSkillsDir` (built-in, shipped with Mira, read-only) and
-  `UserSkillsDir` (user-writable). Both configurable.
+- **Built-in:** embedded in the binary (`embed/init-skills/`); read-only at runtime.
+- **User:** `UserSkillsDir` (default `./data/user-skills`), user-writable; overrides
+  built-in skills by slug.
+- **Dev override:** optional `InitSkillsDir` / `MIRA_INIT_SKILLS` replaces embedded
+  builtins from a filesystem directory (rebuild not required).
 - **Format:** each skill is a directory with a `SKILL.md` containing YAML
   front matter (`slug`, `name`, `description`) and a markdown body.
 - **Discovery:** walk both dirs, parse front matter, dedupe by slug (init first,
@@ -636,11 +658,11 @@ JSON file with env overlay (env wins). Defaults shown.
 | `auth_token` | `MIRA_AUTH_TOKEN` | (required, no default) | bearer token |
 | `encryption_key` | `MIRA_ENCRYPTION_KEY` | (required) | provider-key encryption; ≥16 chars |
 | `workspace_dir` | `MIRA_WORKSPACE` | `./data/workspace` | file-tool sandbox root |
-| `init_skills_dir` | `MIRA_INIT_SKILLS` | `./skills` | built-in skills |
-| `user_skills_dir` | `MIRA_USER_SKILLS` | `./data/skills` | user skills |
+| `init_skills_dir` | `MIRA_INIT_SKILLS` | (empty) | dev override for built-in skills |
+| `user_skills_dir` | `MIRA_USER_SKILLS` | `./data/user-skills` | user skills |
 | `allowed_origins` | — | `[]` | CORS; empty = allow all |
 | `web_dist_dir` | — | (embedded) | override for dev |
-| `tools.exec_enabled` | `MIRA_EXEC` | `false` | register `exec_run` if true |
+| `tools.exec_enabled` | `MIRA_EXEC` | `false` | register `cmd_run`, `exec_run`, `python_run`, `node_run` if true |
 | `tools.web_search_provider` | — | `""` | disabled if empty |
 
 `config.example.json` ships documenting these. `Load` errors if `auth_token` or
@@ -717,13 +739,11 @@ build is embedded and served by Go.
 ## 14. Build & run
 
 **Makefile targets:**
-- `build`: `go build -o mira ./cmd/mira`
-- `run`: `./mira serve --migrate`
-- `migrate`: `./mira migrate`
-- `web-install`: `cd webui && pnpm install`
-- `web-dev`: `cd webui && pnpm dev`
-- `web-build`: `cd webui && pnpm install && pnpm build` (output to `webui/dist`)
-- `test`: `go vet ./... && go build ./...`
+- `dev`: local API `:8000` + Vite `:5173` (parallel)
+- `build`: `webui/dist` + `go build -o mira`
+- `image`: `docker build -t mira:latest .`
+- `migrate`: `go run ./cmd/mira migrate`
+- `test`: web build + `go vet` + `go test` + `go build`
 
 **Embedding:** `internal/server` (or `web`) has `//go:embed dist/*` over the
 built `webui/dist`; the static handler serves it. For dev, set `web_dist_dir` to
@@ -771,8 +791,8 @@ truth; code is then implemented to the amended document.
 
 **Phase 1 end-to-end:**
 1. `make migrate` against a temp SQLite file → `schema_migrations` and all
-   tables created (compare to `initial/schema.sql`).
-2. `make run` → server listens; `curl /api/health` → `{"status":"ok"}`.
+   tables created (compare to `embed/schema.sql`).
+2. `make dev` or `./mira serve` → server listens; `curl /api/health` → `{"status":"ok"}`.
 3. Create a provider (OpenAI-compatible endpoint + key) via `POST /api/providers`;
    confirm `GET` omits `api_key`. Confirm `api_key_enc` in DB is non-empty
    ciphertext.
@@ -788,7 +808,7 @@ truth; code is then implemented to the amended document.
    promptly.
 9. Update the agent's `model` via `PUT /api/agents/{key}` → next chat uses the
    new model (invalidate cache).
-10. `make web-dev` → Vue UI lists agents/providers, chats end-to-end with
+10. `make dev` → Vue UI lists agents/providers, chats end-to-end with
     streaming, tool calls render.
 11. `go vet ./... && go build ./...` clean.
 

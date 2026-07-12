@@ -1,4 +1,4 @@
-// Package migrate applies the embedded initial schema and incremental upgrades.
+// Package migrate applies the embedded schema and incremental upgrades.
 package migrate
 
 import (

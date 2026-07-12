@@ -69,6 +69,9 @@ func SandboxPath(workspace, requested string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if resolved, err := filepath.EvalSymlinks(ws); err == nil {
+		ws = resolved
+	}
 	full := requested
 	if !filepath.IsAbs(full) {
 		full = filepath.Join(ws, full)

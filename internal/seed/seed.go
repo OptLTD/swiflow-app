@@ -5,8 +5,8 @@ import (
 	"context"
 	"log/slog"
 
-	"mira/internal/id"
 	"mira/internal/store"
+	"mira/internal/util"
 )
 
 // EnsureDefaults creates a default agent if the database has none.
@@ -28,11 +28,9 @@ func EnsureDefaults(ctx context.Context, st store.Store) error {
 	}
 	prov := providers[0].Name
 	ag := &store.Agent{
-		ID:          id.New(),
-		Key:         "default",
+		ID: util.NewID(), Key: "default",
+		Provider: prov, Model: "gpt-4o-mini",
 		DisplayName: "Default Agent",
-		Provider:    prov,
-		Model:       "gpt-4o-mini",
 	}
 	if err := st.CreateAgent(ctx, ag); err != nil {
 		return err

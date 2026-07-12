@@ -1,5 +1,6 @@
-// Package initial embeds the database schema and incremental upgrade scripts.
-package initial
+// Package embed holds assets compiled into the Mira binary: database schema,
+// incremental upgrades, and built-in skills.
+package embed
 
 import (
 	"embed"
@@ -15,6 +16,11 @@ var SchemaSQL string
 //
 //go:embed all:upgrades
 var upgrades embed.FS
+
+// InitSkillsFS holds embedded built-in skills (init-skills/<slug>/SKILL.md).
+//
+//go:embed all:init-skills
+var InitSkillsFS embed.FS
 
 // UpgradesDir returns the embedded upgrades/ directory as an fs.FS.
 func UpgradesDir() (fs.FS, error) {

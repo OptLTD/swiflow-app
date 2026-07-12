@@ -11,26 +11,32 @@ import (
 
 	"mira/internal/agent"
 	"mira/internal/config"
-	"mira/internal/id"
+	"mira/internal/mcpclient"
+	"mira/internal/schedule"
 	"mira/internal/secure"
+	"mira/internal/sesshub"
 	"mira/internal/skill"
 	"mira/internal/store"
 	"mira/internal/tool"
+	"mira/internal/util"
 	"mira/webui"
 )
 
 // Server is the HTTP API server.
 type Server struct {
-	cfg     config.Config
-	st      store.Store
-	runner  *agent.Runner
-	tools   *tool.Registry
-	skills  *skill.Catalog
+	cfg    config.Config
+	st     store.Store
+	runner *agent.Runner
+	tools  *tool.Registry
+	skills *skill.Catalog
+	mcp    *mcpclient.Manager
+	cron   *schedule.Scheduler
+	events *sesshub.Hub
 }
 
 // New constructs a server.
-func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog) *Server {
-	return &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills}
+func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *sesshub.Hub) *Server {
+	return &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events}
 }
 
 // Handler returns the root http.Handler.
@@ -52,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions", s.listSessions)
 	mux.HandleFunc("GET /api/sessions/{key}", s.getSession)
 	mux.HandleFunc("POST /api/sessions/{key}/chat", s.chat)
+	mux.HandleFunc("GET /api/sessions/{key}/watch", s.watchSession)
 	mux.HandleFunc("POST /api/sessions/{key}/abort", s.abort)
 
 	mux.HandleFunc("GET /api/tools", s.listTools)
@@ -60,6 +67,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/skills", s.listSkills)
 	mux.HandleFunc("PUT /api/skills/{slug}", s.setSkillEnabled)
 	mux.HandleFunc("POST /api/skills/reload", s.reloadSkills)
+
+	mux.HandleFunc("POST /api/mcp/reload", s.reloadMCP)
+	mux.HandleFunc("GET /api/mcp/servers", s.listMCPServers)
+	mux.HandleFunc("POST /api/mcp/servers", s.createMCPServer)
+	mux.HandleFunc("GET /api/mcp/servers/{id}", s.getMCPServer)
+	mux.HandleFunc("GET /api/mcp/servers/{id}/capabilities", s.getMCPServerCapabilities)
+	mux.HandleFunc("PUT /api/mcp/servers/{id}", s.updateMCPServer)
+	mux.HandleFunc("DELETE /api/mcp/servers/{id}", s.deleteMCPServer)
+
+	mux.HandleFunc("GET /api/cron/jobs", s.listCronJobs)
+	mux.HandleFunc("POST /api/cron/jobs", s.createCronJob)
+	mux.HandleFunc("PUT /api/cron/jobs/{id}", s.updateCronJob)
+	mux.HandleFunc("DELETE /api/cron/jobs/{id}", s.deleteCronJob)
+	mux.HandleFunc("POST /api/cron/reload", s.reloadCron)
 
 	var h http.Handler = mux
 	h = s.requestLogMiddleware(h)
@@ -74,7 +95,7 @@ func (s *Server) requestLogMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		rid := r.Header.Get("X-Request-Id")
 		if rid == "" {
-			rid = id.New()
+			rid = util.NewID()
 		}
 		w.Header().Set("X-Request-Id", rid)
 		rw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
@@ -99,6 +120,18 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(code int) {
 	w.status = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// Flush implements http.Flusher so SSE handlers work through the logging wrapper.
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap exposes the underlying ResponseWriter for http.ResponseController.
+func (w *statusWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 // --- middleware ---
@@ -238,7 +271,7 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 		enabled = *in.Enabled
 	}
 	p := &store.Provider{
-		ID:          id.New(),
+		ID:          util.NewID(),
 		Name:        in.Name,
 		DisplayName: in.DisplayName,
 		APIBase:     in.APIBase,
@@ -332,7 +365,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a := &store.Agent{
-		ID:          id.New(),
+		ID:          util.NewID(),
 		Key:         in.Key,
 		DisplayName: in.DisplayName,
 		Provider:    in.Provider,
@@ -432,8 +465,8 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 	var in struct {
-		Message   string `json:"message"`
-		AgentKey  string `json:"agent_key"`
+		Message  string `json:"message"`
+		AgentKey string `json:"agent_key"`
 	}
 	if !bindJSON(w, r, &in) {
 		return
@@ -475,6 +508,48 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	if s.events == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "session watch unavailable"})
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming unsupported"})
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	ch, cancel := s.events.Subscribe(key)
+	defer cancel()
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case data, open := <-ch:
+			if !open {
+				return
+			}
+			if _, err := w.Write([]byte("data: ")); err != nil {
+				return
+			}
+			if _, err := w.Write(data); err != nil {
+				return
+			}
+			if _, err := w.Write([]byte("\n\n")); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
 func (s *Server) abort(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 	ok := s.runner.Abort(key)
@@ -485,7 +560,18 @@ func (s *Server) abort(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listTools(w http.ResponseWriter, _ *http.Request) {
 	infos := s.tools.All()
-	writeJSON(w, http.StatusOK, map[string]any{"tools": infos})
+	out := make([]tool.Info, 0, len(infos))
+	for _, t := range infos {
+		if strings.HasPrefix(t.Name, "mcp_") {
+			continue
+		}
+		out = append(out, t)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"tools":           out,
+		"exec_enabled":    s.cfg.Tools.ExecEnabled,
+		"browser_enabled": s.cfg.Tools.BrowserEnabled,
+	})
 }
 
 func (s *Server) setToolEnabled(w http.ResponseWriter, r *http.Request) {
@@ -494,6 +580,18 @@ func (s *Server) setToolEnabled(w http.ResponseWriter, r *http.Request) {
 		Enabled bool `json:"enabled"`
 	}
 	if !bindJSON(w, r, &in) {
+		return
+	}
+	if in.Enabled && tool.IsRuntimeTool(name) && !s.cfg.Tools.ExecEnabled {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "runtime tools require tools.exec_enabled or MIRA_EXEC=true in config",
+		})
+		return
+	}
+	if in.Enabled && tool.IsBrowserTool(name) && !s.cfg.Tools.BrowserEnabled {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "browser tool requires tools.browser_enabled or MIRA_BROWSER=true in config",
+		})
 		return
 	}
 	if err := s.st.SetToolEnabled(r.Context(), name, in.Enabled); err != nil {

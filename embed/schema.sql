@@ -3,7 +3,7 @@
 
 PRAGMA foreign_keys = ON;
 
--- Tracks applied upgrade scripts in initial/upgrades/ (not schema.sql itself).
+-- Tracks applied upgrade scripts in embed/upgrades/ (not schema.sql itself).
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version    TEXT PRIMARY KEY,
     applied_at TEXT NOT NULL DEFAULT (datetime('now'))

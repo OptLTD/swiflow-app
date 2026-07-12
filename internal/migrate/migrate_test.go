@@ -10,7 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"mira/initial"
+	"mira/embed"
 	"mira/internal/migrate"
 )
 
@@ -22,12 +22,12 @@ func TestApplyIdempotent(t *testing.T) {
 	}
 	defer db.Close()
 	ctx := context.Background()
-	upgrades, err := initial.UpgradesDir()
+	upgrades, err := embed.UpgradesDir()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		if err := migrate.Apply(ctx, db, initial.SchemaSQL, upgrades); err != nil {
+		if err := migrate.Apply(ctx, db, embed.SchemaSQL, upgrades); err != nil {
 			t.Fatalf("apply %d: %v", i, err)
 		}
 	}
@@ -52,10 +52,10 @@ func TestApplyUpgradesInOrder(t *testing.T) {
 		"0001_a.sql": &fstest.MapFile{Data: []byte(`CREATE TABLE IF NOT EXISTS upgrade_a (id TEXT PRIMARY KEY);`)},
 		"0002_b.sql": &fstest.MapFile{Data: []byte(`CREATE TABLE IF NOT EXISTS upgrade_b (id TEXT PRIMARY KEY);`)},
 	}
-	if err := migrate.Apply(ctx, db, initial.SchemaSQL, fsys); err != nil {
+	if err := migrate.Apply(ctx, db, embed.SchemaSQL, fsys); err != nil {
 		t.Fatal(err)
 	}
-	if err := migrate.Apply(ctx, db, initial.SchemaSQL, fsys); err != nil {
+	if err := migrate.Apply(ctx, db, embed.SchemaSQL, fsys); err != nil {
 		t.Fatal(err)
 	}
 	var versions []string

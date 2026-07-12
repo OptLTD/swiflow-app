@@ -7,19 +7,14 @@ import (
 	"strings"
 
 	"mira/internal/skill"
-	"mira/internal/store"
 )
-
-type skillCatalog interface {
-	Discover(context.Context) []skill.Skill
-}
 
 type skillStore interface {
 	DisabledSkills(context.Context) ([]string, error)
 }
 
 type skillTools struct {
-	cat skillCatalog
+	cat *skill.Catalog
 	st  skillStore
 }
 
@@ -99,9 +94,10 @@ func (t *skillSearchTool) Execute(ctx context.Context, args map[string]any) (str
 	return b.String(), nil
 }
 
-// RegisterSkill registers the skill tools.
-func RegisterSkill(r *Registry, cat skillCatalog, st store.Store) {
+// RegisterSkill registers skill discovery, use, search, and manage tools.
+func RegisterSkill(r *Registry, cat *skill.Catalog, st skillStore) {
 	base := &skillTools{cat: cat, st: st}
 	r.Register(&useSkillTool{base: base})
 	r.Register(&skillSearchTool{base: base})
+	r.Register(&skillManageTool{base: base})
 }

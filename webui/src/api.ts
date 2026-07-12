@@ -7,6 +7,9 @@ import type {
   Session,
   SkillInfo,
   ToolInfo,
+  MCPServer,
+  MCPCapabilities,
+  CronJob,
 } from './types'
 
 const TOKEN_KEY = 'mira_token'
@@ -58,11 +61,22 @@ export const api = {
   listSessions: () => req<{ sessions: Session[] }>('GET', '/sessions'),
   getSession: (key: string) => req<{ session: Session; messages: Message[] }>('GET', `/sessions/${key}`),
   abortSession: (key: string) => req<{ aborted: boolean }>('POST', `/sessions/${key}/abort`),
-  listTools: () => req<{ tools: ToolInfo[] }>('GET', '/tools'),
+  listTools: () => req<{ tools: ToolInfo[]; exec_enabled: boolean; browser_enabled: boolean }>('GET', '/tools'),
   setTool: (name: string, enabled: boolean) => req<{ status: string }>('PUT', `/tools/${name}`, { enabled }),
   listSkills: () => req<{ skills: SkillInfo[] }>('GET', '/skills'),
   setSkill: (slug: string, enabled: boolean) => req<{ status: string }>('PUT', `/skills/${slug}`, { enabled }),
   reloadSkills: () => req<{ status: string }>('POST', '/skills/reload'),
+  listMCPServers: () => req<{ servers: MCPServer[] }>('GET', '/mcp/servers'),
+  getMCPCapabilities: (id: string) => req<MCPCapabilities>('GET', `/mcp/servers/${id}/capabilities`),
+  createMCPServer: (s: Partial<MCPServer>) => req<MCPServer>('POST', '/mcp/servers', s),
+  updateMCPServer: (id: string, s: Record<string, unknown>) => req<{ status: string }>('PUT', `/mcp/servers/${id}`, s),
+  deleteMCPServer: (id: string) => req<{ status: string }>('DELETE', `/mcp/servers/${id}`),
+  reloadMCP: () => req<{ status: string }>('POST', '/mcp/reload'),
+  listCronJobs: () => req<{ jobs: CronJob[] }>('GET', '/cron/jobs'),
+  createCronJob: (j: Partial<CronJob>) => req<CronJob>('POST', '/cron/jobs', j),
+  updateCronJob: (id: string, j: Record<string, unknown>) => req<{ status: string }>('PUT', `/cron/jobs/${id}`, j),
+  deleteCronJob: (id: string) => req<{ status: string }>('DELETE', `/cron/jobs/${id}`),
+  reloadCron: () => req<{ status: string }>('POST', '/cron/reload'),
 }
 
 export async function chat(
@@ -71,14 +85,33 @@ export async function chat(
   agentKey: string,
   onEvent: (ev: ChatEvent) => void,
 ): Promise<void> {
-  const token = getToken()
-  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionKey)}/chat`, {
+  await streamSSE(`/api/sessions/${encodeURIComponent(sessionKey)}/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: JSON.stringify({ message, agent_key: agentKey }),
+  }, onEvent)
+}
+
+/** Subscribe to background runs (e.g. schedule_run) for a session. */
+export async function watchSession(
+  sessionKey: string,
+  onEvent: (ev: ChatEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  await streamSSE(`/api/sessions/${encodeURIComponent(sessionKey)}/watch`, { method: 'GET', signal }, onEvent)
+}
+
+async function streamSSE(
+  path: string,
+  init: RequestInit,
+  onEvent: (ev: ChatEvent) => void,
+): Promise<void> {
+  const token = getToken()
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  if (init.body) headers['Content-Type'] = 'application/json'
+  const res = await fetch(path, {
+    ...init,
+    headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
   })
   if (!res.ok) {
     const text = await res.text()

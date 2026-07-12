@@ -1,66 +1,67 @@
-// Shell execution tool, gated by config. Spec §8. Only registered when
-// config.Tools.ExecEnabled is true.
+// Shell execution tool (group:runtime), gated by config. Spec §8.
 package tool
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
-	"time"
 )
 
-type execTool struct{ ws WorkspaceRoots }
+const ToolExec = "exec"
 
-func (t *execTool) Name() string        { return "exec_run" }
-func (t *execTool) Description() string { return "Run a shell command in the workspace." }
+var runtimeToolNames = []string{ToolExec}
+
+// RuntimeToolNames returns workspace execution tool names.
+func RuntimeToolNames() []string {
+	return append([]string(nil), runtimeToolNames...)
+}
+
+// IsRuntimeTool reports whether name is the workspace exec tool.
+func IsRuntimeTool(name string) bool {
+	return name == ToolExec
+}
+
+type execTool struct {
+	ws      WorkspaceRoots
+	allowed bool
+}
+
+func (t *execTool) Name() string { return ToolExec }
+func (t *execTool) Description() string {
+	return "Run a shell command in the workspace (sh -c). Use python3, node, etc. in the command when needed."
+}
 func (t *execTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"command": map[string]any{"type": "string"},
-			"timeout": map[string]any{"type": "integer", "default": 30},
+			"command": map[string]any{
+				"type":        "string",
+				"description": "Shell command to run in the workspace directory.",
+			},
+			"timeout": map[string]any{
+				"type":        "integer",
+				"description": "Timeout in seconds (1–3600, default 60).",
+				"default":     60,
+			},
 		},
 		"required": []string{"command"},
 	}
 }
 func (t *execTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	if !t.allowed {
+		return "", fmt.Errorf("exec is disabled (set tools.exec_enabled or MIRA_EXEC=true)")
+	}
 	command, _ := args["command"].(string)
-	timeout := 30
-	if to, ok := args["timeout"].(float64); ok && to > 0 {
-		timeout = int(to)
+	if command == "" {
+		return "", fmt.Errorf("command is required")
 	}
-	cctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(cctx, "sh", "-c", command)
-	if t.ws.Base != "" {
-		cmd.Dir = t.ws.Base
-	}
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	runErr := cmd.Run()
-	result := out.String()
-	const max = 256 * 1024
-	if len(result) > max {
-		result = result[:max] + "\n...[truncated]"
-	}
-	if runErr != nil {
-		if cctx.Err() == context.DeadlineExceeded {
-			return result + "\n[timeout]", fmt.Errorf("command timed out after %ds", timeout)
-		}
-		return result, fmt.Errorf("command failed: %w", runErr)
-	}
-	if result == "" {
-		return "(no output)", nil
-	}
-	return result, nil
+	return runCommand(ctx, t.ws, "sh", []string{"-c", command}, parseTimeout(args))
 }
 
-// RegisterExec registers the shell tool if enabled.
+// RegisterExec registers the exec tool. It appears in the admin UI even when
+// disabled; execution and LLM exposure stay off until enabled.
 func RegisterExec(r *Registry, ws WorkspaceRoots, enabled bool) {
+	r.Register(&execTool{ws: ws, allowed: enabled})
 	if !enabled {
-		return
+		r.SetEnabled(ToolExec, false)
 	}
-	r.Register(&execTool{ws: ws})
 }

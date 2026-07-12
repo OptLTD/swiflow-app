@@ -61,8 +61,37 @@ type ToolPolicy struct {
 	Enabled  bool   `json:"enabled" db:"enabled"`
 }
 
-// Store is the persistence interface. The SQLite implementation satisfies it;
-// a Postgres implementation will satisfy the same interface in Phase 3.
+// MCPServer is a configured MCP server connection (Phase 2).
+type MCPServer struct {
+	ID          string   `json:"id" db:"id"`
+	Name        string   `json:"name" db:"name"`
+	DisplayName string   `json:"display_name" db:"display_name"`
+	Transport   string   `json:"transport" db:"transport"` // stdio|sse|streamable
+	Command     string   `json:"command,omitempty" db:"command"`
+	Args        []string `json:"args,omitempty" db:"-"`
+	ArgsJSON    string   `json:"-" db:"args_json"`
+	URL         string   `json:"url,omitempty" db:"url"`
+	Env         map[string]string `json:"env,omitempty" db:"-"`
+	EnvJSON     string   `json:"-" db:"env_json"`
+	Enabled     bool     `json:"enabled" db:"enabled"`
+	CreatedAt   string   `json:"created_at" db:"created_at"`
+	UpdatedAt   string   `json:"updated_at" db:"updated_at"`
+}
+
+// CronJob is a scheduled agent task (Phase 2).
+type CronJob struct {
+	ID        string `json:"id" db:"id"`
+	Name      string `json:"name" db:"name"`
+	AgentKey  string `json:"agent_key" db:"agent_key"`
+	Message   string `json:"message" db:"message"`
+	Schedule  string `json:"schedule" db:"schedule"`
+	Enabled   bool   `json:"enabled" db:"enabled"`
+	LastRunAt string `json:"last_run_at,omitempty" db:"last_run_at"`
+	CreatedAt string `json:"created_at" db:"created_at"`
+	UpdatedAt string `json:"updated_at" db:"updated_at"`
+}
+
+// Store is the persistence interface.
 type Store interface {
 	Close() error
 
@@ -95,4 +124,20 @@ type Store interface {
 	ListToolPolicy(ctx context.Context) ([]ToolPolicy, error)
 	DisabledSkills(ctx context.Context) ([]string, error)
 	SetSkillEnabled(ctx context.Context, slug string, enabled bool) error
+
+	// MCP servers (Phase 2)
+	CreateMCPServer(ctx context.Context, s *MCPServer) error
+	ListMCPServers(ctx context.Context) ([]MCPServer, error)
+	GetMCPServerByID(ctx context.Context, id string) (*MCPServer, error)
+	GetMCPServerByName(ctx context.Context, name string) (*MCPServer, error)
+	UpdateMCPServer(ctx context.Context, id string, fields map[string]any) error
+	DeleteMCPServer(ctx context.Context, id string) error
+
+	// Cron jobs (Phase 2)
+	CreateCronJob(ctx context.Context, j *CronJob) error
+	ListCronJobs(ctx context.Context) ([]CronJob, error)
+	GetCronJobByID(ctx context.Context, id string) (*CronJob, error)
+	UpdateCronJob(ctx context.Context, id string, fields map[string]any) error
+	DeleteCronJob(ctx context.Context, id string) error
+	SetCronJobLastRun(ctx context.Context, id string, at string) error
 }

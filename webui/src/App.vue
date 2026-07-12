@@ -22,6 +22,9 @@ const menu = [
   { to: '/', label: 'Chats' },
   { to: '/agents', label: 'Agents' },
   { to: '/skills', label: 'Skills' },
+  { to: '/tools', label: 'Tools' },
+  { to: '/mcp', label: 'MCP' },
+  { to: '/cron', label: 'Cron' },
   { to: '/providers', label: 'Providers' },
   { to: '/settings', label: 'Settings' },
 ]

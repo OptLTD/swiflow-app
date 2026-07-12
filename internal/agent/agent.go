@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"mira/internal/id"
+	"mira/internal/util"
 	"mira/internal/llm"
 	"mira/internal/skill"
 	"mira/internal/store"
@@ -133,7 +133,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 		if agentKey == "" {
 			agentKey = "default"
 		}
-		sess = &store.Session{ID: id.New(), Key: sessionKey, AgentKey: agentKey}
+		sess = &store.Session{ID: util.NewID(), Key: sessionKey, AgentKey: agentKey}
 		if cerr := st.CreateSession(runCtx, sess); cerr != nil {
 			// Maybe created concurrently; try once more.
 			sess, err = st.GetSessionByKey(runCtx, sessionKey)
@@ -169,7 +169,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 	history = truncateHistory(history, r.deps.MaxHistoryMessages)
 
 	// Persist the user message immediately (survives first-round failure).
-	userMsg := store.Message{ID: id.New(), Role: "user", Content: userMessage}
+	userMsg := store.Message{ID: util.NewID(), Role: "user", Content: userMessage}
 	if _, err := st.AppendMessage(runCtx, sessionKey, userMsg); err != nil {
 		slog.Error("persist user message", "error", err)
 	}
@@ -210,7 +210,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 			}
 
 			assistantMsg := store.Message{
-				ID:            id.New(),
+				ID:            util.NewID(),
 				Role:          "assistant",
 				Content:       resp.Content,
 				Thinking:      resp.Thinking,
@@ -228,7 +228,10 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 				if !st.ToolEnabled(runCtx, tc.Name) {
 					execErr = fmt.Errorf("tool %q is disabled", tc.Name)
 				} else {
-					result, execErr = r.deps.Tools.Execute(runCtx, tc.Name, tc.Arguments)
+					result, execErr = r.deps.Tools.Execute(tool.WithRunContext(runCtx, tool.RunContext{
+						SessionKey: sessionKey,
+						AgentKey:   agentKey,
+					}), tc.Name, tc.Arguments)
 				}
 				isErr := execErr != nil
 				if isErr {
@@ -241,7 +244,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 				emit(onEvent, Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: truncated, IsError: isErr})
 
 				toolMsg := store.Message{
-					ID:         id.New(),
+					ID:         util.NewID(),
 					Role:       "tool",
 					Content:    truncated,
 					ToolCallID: tc.ID,
@@ -262,7 +265,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 
 		// Final answer.
 		assistantMsg := store.Message{
-			ID:       id.New(),
+			ID:       util.NewID(),
 			Role:     "assistant",
 			Content:  resp.Content,
 			Thinking: resp.Thinking,
@@ -347,6 +350,12 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 			b.WriteString(summary)
 		}
 	}
+	b.WriteString("\n\n## Scheduling\n")
+	b.WriteString("Use schedule_run to re-invoke the agent in the current chat after a delay (delay_seconds + message as a new user turn). ")
+	b.WriteString("Use schedule_create for recurring cron jobs (@hourly, 0 9 * * *, @every 5m).")
+	b.WriteString("\n\n## Skill authoring\n")
+	b.WriteString("Use skill_manage to save reusable workflows: action create with full SKILL.md content for new skills; ")
+	b.WriteString("action patch with old_string/new_string for small edits (preferred). User skills override built-ins by slug.")
 	return b.String()
 }
 

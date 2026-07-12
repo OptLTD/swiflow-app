@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 
 	"mira/internal/llm"
 )
@@ -63,6 +65,22 @@ func (r *Registry) Get(name string) (Tool, bool) {
 	return t, ok
 }
 
+// Unregister removes a tool from the registry.
+func (r *Registry) Unregister(name string) {
+	delete(r.tools, name)
+	delete(r.disabled, name)
+}
+
+// UnregisterPrefix removes all tools whose names start with prefix.
+func (r *Registry) UnregisterPrefix(prefix string) {
+	for n := range r.tools {
+		if strings.HasPrefix(n, prefix) {
+			delete(r.tools, n)
+			delete(r.disabled, n)
+		}
+	}
+}
+
 // Definitions returns tool defs for all enabled tools, for advertising to the LLM.
 func (r *Registry) Definitions() []llm.ToolDef {
 	out := make([]llm.ToolDef, 0, len(r.tools))
@@ -90,6 +108,9 @@ func (r *Registry) All() []Info {
 			Enabled:     !r.disabled[t.Name()],
 		})
 	}
+	slices.SortFunc(out, func(a, b Info) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 	return out
 }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
-import { api, chat } from '../api'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { api, chat, watchSession } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useAgentsStore } from '../stores/agents'
@@ -12,7 +12,7 @@ import bash from 'highlight.js/lib/languages/bash'
 import 'highlight.js/styles/github.min.css'
 import ToolCallBlock from '../components/ToolCallBlock.vue'
 import ThinkingBlock from '../components/ThinkingBlock.vue'
-import type { Message, Session } from '../types'
+import type { ChatEvent, Message, Session } from '../types'
 
 hljs.registerLanguage('json', jsonLang)
 hljs.registerLanguage('python', python)
@@ -43,6 +43,92 @@ const input = ref('')
 const streaming = ref(false)
 const error = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
+let watchAbort: AbortController | null = null
+let bgCur: Msg | null = null
+
+function stopWatch() {
+  watchAbort?.abort()
+  watchAbort = null
+}
+
+async function startWatch(key: string) {
+  stopWatch()
+  if (!key) return
+  const ac = new AbortController()
+  watchAbort = ac
+  while (!ac.signal.aborted && currentKey.value === key) {
+    try {
+      await watchSession(key, (ev) => {
+        if (streaming.value) return
+        handleChatEvent(ev, () => bgCur, (m) => { bgCur = m })
+      }, ac.signal)
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') return
+    }
+    if (ac.signal.aborted || currentKey.value !== key) return
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+}
+
+function handleChatEvent(
+  ev: ChatEvent,
+  getCur: () => Msg | null,
+  setCur: (m: Msg | null) => void,
+) {
+  if (ev.type === 'user') {
+    messages.value.push({ role: 'user', content: ev.content || '' })
+    streaming.value = true
+    setCur(pushAssistant())
+    scrollBottom()
+    return
+  }
+  let cur = getCur()
+  if (ev.type === 'delta') {
+    if (!cur) { streaming.value = true; cur = pushAssistant(); setCur(cur) }
+    cur.content += ev.content || ''
+  } else if (ev.type === 'thinking') {
+    if (!cur) { streaming.value = true; cur = pushAssistant(); setCur(cur) }
+    cur.thinking = (cur.thinking || '') + (ev.content || '')
+  } else if (ev.type === 'tool_call') {
+    if (cur) {
+      cur.streaming = false
+      if (!cur.content && !cur.thinking) {
+        messages.value.splice(messages.value.length - 1, 1)
+      }
+      setCur(null)
+      cur = null
+    }
+    messages.value.push({
+      role: 'tool',
+      id: ev.id,
+      tool_name: ev.name,
+      arguments: ev.arguments,
+      content: '',
+      isError: false,
+    })
+  } else if (ev.type === 'tool_result') {
+    const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
+    if (t) {
+      t.content = ev.result || ''
+      t.isError = ev.is_error
+    }
+  } else if (ev.type === 'error') {
+    error.value = ev.error || 'error'
+  } else if (ev.type === 'done') {
+    if (cur) {
+      cur.streaming = false
+      setCur(null)
+    }
+    streaming.value = false
+    if (ev.title) {
+      chatStore.currentTitle = ev.title
+      const s = sessions.value.find((s) => s.key === currentKey.value)
+      if (s) s.title = ev.title
+      else loadSessions()
+    }
+  }
+  scrollBottom()
+}
 
 function pushAssistant(): Msg {
   const a: Msg = { role: 'assistant', content: '', streaming: true }
@@ -93,6 +179,7 @@ onMounted(() => {
     agentsStore.load().catch((e: Error) => { error.value = e.message })
   }
 })
+onUnmounted(() => stopWatch())
 watch(() => auth.isAuthed, (v) => {
   if (v) {
     loadSessions()
@@ -110,6 +197,7 @@ async function loadSessions() {
 }
 
 async function selectSession(key: string) {
+  stopWatch()
   chatStore.closeDrawer()
   currentKey.value = key
   messages.value = []
@@ -121,17 +209,20 @@ async function selectSession(key: string) {
     chatStore.setSession(key, r.session?.title || '')
     await nextTick()
     scrollBottom()
+    startWatch(key)
   } catch (e: any) {
     error.value = e.message
   }
 }
 
 function newSession() {
+  stopWatch()
   currentKey.value = 'sess-' + Math.random().toString(36).slice(2, 10)
   sessionAgentKey.value = ''
   messages.value = []
   chatStore.setSession(currentKey.value, '')
   chatStore.closeDrawer()
+  startWatch(currentKey.value)
 }
 
 function chatAgentKey(): string {
@@ -151,49 +242,7 @@ async function send() {
   scrollBottom()
   try {
     await chat(currentKey.value, text, chatAgentKey(), (ev) => {
-      if (ev.type === 'delta') {
-        if (!cur) cur = pushAssistant()
-        cur.content += ev.content || ''
-      } else if (ev.type === 'thinking') {
-        if (!cur) cur = pushAssistant()
-        cur.thinking = (cur.thinking || '') + (ev.content || '')
-      } else if (ev.type === 'tool_call') {
-        if (cur) {
-          cur.streaming = false
-          if (!cur.content && !cur.thinking) {
-            messages.value.splice(messages.value.length - 1, 1)
-          }
-          cur = null
-        }
-        messages.value.push({
-          role: 'tool',
-          id: ev.id,
-          tool_name: ev.name,
-          arguments: ev.arguments,
-          content: '',
-          isError: false,
-        })
-      } else if (ev.type === 'tool_result') {
-        const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
-        if (t) {
-          t.content = ev.result || ''
-          t.isError = ev.is_error
-        }
-      } else if (ev.type === 'error') {
-        error.value = ev.error || 'error'
-      } else if (ev.type === 'done') {
-        if (cur) {
-          cur.streaming = false
-          cur = null
-        }
-        if (ev.title) {
-          chatStore.currentTitle = ev.title
-          const s = sessions.value.find((s) => s.key === currentKey.value)
-          if (s) s.title = ev.title
-          else loadSessions()
-        }
-      }
-      scrollBottom()
+      handleChatEvent(ev, () => cur, (m) => { cur = m })
     })
   } catch (e: any) {
     error.value = e.message
@@ -222,6 +271,12 @@ function render(content: string) {
   el.querySelectorAll('pre code').forEach((node) => {
     hljs.highlightElement(node as HTMLElement)
   })
+  el.querySelectorAll('table').forEach((table) => {
+    const wrap = document.createElement('div')
+    wrap.className = 'prose-table-wrap'
+    table.parentNode?.insertBefore(wrap, table)
+    wrap.appendChild(table)
+  })
   return el.innerHTML
 }
 
@@ -244,7 +299,9 @@ function gapClass(m: Msg, i: number): string {
       v-if="chatStore.drawerOpen"
       class="absolute left-0 top-0 bottom-0 w-64 bg-white border-r border-neutral-200 z-40 flex flex-col"
     >
-      <button class="px-4 py-2 bg-neutral-800 text-white text-sm" @click="newSession">+ New session</button>
+      <button class="px-4 py-3 bg-neutral-800 text-white text-sm border-y border-neutral-800" @click="newSession">
+        + New session
+      </button>
       <div class="flex-1 overflow-y-auto">
         <div
           v-for="s in sessions"

@@ -1,24 +1,28 @@
-.PHONY: build run migrate test web-install web-dev web-build tidy
+.PHONY: dev dev-backend dev-frontend build image test migrate tidy
 
-web-install:
-	cd webui && pnpm install
+# Local dev: API :8000 + Vite :5173 (proxies /api)
+dev:
+	@$(MAKE) -j2 dev-backend dev-frontend
 
-web-dev:
-	cd webui && pnpm dev
+dev-backend:
+	go run ./cmd/mira serve --migrate -v
 
-web-build:
+dev-frontend:
+	cd webui && pnpm install && pnpm dev
+
+# Production build: webui/dist embedded into Go binary
+build:
 	cd webui && pnpm install && pnpm build
-
-build: web-build
 	go build -o mira ./cmd/mira
 
-run: build
-	./mira serve --migrate -v
+image:
+	docker build -t mira:latest .
 
 migrate:
 	go run ./cmd/mira migrate
 
-test: web-build
+test:
+	cd webui && pnpm install && pnpm build
 	go vet ./...
 	go test ./...
 	go build ./...

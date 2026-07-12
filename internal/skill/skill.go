@@ -1,13 +1,17 @@
-// Package skill discovers filesystem skills and builds a summary for the
-// system prompt. Spec §6.6, §9.
+// Package skill discovers built-in (embedded) and user filesystem skills and
+// builds a summary for the system prompt. Spec §6.6, §9.
 package skill
 
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"mira/embed"
 )
 
 // Skill is a discovered skill.
@@ -20,19 +24,26 @@ type Skill struct {
 	Body        string `json:"-"`
 }
 
-// Catalog discovers skills from an init dir and a user dir.
+// Catalog discovers embedded built-in skills and optional user-dir overrides.
 type Catalog struct {
-	initDir string
+	initFS  fs.FS
+	initDir string // optional dev override (filesystem)
 	userDir string
 }
 
-// NewCatalog creates a catalog.
-func NewCatalog(initDir, userDir string) *Catalog {
-	return &Catalog{initDir: initDir, userDir: userDir}
+// NewCatalog creates a catalog. Built-in skills come from the embedded FS;
+// userDir supplies overrides by slug. If devInitDir is non-empty, filesystem
+// skills there override embedded builtins (for local development).
+func NewCatalog(devInitDir, userDir string) *Catalog {
+	return &Catalog{
+		initFS:  embed.InitSkillsFS,
+		initDir: devInitDir,
+		userDir: userDir,
+	}
 }
 
-// Discover walks both directories and returns skills (init first; user
-// overrides by slug). Malformed entries are skipped.
+// Discover returns skills (embedded init first; dev init dir and user override by slug).
+// Malformed entries are skipped.
 func (c *Catalog) Discover(_ context.Context) []Skill {
 	bySlug := map[string]Skill{}
 	order := []string{}
@@ -41,6 +52,9 @@ func (c *Catalog) Discover(_ context.Context) []Skill {
 			order = append(order, s.Slug)
 		}
 		bySlug[s.Slug] = s
+	}
+	for _, s := range discoverEmbed(c.initFS, "init-skills", "init") {
+		add(s)
 	}
 	for _, s := range discoverDir(c.initDir, "init") {
 		add(s)
@@ -71,6 +85,25 @@ func (c *Catalog) Summary(ctx context.Context, disabled map[string]bool) string 
 	return b.String()
 }
 
+func discoverEmbed(fsys fs.FS, root, source string) []Skill {
+	entries, err := fs.ReadDir(fsys, root)
+	if err != nil {
+		return nil
+	}
+	var out []Skill
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dirPath := path.Join(root, e.Name())
+		s, ok := parseSkillFS(fsys, dirPath, source)
+		if ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func discoverDir(dir, source string) []Skill {
 	if dir == "" {
 		return nil
@@ -92,9 +125,27 @@ func discoverDir(dir, source string) []Skill {
 	return out
 }
 
-func parseSkill(path, source string) (Skill, bool) {
+func parseSkillFS(fsys fs.FS, dirPath, source string) (Skill, bool) {
 	for _, name := range []string{"SKILL.md", "skill.md"} {
-		f := filepath.Join(path, name)
+		f := path.Join(dirPath, name)
+		data, err := fs.ReadFile(fsys, f)
+		if err != nil {
+			continue
+		}
+		s, ok := parseFrontMatter(string(data))
+		if !ok {
+			return Skill{}, false
+		}
+		s.Source = source
+		s.Path = "embed:" + dirPath
+		return s, true
+	}
+	return Skill{}, false
+}
+
+func parseSkill(dirPath, source string) (Skill, bool) {
+	for _, name := range []string{"SKILL.md", "skill.md"} {
+		f := filepath.Join(dirPath, name)
 		data, err := os.ReadFile(f)
 		if err != nil {
 			continue
@@ -104,7 +155,7 @@ func parseSkill(path, source string) (Skill, bool) {
 			return Skill{}, false
 		}
 		s.Source = source
-		s.Path = path
+		s.Path = dirPath
 		return s, true
 	}
 	return Skill{}, false

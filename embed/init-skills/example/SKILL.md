@@ -1,4 +1,5 @@
 ---
+slug: example
 name: example
 description: A minimal example skill for Mira
 ---

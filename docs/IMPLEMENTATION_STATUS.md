@@ -1,54 +1,29 @@
 # Mira Implementation Status
 
-Tracked against `docs/SPEC.md` Phase 1. Last updated with the comprehensive improvement pass.
+Tracked against `docs/SPEC.md`. Phase 2 MCP and cron implemented.
 
-## Build and DX
-
-| Item | Status |
-|------|--------|
-| `webui/` embed + Makefile web targets | Done |
-| Default port 8000 | Done |
-| `serve --migrate` default true | Done |
-| GitHub Actions CI | Done |
-| Docker Compose | Done |
-| Example `skills/example` | Done |
-
-## Backend
+## Phase 2 — Extensibility
 
 | Item | Status |
 |------|--------|
-| `initial/schema.sql` + `upgrades/` | Done |
-| Disabled skill/provider enforcement | Done |
-| Provider URL validation | Done |
-| `GetProviderByID` | Done |
-| `WebDistDir` dev override | Done |
-| SSE terminal error events | Done |
-| Tool loop key sorting | Done |
-| `Registry.Get` | Done |
-| SQLite WAL + connection pool | Done |
-| History truncation (`max_history_messages`) | Done |
-| UUIDv7 IDs | Done |
-| Request ID + access logging | Done |
-| Default agent seed (when providers exist) | Done |
-| Unit tests (secure, migrate, store, llm, agent) | Done |
+| MCP client (stdio / sse / streamable) | Done |
+| MCP tools in `tool.Registry` (`mcp_<server>_<tool>`) | Done |
+| MCP server CRUD API + reload | Done |
+| MCP UI (`/mcp`) | Done |
+| Per-tool enable via existing `tool_policy` | Done |
+| Cron scheduler (`agentine/cadence`, fork of `robfig/cron` with active maintenance) | Done |
+| Cron job CRUD API + reload | Done |
+| Cron UI (`/cron`) | Done |
 
-## Frontend (webui)
+## Phase 1 (complete)
 
-| Item | Status |
-|------|--------|
-| Settings tool toggles | Done |
-| Agents / Providers edit | Done |
-| Chat history tool-call restore | Done |
-| Agent selector (new sessions) | Done |
-| API types (`types.ts`) | Done |
-| highlight.js code blocks | Done |
-| Pinia stores split | Done |
+Build chain, tests, CI, frontend features — see prior sections in git history.
 
-## Known Phase 1 gaps (deferred)
+## Deferred
 
-| Item | Notes |
+| Item | Phase |
 |------|-------|
-| `web_search` provider integration | Still stub |
+| Subagents | Phase 2 (not yet) |
+| `web_search` provider integration | Phase 1 stub |
 | Postgres / multi-tenancy | Phase 3 |
-| MCP / subagents / cron | Phase 2 |
 | OTel / rate limiting | Phase 4 |

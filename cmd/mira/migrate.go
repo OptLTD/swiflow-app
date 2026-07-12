@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"mira/initial"
+	"mira/embed"
 	"mira/internal/config"
 	"mira/internal/migrate"
 	"mira/internal/seed"
@@ -33,11 +33,11 @@ func migrateCmd() *cobra.Command {
 				return err
 			}
 			defer st.Close()
-			upgrades, err := initial.UpgradesDir()
+			upgrades, err := embed.UpgradesDir()
 			if err != nil {
 				return fmt.Errorf("upgrades fs: %w", err)
 			}
-			if err := migrate.Apply(context.Background(), st.DB(), initial.SchemaSQL, upgrades); err != nil {
+			if err := migrate.Apply(context.Background(), st.DB(), embed.SchemaSQL, upgrades); err != nil {
 				return fmt.Errorf("migrate: %w", err)
 			}
 			if err := seed.EnsureDefaults(context.Background(), st); err != nil {

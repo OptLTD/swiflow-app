@@ -8,26 +8,35 @@ SSE streaming. See `docs/SPEC.md` for the full development specification.
 
 ```bash
 cp config.example.json config.json   # then edit auth_token / encryption_key
-make build
-./mira serve -v
+make dev      # API :8000 + UI http://localhost:5173
 ```
 
 `serve` applies the database schema by default (`--migrate` is on). Use
 `--migrate=false` to skip.
 
-UI (dev):
+Build & run:
+
 ```bash
-make web-install
-make web-dev   # http://localhost:5173, proxies /api to :8000
+make build    # webui + Go binary → ./mira
+./mira serve -v
 ```
 
 Docker:
+
 ```bash
 cp config.example.json config.json   # edit secrets
-docker compose up --build
+make image
+docker compose up
 ```
 
-Built-in skills live under `skills/` (see `skills/example/SKILL.md`).
+Built-in skills are embedded in the binary (`embed/init-skills/`). User overrides go in
+`./data/user-skills/` (see `config.example.json`). For local skill development without
+rebuilding, set `init_skills_dir` or `MIRA_INIT_SKILLS` to a filesystem directory.
+
+## Phase 2 features
+
+- **MCP** — configure MCP servers at `/mcp` (stdio / sse / streamable). Tools appear as `mcp_<server>_<tool>` in Settings.
+- **Cron** — schedule agent runs at `/cron` using cron expressions (`0 9 * * *`, `@hourly`, etc.).
 
 ## Status
 

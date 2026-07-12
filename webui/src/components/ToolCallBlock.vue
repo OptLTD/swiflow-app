@@ -31,12 +31,39 @@ const intent = computed(() => {
       return '抓取网页 ' + trim(pick(a, 'url'), 60)
     case 'web_search':
       return '搜索关键字 ' + trim(pick(a, 'query'), 60)
+    case 'browser': {
+      const act = pick(a, 'action')
+      if (act === 'navigate') return '浏览器打开 ' + trim(pick(a, 'url'), 50)
+      if (act === 'screenshot') return '浏览器截图'
+      if (act === 'click') return '浏览器点击 ' + trim(pick(a, 'selector'), 40)
+      if (act === 'type') return '浏览器输入 ' + trim(pick(a, 'selector'), 40)
+      return '浏览器 ' + act
+    }
+    case 'exec':
     case 'exec_run':
+    case 'cmd_run':
       return '执行命令: ' + trim(pick(a, 'command'), 60)
+    case 'python_run':
+      if (pick(a, 'file')) return '运行 Python 脚本 ' + trim(pick(a, 'file'), 50)
+      return '运行 Python 代码'
+    case 'node_run':
+      if (pick(a, 'file')) return '运行 Node 脚本 ' + trim(pick(a, 'file'), 50)
+      return '运行 Node 代码'
     case 'skill_use':
       return '使用技能 ' + trim(pick(a, 'slug'), 40)
     case 'skill_search':
       return '搜索技能 ' + trim(pick(a, 'query'), 40)
+    case 'skill_manage': {
+      const act = pick(a, 'action')
+      const slug = trim(pick(a, 'slug'), 40)
+      if (act === 'create') return '创建技能 ' + slug
+      if (act === 'patch') return '更新技能 ' + slug
+      return '管理技能 ' + slug
+    }
+    case 'schedule_run':
+      return `将在 ${pick(a, 'delay_seconds') || '?'} 秒后执行任务: ` + trim(pick(a, 'message'), 50)
+    case 'schedule_create':
+      return '创建定时任务 ' + trim(pick(a, 'name'), 40) + ' (' + trim(pick(a, 'schedule'), 30) + ')'
     default:
       return props.name
   }

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mira/initial"
+	"mira/embed"
 	"mira/internal/migrate"
 	"mira/internal/store"
 	"mira/internal/store/sqlite"
@@ -19,11 +19,11 @@ func openTestDB(t *testing.T) *sqlite.Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	upgrades, err := initial.UpgradesDir()
+	upgrades, err := embed.UpgradesDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := migrate.Apply(context.Background(), st.DB(), initial.SchemaSQL, upgrades); err != nil {
+	if err := migrate.Apply(context.Background(), st.DB(), embed.SchemaSQL, upgrades); err != nil {
 		t.Fatal(err)
 	}
 	return st

@@ -29,6 +29,8 @@ type Config struct {
 type ToolsConfig struct {
 	ExecEnabled       bool   `json:"exec_enabled"`
 	WebSearchProvider string `json:"web_search_provider"`
+	BrowserEnabled    bool   `json:"browser_enabled"`
+	BrowserHeadless   bool   `json:"browser_headless"`
 }
 
 // Default returns sensible local defaults.
@@ -36,11 +38,11 @@ func Default() Config {
 	return Config{
 		Host: "127.0.0.1", Port: 8000,
 		DBPath:        "./data/mira.db",
-		InitSkillsDir: "./skills",
-		UserSkillsDir: "./data/skills",
+		InitSkillsDir: "", // empty = embedded builtins; set for local dev override
+		UserSkillsDir: "./data/user-skills",
 		WorkspaceDir:       "./data/workspace",
 		MaxHistoryMessages: 100,
-		Tools:              ToolsConfig{},
+		Tools:              ToolsConfig{BrowserHeadless: true},
 	}
 }
 
@@ -96,6 +98,9 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("MIRA_EXEC"); v != "" {
 		cfg.Tools.ExecEnabled = v == "1" || v == "true"
+	}
+	if v := os.Getenv("MIRA_BROWSER"); v != "" {
+		cfg.Tools.BrowserEnabled = v == "1" || v == "true"
 	}
 }
 
