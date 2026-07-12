@@ -34,7 +34,7 @@ transforming or renaming files from any forbidden codebase.
 | `internal/agent` | SPEC §6.7, §7 |
 | `internal/server` | SPEC §6.8, §10 |
 | `cmd/mira` | SPEC §14 |
-| `web/` | SPEC §13 |
+| `webui/` | SPEC §13 |
 
 ## Audit
 

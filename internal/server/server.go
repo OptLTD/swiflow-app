@@ -7,15 +7,16 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-
-	"github.com/google/uuid"
+	"time"
 
 	"mira/internal/agent"
 	"mira/internal/config"
+	"mira/internal/id"
+	"mira/internal/secure"
 	"mira/internal/skill"
 	"mira/internal/store"
 	"mira/internal/tool"
-	"mira/web"
+	"mira/webui"
 )
 
 // Server is the HTTP API server.
@@ -61,10 +62,43 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/skills/reload", s.reloadSkills)
 
 	var h http.Handler = mux
+	h = s.requestLogMiddleware(h)
 	h = s.authMiddleware(h)
 	h = s.corsMiddleware(s.cfg.AllowedOrigins)(h)
 	h = s.staticMiddleware(h)
 	return h
+}
+
+func (s *Server) requestLogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rid := r.Header.Get("X-Request-Id")
+		if rid == "" {
+			rid = id.New()
+		}
+		w.Header().Set("X-Request-Id", rid)
+		rw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rw, r)
+		if !strings.HasPrefix(r.URL.Path, "/api/sessions/") || !strings.HasSuffix(r.URL.Path, "/chat") {
+			slog.Info("http",
+				"request_id", rid,
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", rw.status,
+				"duration_ms", time.Since(start).Milliseconds(),
+			)
+		}
+	})
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
 }
 
 // --- middleware ---
@@ -111,15 +145,25 @@ func (s *Server) corsMiddleware(allowed []string) func(http.Handler) http.Handle
 	}
 }
 
-// staticMiddleware serves the embedded Vue UI for non-/api routes.
+// staticMiddleware serves the Vue UI for non-/api routes.
 func (s *Server) staticMiddleware(next http.Handler) http.Handler {
-	dist, _ := fs.Sub(web.Dist, "dist")
-	fileServer := http.FileServer(http.FS(dist))
+	var fileServer http.Handler
+	if s.cfg.WebDistDir != "" {
+		fileServer = http.FileServer(http.Dir(s.cfg.WebDistDir))
+	} else {
+		dist, _ := fs.Sub(webui.Dist, "dist")
+		fileServer = http.FileServer(http.FS(dist))
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if s.cfg.WebDistDir != "" {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		dist, _ := fs.Sub(webui.Dist, "dist")
 		p := strings.TrimPrefix(r.URL.Path, "/")
 		if p == "" {
 			p = "index.html"
@@ -178,19 +222,23 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 	if !bindJSON(w, r, &in) {
 		return
 	}
-	if in.Name == "" || in.APIBase == "" || in.APIKey == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name, api_base, api_key required"})
+	if in.Name == "" || in.APIKey == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name, api_key required"})
 		return
 	}
 	if in.APIBase == "" {
 		in.APIBase = "https://api.openai.com/v1"
+	}
+	if err := secure.ValidateHTTPURL(in.APIBase); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
 	}
 	enabled := true
 	if in.Enabled != nil {
 		enabled = *in.Enabled
 	}
 	p := &store.Provider{
-		ID:          uuid.NewString(),
+		ID:          id.New(),
 		Name:        in.Name,
 		DisplayName: in.DisplayName,
 		APIBase:     in.APIBase,
@@ -208,18 +256,12 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getProvider(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	list, err := s.st.ListProviders(r.Context())
+	p, err := s.st.GetProviderByID(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	for _, p := range list {
-		if p.ID == id {
-			writeJSON(w, http.StatusOK, p)
-			return
-		}
-	}
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	writeJSON(w, http.StatusOK, p)
 }
 
 func (s *Server) updateProvider(w http.ResponseWriter, r *http.Request) {
@@ -290,7 +332,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a := &store.Agent{
-		ID:          uuid.NewString(),
+		ID:          id.New(),
 		Key:         in.Key,
 		DisplayName: in.DisplayName,
 		Provider:    in.Provider,
@@ -426,6 +468,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil && err != agent.ErrBusy {
 		slog.Error("chat.run", "session", key, "error", err)
+		ev := agent.Event{Type: "error", Error: err.Error()}
+		data, _ := json.Marshal(ev)
+		_, _ = w.Write([]byte("data: " + string(data) + "\n\n"))
+		flusher.Flush()
 	}
 }
 

@@ -1,6 +1,6 @@
-// Package web embeds the built Vue UI (web/dist). The Vite build outputs to
-// web/dist; this file exposes it as an embed.FS for the server to serve.
-package web
+// Package webui embeds the built Vue UI (webui/dist). The Vite build outputs to
+// webui/dist; this file exposes it as an embed.FS for the server to serve.
+package webui
 
 import "embed"
 

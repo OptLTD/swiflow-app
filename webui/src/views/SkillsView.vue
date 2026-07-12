@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useSkillsStore } from '../stores/skills'
 import { api } from '../api'
 
-const skills = ref<any[]>([])
+const skillsStore = useSkillsStore()
 const error = ref('')
 
 onMounted(load)
 async function load() {
-  try { skills.value = (await api.listSkills()).skills || [] }
+  try { await skillsStore.load() }
   catch (e: any) { error.value = e.message }
 }
 async function toggle(slug: string, enabled: boolean) {
@@ -28,7 +29,7 @@ async function reload() {
     </div>
     <div v-if="error" class="text-red-600 mb-2">{{ error }}</div>
     <div class="space-y-2">
-      <div v-for="s in skills" :key="s.slug" class="border border-neutral-200 rounded p-3 bg-white flex justify-between">
+      <div v-for="s in skillsStore.skills" :key="s.slug" class="border border-neutral-200 rounded p-3 bg-white flex justify-between">
         <div>
           <div class="font-mono font-semibold">{{ s.slug }} <span class="text-xs text-neutral-400">[{{ s.source }}]</span></div>
           <div class="text-sm text-neutral-600">{{ s.name }} — {{ s.description }}</div>
@@ -37,7 +38,7 @@ async function reload() {
           {{ s.enabled ? 'disable' : 'enable' }}
         </button>
       </div>
-      <div v-if="!skills.length" class="text-neutral-500 text-sm">No skills discovered.</div>
+      <div v-if="!skillsStore.skills.length" class="text-neutral-500 text-sm">No skills discovered.</div>
     </div>
   </div>
 </template>

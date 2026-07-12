@@ -9,14 +9,25 @@ SSE streaming. See `docs/SPEC.md` for the full development specification.
 ```bash
 cp config.example.json config.json   # then edit auth_token / encryption_key
 make build
-./mira serve --migrate -v
+./mira serve -v
 ```
+
+`serve` applies the database schema by default (`--migrate` is on). Use
+`--migrate=false` to skip.
 
 UI (dev):
 ```bash
 make web-install
-make web-dev   # http://localhost:5173, proxies /api to :18800
+make web-dev   # http://localhost:5173, proxies /api to :8000
 ```
+
+Docker:
+```bash
+cp config.example.json config.json   # edit secrets
+docker compose up --build
+```
+
+Built-in skills live under `skills/` (see `skills/example/SKILL.md`).
 
 ## Status
 

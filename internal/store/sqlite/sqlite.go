@@ -22,12 +22,12 @@ type Store struct {
 
 // Open opens (creating if needed) the SQLite database at path.
 func Open(path string, encryptionKey string) (*Store, error) {
-	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 	db, err := sqlx.Connect("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	db.SetMaxOpenConns(1) // SQLite write safety; Phase 3 Postgres removes this.
+	db.SetMaxOpenConns(8)
 	s := &Store{db: db, key: secure.DeriveKey(encryptionKey)}
 	return s, nil
 }
@@ -86,10 +86,25 @@ func (s *Store) DecryptAPIKey(ctx context.Context, name string) (string, error) 
 	return string(pt), nil
 }
 
-// ProviderCreds returns the api_base and plaintext api_key for a provider.
+func (s *Store) GetProviderByID(ctx context.Context, id string) (*store.Provider, error) {
+	var r providerRow
+	if err := s.db.GetContext(ctx, &r, `SELECT * FROM providers WHERE id = ?`, id); err != nil {
+		return nil, err
+	}
+	p := r.toProvider()
+	return &p, nil
+}
+
+// ProviderCreds returns the api_base and plaintext api_key for an enabled provider.
 func (s *Store) ProviderCreds(ctx context.Context, name string) (apiBase, apiKey string, err error) {
 	var r providerRow
-	if err := s.db.GetContext(ctx, &r, `SELECT * FROM providers WHERE name = ?`, name); err != nil {
+	if err := s.db.GetContext(ctx, &r, `SELECT * FROM providers WHERE name = ? AND enabled = 1`, name); err != nil {
+		if err == sql.ErrNoRows {
+			var disabled providerRow
+			if e := s.db.GetContext(ctx, &disabled, `SELECT * FROM providers WHERE name = ?`, name); e == nil {
+				return "", "", fmt.Errorf("provider %q is disabled", name)
+			}
+		}
 		return "", "", err
 	}
 	pt, err := secure.Decrypt(s.key, r.APIKeyEnc)
@@ -109,22 +124,33 @@ func (s *Store) UpdateProvider(ctx context.Context, id string, fields map[string
 		if !allowed[k] {
 			continue
 		}
-		if k == "api_key" {
-			enc, err := secure.Encrypt(s.key, []byte(v.(string)))
+		switch k {
+		case "api_key":
+			keyStr, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("api_key must be a string")
+			}
+			enc, err := secure.Encrypt(s.key, []byte(keyStr))
 			if err != nil {
 				return err
 			}
 			sets = append(sets, "api_key_enc = ?")
 			args = append(args, enc)
-			continue
-		}
-		if k == "enabled" {
+		case "enabled":
+			b, ok := v.(bool)
+			if !ok {
+				return fmt.Errorf("enabled must be a boolean")
+			}
 			sets = append(sets, "enabled = ?")
-			args = append(args, boolToInt(v.(bool)))
-			continue
+			args = append(args, boolToInt(b))
+		case "display_name", "api_base":
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("%s must be a string", k)
+			}
+			sets = append(sets, k+" = ?")
+			args = append(args, s)
 		}
-		sets = append(sets, k+" = ?")
-		args = append(args, v)
 	}
 	if len(sets) == 0 {
 		return nil

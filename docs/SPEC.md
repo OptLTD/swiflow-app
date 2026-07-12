@@ -131,7 +131,7 @@ internal/store        Store interface                                           
 internal/migrate      applies embedded initial/schema.sql                         │
 internal/config       config loading (JSON + env)                                 │
 initial/              embedded schema.sql + upgrades/*.sql                      │
-web/                  Vue app (built to web/dist, embedded into binary)
+webui/                Vue app (built to webui/dist, embedded into binary)
 ```
 
 **Module responsibilities & allowed dependencies:**
@@ -371,7 +371,7 @@ Semantics in §7.
 ### 6.8 `server`
 HTTP layer. Wires `store`, `agent.Runner`, `tool.Registry`, `skill.Catalog`,
 `config`. See §10. Auth middleware validates the bearer token; CORS middleware
-applies `AllowedOrigins`; static handler serves embedded `web/dist` for non-API
+applies `AllowedOrigins`; static handler serves embedded `webui/dist` for non-API
 routes.
 
 ### 6.9 `migrate`
@@ -581,7 +581,7 @@ panic becomes a tool-error result (`"error: panic: <msg>"`), not a run crash.
 All API routes are prefixed `/api`. Auth: `Authorization: Bearer <token>` where
 token = `config.AuthToken`. Missing/invalid → `401`. CORS: `Access-Control-
 Allow-Origin` reflects `AllowedOrigins` (or `*` if empty list). Static: non-`/api`
-routes serve embedded `web/dist` (SPA fallback to `index.html`).
+routes serve embedded `webui/dist` (SPA fallback to `index.html`).
 
 ### 10.1 Health
 - `GET /api/health` → `200 {"status":"ok"}`
@@ -684,7 +684,7 @@ needed for identification.
 ## 13. Frontend (Vue 3)
 
 **Stack:** Vite + Vue 3 (Composition API) + Pinia + Vue Router + Tailwind. Build
-to `web/dist`, embedded into the Go binary via `//go:embed`.
+to `webui/dist`, embedded into the Go binary via `//go:embed`.
 
 **Pages:**
 - **Chat** (`/`): left = session list (with titles); right = message stream for
@@ -720,13 +720,13 @@ build is embedded and served by Go.
 - `build`: `go build -o mira ./cmd/mira`
 - `run`: `./mira serve --migrate`
 - `migrate`: `./mira migrate`
-- `web-install`: `cd web && pnpm install`
-- `web-dev`: `cd web && pnpm dev`
-- `web-build`: `cd web && pnpm install && pnpm build` (output to `web/dist`)
+- `web-install`: `cd webui && pnpm install`
+- `web-dev`: `cd webui && pnpm dev`
+- `web-build`: `cd webui && pnpm install && pnpm build` (output to `webui/dist`)
 - `test`: `go vet ./... && go build ./...`
 
 **Embedding:** `internal/server` (or `web`) has `//go:embed dist/*` over the
-built `web/dist`; the static handler serves it. For dev, set `web_dist_dir` to
+built `webui/dist`; the static handler serves it. For dev, set `web_dist_dir` to
 the Vite dev path or run the UI separately.
 
 **CLI:**

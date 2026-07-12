@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 
-	"github.com/google/uuid"
-
+	"mira/internal/id"
 	"mira/internal/llm"
 	"mira/internal/skill"
 	"mira/internal/store"
@@ -41,7 +41,8 @@ type RunnerDeps struct {
 	Tools  *tool.Registry
 	Skills *skill.Catalog
 
-	Workspace string
+	Workspace            string
+	MaxHistoryMessages   int
 }
 
 // Runner executes agent runs and enforces single-run-per-session.
@@ -132,7 +133,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 		if agentKey == "" {
 			agentKey = "default"
 		}
-		sess = &store.Session{ID: uuid.NewString(), Key: sessionKey, AgentKey: agentKey}
+		sess = &store.Session{ID: id.New(), Key: sessionKey, AgentKey: agentKey}
 		if cerr := st.CreateSession(runCtx, sess); cerr != nil {
 			// Maybe created concurrently; try once more.
 			sess, err = st.GetSessionByKey(runCtx, sessionKey)
@@ -155,7 +156,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 	// Resolve provider (cached, invalidate on config change).
 	prov, err := r.provider(runCtx, ag.Provider)
 	if err != nil {
-		emit(onEvent, Event{Type: "error", Error: "provider not found: " + ag.Provider})
+		emit(onEvent, Event{Type: "error", Error: err.Error()})
 		return err
 	}
 
@@ -165,9 +166,10 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 		emit(onEvent, Event{Type: "error", Error: "load history failed"})
 		return err
 	}
+	history = truncateHistory(history, r.deps.MaxHistoryMessages)
 
 	// Persist the user message immediately (survives first-round failure).
-	userMsg := store.Message{ID: uuid.NewString(), Role: "user", Content: userMessage}
+	userMsg := store.Message{ID: id.New(), Role: "user", Content: userMessage}
 	if _, err := st.AppendMessage(runCtx, sessionKey, userMsg); err != nil {
 		slog.Error("persist user message", "error", err)
 	}
@@ -208,7 +210,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 			}
 
 			assistantMsg := store.Message{
-				ID:            uuid.NewString(),
+				ID:            id.New(),
 				Role:          "assistant",
 				Content:       resp.Content,
 				Thinking:      resp.Thinking,
@@ -239,7 +241,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 				emit(onEvent, Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: truncated, IsError: isErr})
 
 				toolMsg := store.Message{
-					ID:         uuid.NewString(),
+					ID:         id.New(),
 					Role:       "tool",
 					Content:    truncated,
 					ToolCallID: tc.ID,
@@ -260,7 +262,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 
 		// Final answer.
 		assistantMsg := store.Message{
-			ID:       uuid.NewString(),
+			ID:       id.New(),
 			Role:     "assistant",
 			Content:  resp.Content,
 			Thinking: resp.Thinking,
@@ -384,7 +386,9 @@ func toolCallKey(tcs []llm.ToolCall) string {
 	if len(tcs) == 0 {
 		return ""
 	}
-	b, _ := json.Marshal(tcs)
+	sorted := append([]llm.ToolCall(nil), tcs...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
+	b, _ := json.Marshal(sorted)
 	return string(b)
 }
 
@@ -403,6 +407,13 @@ func firstUserMessage(history []store.Message, current string) string {
 		}
 	}
 	return current
+}
+
+func truncateHistory(msgs []store.Message, max int) []store.Message {
+	if max <= 0 || len(msgs) <= max {
+		return msgs
+	}
+	return msgs[len(msgs)-max:]
 }
 
 func titleFromMessage(msg string) string {

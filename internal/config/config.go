@@ -21,7 +21,8 @@ type Config struct {
 	UserSkillsDir  string      `json:"user_skills_dir"`
 	AllowedOrigins []string    `json:"allowed_origins"`
 	WebDistDir     string      `json:"web_dist_dir"`
-	Tools          ToolsConfig `json:"tools"`
+	MaxHistoryMessages int         `json:"max_history_messages"`
+	Tools              ToolsConfig `json:"tools"`
 }
 
 // ToolsConfig controls optional tools.
@@ -33,12 +34,13 @@ type ToolsConfig struct {
 // Default returns sensible local defaults.
 func Default() Config {
 	return Config{
-		Host: "127.0.0.1", Port: 18800,
+		Host: "127.0.0.1", Port: 8000,
 		DBPath:        "./data/mira.db",
 		InitSkillsDir: "./skills",
 		UserSkillsDir: "./data/skills",
-		WorkspaceDir:  "./data/workspace",
-		Tools:         ToolsConfig{},
+		WorkspaceDir:       "./data/workspace",
+		MaxHistoryMessages: 100,
+		Tools:              ToolsConfig{},
 	}
 }
 

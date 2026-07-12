@@ -5,9 +5,10 @@
   "auth_token": "change-me",
   "encryption_key": "change-me-at-least-16-chars",
   "workspace_dir": "./data/workspace",
-  "init_skills_dir": "./skills",
-  "user_skills_dir": "./data/skills",
+  "init_skills_dir": "./data/init-skills",
+  "user_skills_dir": "./data/user-skills",
   "allowed_origins": ["http://localhost:5173"],
+  "max_history_messages": 100,
   "tools": {
     "exec_enabled": false,
     "web_search_provider": ""

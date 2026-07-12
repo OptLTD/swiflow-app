@@ -3,13 +3,25 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 import { api, chat } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
+import { useAgentsStore } from '../stores/agents'
 import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js/lib/core'
+import jsonLang from 'highlight.js/lib/languages/json'
+import python from 'highlight.js/lib/languages/python'
+import bash from 'highlight.js/lib/languages/bash'
+import 'highlight.js/styles/github.min.css'
 import ToolCallBlock from '../components/ToolCallBlock.vue'
 import ThinkingBlock from '../components/ThinkingBlock.vue'
+import type { Message, Session } from '../types'
+
+hljs.registerLanguage('json', jsonLang)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('bash', bash)
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const auth = useAuthStore()
 const chatStore = useChatStore()
+const agentsStore = useAgentsStore()
 
 interface Msg {
   role: string
@@ -17,31 +29,75 @@ interface Msg {
   thinking?: string
   tool_name?: string
   id?: string
-  arguments?: any
+  arguments?: Record<string, unknown>
   isError?: boolean
   streaming?: boolean
 }
 
-const sessions = ref<any[]>([])
+const sessions = ref<Session[]>([])
 const currentKey = ref('')
+const sessionAgentKey = ref('')
+const selectedAgentKey = ref('default')
 const messages = ref<Msg[]>([])
 const input = ref('')
 const streaming = ref(false)
 const error = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
 
-// Create a fresh assistant bubble for the current LLM round and return it.
 function pushAssistant(): Msg {
   const a: Msg = { role: 'assistant', content: '', streaming: true }
   messages.value.push(a)
   return a
 }
 
+function mapStoredMessages(raw: Message[]): Msg[] {
+  const out: Msg[] = []
+  for (const m of raw) {
+    if (m.role === 'assistant' && m.tool_calls_json) {
+      let tcs: { id: string; name: string; arguments?: Record<string, unknown> }[] = []
+      try {
+        tcs = JSON.parse(m.tool_calls_json)
+      } catch {}
+      if (m.content || m.thinking) {
+        out.push({ role: 'assistant', content: m.content, thinking: m.thinking })
+      }
+      for (const tc of tcs) {
+        out.push({
+          role: 'tool',
+          id: tc.id,
+          tool_name: tc.name,
+          arguments: tc.arguments,
+          content: '',
+        })
+      }
+      continue
+    }
+    if (m.role === 'tool') {
+      out.push({
+        role: 'tool',
+        id: m.tool_call_id,
+        tool_name: m.tool_name,
+        content: m.content,
+        isError: false,
+      })
+      continue
+    }
+    out.push({ role: m.role, content: m.content, thinking: m.thinking })
+  }
+  return out
+}
+
 onMounted(() => {
-  if (auth.isAuthed) loadSessions()
+  if (auth.isAuthed) {
+    loadSessions()
+    agentsStore.load().catch((e: Error) => { error.value = e.message })
+  }
 })
 watch(() => auth.isAuthed, (v) => {
-  if (v) loadSessions()
+  if (v) {
+    loadSessions()
+    agentsStore.load().catch((e: Error) => { error.value = e.message })
+  }
 })
 
 async function loadSessions() {
@@ -59,13 +115,9 @@ async function selectSession(key: string) {
   messages.value = []
   try {
     const r = await api.getSession(key)
-    messages.value = (r.messages || []).map((m: any) => ({
-      role: m.role,
-      content: m.content,
-      thinking: m.thinking,
-      tool_name: m.tool_name,
-      isError: false,
-    }))
+    messages.value = mapStoredMessages(r.messages || [])
+    sessionAgentKey.value = r.session?.agent_key || ''
+    selectedAgentKey.value = sessionAgentKey.value || selectedAgentKey.value
     chatStore.setSession(key, r.session?.title || '')
     await nextTick()
     scrollBottom()
@@ -76,9 +128,14 @@ async function selectSession(key: string) {
 
 function newSession() {
   currentKey.value = 'sess-' + Math.random().toString(36).slice(2, 10)
+  sessionAgentKey.value = ''
   messages.value = []
   chatStore.setSession(currentKey.value, '')
   chatStore.closeDrawer()
+}
+
+function chatAgentKey(): string {
+  return sessionAgentKey.value || selectedAgentKey.value || 'default'
 }
 
 async function send() {
@@ -87,25 +144,20 @@ async function send() {
   const text = input.value
   input.value = ''
   messages.value.push({ role: 'user', content: text })
-  // One assistant bubble per LLM round. The first round's bubble is created
-  // up front so the "…" indicator shows; later rounds create one on the next
-  // delta.
   let cur: Msg | null = pushAssistant()
   streaming.value = true
   error.value = ''
   await nextTick()
   scrollBottom()
   try {
-    await chat(currentKey.value, text, '', (ev) => {
+    await chat(currentKey.value, text, chatAgentKey(), (ev) => {
       if (ev.type === 'delta') {
         if (!cur) cur = pushAssistant()
-        cur.content += ev.content
+        cur.content += ev.content || ''
       } else if (ev.type === 'thinking') {
         if (!cur) cur = pushAssistant()
-        cur.thinking = (cur.thinking || '') + ev.content
+        cur.thinking = (cur.thinking || '') + (ev.content || '')
       } else if (ev.type === 'tool_call') {
-        // Close the current round's assistant bubble (the "intent" text before
-        // the call). Drop it if it produced no text so we don't show empties.
         if (cur) {
           cur.streaming = false
           if (!cur.content && !cur.thinking) {
@@ -124,11 +176,11 @@ async function send() {
       } else if (ev.type === 'tool_result') {
         const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
         if (t) {
-          t.content = ev.result
+          t.content = ev.result || ''
           t.isError = ev.is_error
         }
       } else if (ev.type === 'error') {
-        error.value = ev.error
+        error.value = ev.error || 'error'
       } else if (ev.type === 'done') {
         if (cur) {
           cur.streaming = false
@@ -162,12 +214,17 @@ async function abortRun() {
 function scrollBottom() {
   if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
 }
+
 function render(content: string) {
-  return md.render(content || '')
+  const html = md.render(content || '')
+  const el = document.createElement('div')
+  el.innerHTML = html
+  el.querySelectorAll('pre code').forEach((node) => {
+    hljs.highlightElement(node as HTMLElement)
+  })
+  return el.innerHTML
 }
 
-// Per-message top gap: tool rows and thinking-bearing assistant bubbles are
-// tight (2px); user messages and final replies keep the normal 16px gap.
 function gapClass(m: Msg, i: number): string {
   if (i === 0) return ''
   if (m.role === 'tool') return 'mt-1'
@@ -178,7 +235,6 @@ function gapClass(m: Msg, i: number): string {
 
 <template>
   <div class="h-full">
-    <!-- sessions drawer -->
     <div
       v-if="chatStore.drawerOpen"
       class="fixed inset-0 bg-black/20 z-30"
@@ -203,16 +259,12 @@ function gapClass(m: Msg, i: number): string {
       </div>
     </div>
 
-    <!-- chat column -->
     <div class="h-full flex flex-col min-w-0">
       <div ref="scrollEl" class="flex-1 overflow-y-auto">
         <div class="max-w-[960px] mx-auto px-4 py-6">
           <div v-if="!auth.isAuthed" class="text-neutral-500">Authenticate to start chatting.</div>
           <template v-else>
-            <div
-              v-for="(m, i) in messages"
-              :key="i" :class="gapClass(m, i)"
-            >
+            <div v-for="(m, i) in messages" :key="i" :class="gapClass(m, i)">
               <div v-if="m.role === 'user'" class="flex justify-end">
                 <div class="bg-neutral-800 text-white rounded-lg px-3 py-2 max-w-[80%] whitespace-pre-wrap">{{ m.content }}</div>
               </div>
@@ -233,16 +285,24 @@ function gapClass(m: Msg, i: number): string {
       </div>
 
       <div>
-        <div class="max-w-[960px] mx-auto p-3 flex gap-2">
-          <textarea
-            v-model="input"
-            @keydown.enter.exact.prevent="send"
-            rows="1"
-            class="flex-1 border border-neutral-300 rounded px-3 py-2 resize-none focus:outline-none focus:border-neutral-500"
-            placeholder="Message…"
-          ></textarea>
-          <button v-if="!streaming" class="px-4 py-2 bg-neutral-800 text-white rounded" @click="send">Send</button>
-          <button v-else class="px-4 py-2 bg-red-600 text-white rounded" @click="abortRun">Abort</button>
+        <div class="max-w-[960px] mx-auto p-3 flex flex-col gap-2">
+          <div v-if="!sessionAgentKey" class="flex items-center gap-2 text-sm">
+            <label>Agent</label>
+            <select v-model="selectedAgentKey" class="border rounded px-2 py-1">
+              <option v-for="a in agentsStore.agents" :key="a.key" :value="a.key">{{ a.key }}</option>
+            </select>
+          </div>
+          <div class="flex gap-2">
+            <textarea
+              v-model="input"
+              @keydown.enter.exact.prevent="send"
+              rows="1"
+              class="flex-1 border border-neutral-300 rounded px-3 py-2 resize-none focus:outline-none focus:border-neutral-500"
+              placeholder="Message…"
+            ></textarea>
+            <button v-if="!streaming" class="px-4 py-2 bg-neutral-800 text-white rounded" @click="send">Send</button>
+            <button v-else class="px-4 py-2 bg-red-600 text-white rounded" @click="abortRun">Abort</button>
+          </div>
         </div>
       </div>
     </div>

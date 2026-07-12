@@ -57,6 +57,12 @@ func (r *Registry) IsEnabled(name string) bool {
 	return !r.disabled[name]
 }
 
+// Get returns a registered tool by name.
+func (r *Registry) Get(name string) (Tool, bool) {
+	t, ok := r.tools[name]
+	return t, ok
+}
+
 // Definitions returns tool defs for all enabled tools, for advertising to the LLM.
 func (r *Registry) Definitions() []llm.ToolDef {
 	out := make([]llm.ToolDef, 0, len(r.tools))

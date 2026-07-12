@@ -7,13 +7,39 @@ import (
 	"strings"
 
 	"mira/internal/skill"
+	"mira/internal/store"
 )
 
 type skillCatalog interface {
 	Discover(context.Context) []skill.Skill
 }
 
-type useSkillTool struct{ cat skillCatalog }
+type skillStore interface {
+	DisabledSkills(context.Context) ([]string, error)
+}
+
+type skillTools struct {
+	cat skillCatalog
+	st  skillStore
+}
+
+func (t *skillTools) enabledSkills(ctx context.Context) []skill.Skill {
+	disabled := map[string]bool{}
+	if list, err := t.st.DisabledSkills(ctx); err == nil {
+		for _, slug := range list {
+			disabled[slug] = true
+		}
+	}
+	var out []skill.Skill
+	for _, s := range t.cat.Discover(ctx) {
+		if !disabled[s.Slug] {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+type useSkillTool struct{ base *skillTools }
 
 func (t *useSkillTool) Name() string        { return "skill_use" }
 func (t *useSkillTool) Description() string { return "Load and apply a skill's instructions by slug." }
@@ -30,7 +56,7 @@ func (t *useSkillTool) Parameters() map[string]any {
 func (t *useSkillTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	slug, _ := args["slug"].(string)
 	input, _ := args["input"].(string)
-	for _, s := range t.cat.Discover(ctx) {
+	for _, s := range t.base.enabledSkills(ctx) {
 		if s.Slug == slug {
 			if s.Body == "" {
 				return "", fmt.Errorf("skill %s has no body", slug)
@@ -45,7 +71,7 @@ func (t *useSkillTool) Execute(ctx context.Context, args map[string]any) (string
 	return "", fmt.Errorf("skill not found: %s", slug)
 }
 
-type skillSearchTool struct{ cat skillCatalog }
+type skillSearchTool struct{ base *skillTools }
 
 func (t *skillSearchTool) Name() string        { return "skill_search" }
 func (t *skillSearchTool) Description() string { return "Search available skills by keyword." }
@@ -61,7 +87,7 @@ func (t *skillSearchTool) Parameters() map[string]any {
 func (t *skillSearchTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	q := strings.ToLower(fmt.Sprintf("%v", args["query"]))
 	var b strings.Builder
-	for _, s := range t.cat.Discover(ctx) {
+	for _, s := range t.base.enabledSkills(ctx) {
 		hay := strings.ToLower(s.Name + " " + s.Description + " " + s.Slug)
 		if strings.Contains(hay, q) {
 			fmt.Fprintf(&b, "- %s: %s — %s\n", s.Slug, s.Name, s.Description)
@@ -74,7 +100,8 @@ func (t *skillSearchTool) Execute(ctx context.Context, args map[string]any) (str
 }
 
 // RegisterSkill registers the skill tools.
-func RegisterSkill(r *Registry, cat skillCatalog) {
-	r.Register(&useSkillTool{cat: cat})
-	r.Register(&skillSearchTool{cat: cat})
+func RegisterSkill(r *Registry, cat skillCatalog, st store.Store) {
+	base := &skillTools{cat: cat, st: st}
+	r.Register(&useSkillTool{base: base})
+	r.Register(&skillSearchTool{base: base})
 }

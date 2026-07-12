@@ -91,6 +91,22 @@ func SandboxPath(workspace, requested string) (string, error) {
 	return full, nil
 }
 
+// ValidateHTTPURL checks that rawURL is an absolute http or https URL with a host.
+// Provider base URLs are not SSRF-filtered (private inference endpoints are allowed).
+func ValidateHTTPURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("only http and https URLs are supported")
+	}
+	if parsed.Hostname() == "" {
+		return fmt.Errorf("missing hostname")
+	}
+	return nil
+}
+
 // --- SSRF guard ---
 
 var blockedHostnames = map[string]bool{

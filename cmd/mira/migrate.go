@@ -12,6 +12,7 @@ import (
 	"mira/initial"
 	"mira/internal/config"
 	"mira/internal/migrate"
+	"mira/internal/seed"
 	"mira/internal/store/sqlite"
 )
 
@@ -38,6 +39,9 @@ func migrateCmd() *cobra.Command {
 			}
 			if err := migrate.Apply(context.Background(), st.DB(), initial.SchemaSQL, upgrades); err != nil {
 				return fmt.Errorf("migrate: %w", err)
+			}
+			if err := seed.EnsureDefaults(context.Background(), st); err != nil {
+				return fmt.Errorf("seed: %w", err)
 			}
 			slog.Info("schema applied", "db", cfg.DBPath)
 			return nil

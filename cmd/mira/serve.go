@@ -16,6 +16,7 @@ import (
 	"mira/initial"
 	"mira/internal/agent"
 	"mira/internal/migrate"
+	"mira/internal/seed"
 	"mira/internal/server"
 	"mira/internal/skill"
 	"mira/internal/store/sqlite"
@@ -32,7 +33,7 @@ func serveCmd() *cobra.Command {
 			return runServe()
 		},
 	}
-	cmd.Flags().BoolVar(&autoMigrate, "migrate", false, "apply schema and upgrades before serving")
+	cmd.Flags().BoolVar(&autoMigrate, "migrate", true, "apply schema and upgrades before serving")
 	return cmd
 }
 
@@ -68,6 +69,9 @@ func runServe() error {
 		if err := migrate.Apply(context.Background(), st.DB(), initial.SchemaSQL, upgrades); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
+		if err := seed.EnsureDefaults(context.Background(), st); err != nil {
+			return fmt.Errorf("seed: %w", err)
+		}
 	}
 
 	skillsCat := skill.NewCatalog(cfg.InitSkillsDir, cfg.UserSkillsDir)
@@ -76,7 +80,7 @@ func runServe() error {
 	tool.RegisterFS(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
 	tool.RegisterWeb(toolsReg)
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
-	tool.RegisterSkill(toolsReg, skillsCat)
+	tool.RegisterSkill(toolsReg, skillsCat, st)
 
 	// Apply persisted tool policy.
 	if pol, err := st.ListToolPolicy(context.Background()); err == nil {
@@ -86,10 +90,11 @@ func runServe() error {
 	}
 
 	runner := agent.NewRunner(agent.RunnerDeps{
-		Store:     st,
-		Tools:     toolsReg,
-		Skills:    skillsCat,
-		Workspace: cfg.WorkspaceDir,
+		Store:              st,
+		Tools:              toolsReg,
+		Skills:             skillsCat,
+		Workspace:          cfg.WorkspaceDir,
+		MaxHistoryMessages: cfg.MaxHistoryMessages,
 	})
 
 	srv := server.New(cfg, st, runner, toolsReg, skillsCat)

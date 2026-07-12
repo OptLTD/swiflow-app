@@ -1,0 +1,10 @@
+services:
+  mira:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+      - ./skills:/app/skills:ro
+    restart: unless-stopped

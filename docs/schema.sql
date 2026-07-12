@@ -1,6 +1,5 @@
 -- Mira — Phase 1 schema (SQLite).
--- Canonical schema referenced by docs/SPEC.md §5. Source of truth for DDL is
--- initial/schema.sql (embedded into the binary). Designed to be portable to
+-- Canonical reference for docs/SPEC.md §5. Keep in sync with initial/schema.sql.
 -- PostgreSQL in Phase 3 (TEXT ids hold UUIDv7; INTEGER booleans become BOOLEAN;
 -- datetime('now') becomes NOW()).
 

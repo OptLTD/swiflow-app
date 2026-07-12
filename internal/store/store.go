@@ -70,6 +70,7 @@ type Store interface {
 	CreateProvider(ctx context.Context, p *Provider) error
 	ListProviders(ctx context.Context) ([]Provider, error)
 	GetProviderByName(ctx context.Context, name string) (*Provider, error)
+	GetProviderByID(ctx context.Context, id string) (*Provider, error)
 	ProviderCreds(ctx context.Context, name string) (apiBase, apiKey string, err error)
 	UpdateProvider(ctx context.Context, id string, fields map[string]any) error
 	DeleteProvider(ctx context.Context, id string) error

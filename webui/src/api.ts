@@ -1,4 +1,14 @@
 // API client for the Mira backend. Auth token is stored in localStorage.
+import type {
+  Agent,
+  ChatEvent,
+  Message,
+  Provider,
+  Session,
+  SkillInfo,
+  ToolInfo,
+} from './types'
+
 const TOKEN_KEY = 'mira_token'
 
 export function getToken(): string {
@@ -11,7 +21,7 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
 }
 
-async function req<T>(method: string, path: string, body?: any): Promise<T> {
+async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const token = getToken()
   const res = await fetch('/api' + path, {
     method,
@@ -22,7 +32,14 @@ async function req<T>(method: string, path: string, body?: any): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   })
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  let data: { error?: string } | null = null
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    }
+  }
   if (!res.ok) {
     throw new Error(data?.error || `HTTP ${res.status}`)
   }
@@ -31,30 +48,28 @@ async function req<T>(method: string, path: string, body?: any): Promise<T> {
 
 export const api = {
   health: () => req<{ status: string }>('GET', '/health'),
-  listAgents: () => req<{ agents: any[] }>('GET', '/agents'),
-  createAgent: (a: any) => req<any>('POST', '/agents', a),
-  updateAgent: (key: string, a: any) => req<any>('PUT', `/agents/${key}`, a),
-  listProviders: () => req<{ providers: any[] }>('GET', '/providers'),
-  createProvider: (p: any) => req<any>('POST', '/providers', p),
-  updateProvider: (id: string, p: any) => req<any>('PUT', `/providers/${id}`, p),
-  deleteProvider: (id: string) => req<any>('DELETE', `/providers/${id}`),
-  listSessions: () => req<{ sessions: any[] }>('GET', '/sessions'),
-  getSession: (key: string) => req<{ session: any; messages: any[] }>('GET', `/sessions/${key}`),
+  listAgents: () => req<{ agents: Agent[] }>('GET', '/agents'),
+  createAgent: (a: Partial<Agent>) => req<Agent>('POST', '/agents', a),
+  updateAgent: (key: string, a: Partial<Agent>) => req<{ status: string }>('PUT', `/agents/${key}`, a),
+  listProviders: () => req<{ providers: Provider[] }>('GET', '/providers'),
+  createProvider: (p: Partial<Provider> & { api_key?: string }) => req<Provider>('POST', '/providers', p),
+  updateProvider: (id: string, p: Record<string, unknown>) => req<{ status: string }>('PUT', `/providers/${id}`, p),
+  deleteProvider: (id: string) => req<{ status: string }>('DELETE', `/providers/${id}`),
+  listSessions: () => req<{ sessions: Session[] }>('GET', '/sessions'),
+  getSession: (key: string) => req<{ session: Session; messages: Message[] }>('GET', `/sessions/${key}`),
   abortSession: (key: string) => req<{ aborted: boolean }>('POST', `/sessions/${key}/abort`),
-  listTools: () => req<{ tools: any[] }>('GET', '/tools'),
-  setTool: (name: string, enabled: boolean) => req<any>('PUT', `/tools/${name}`, { enabled }),
-  listSkills: () => req<{ skills: any[] }>('GET', '/skills'),
-  setSkill: (slug: string, enabled: boolean) => req<any>('PUT', `/skills/${slug}`, { enabled }),
-  reloadSkills: () => req<any>('POST', '/skills/reload'),
+  listTools: () => req<{ tools: ToolInfo[] }>('GET', '/tools'),
+  setTool: (name: string, enabled: boolean) => req<{ status: string }>('PUT', `/tools/${name}`, { enabled }),
+  listSkills: () => req<{ skills: SkillInfo[] }>('GET', '/skills'),
+  setSkill: (slug: string, enabled: boolean) => req<{ status: string }>('PUT', `/skills/${slug}`, { enabled }),
+  reloadSkills: () => req<{ status: string }>('POST', '/skills/reload'),
 }
 
-// Chat over SSE (POST with streaming response). Calls onEvent for each parsed
-// event object. Resolves when the stream ends.
 export async function chat(
   sessionKey: string,
   message: string,
   agentKey: string,
-  onEvent: (ev: any) => void,
+  onEvent: (ev: ChatEvent) => void,
 ): Promise<void> {
   const token = getToken()
   const res = await fetch(`/api/sessions/${encodeURIComponent(sessionKey)}/chat`, {
@@ -68,7 +83,9 @@ export async function chat(
   if (!res.ok) {
     const text = await res.text()
     let msg = `HTTP ${res.status}`
-    try { msg = JSON.parse(text).error || msg } catch {}
+    try {
+      msg = JSON.parse(text).error || msg
+    } catch {}
     throw new Error(msg)
   }
   const reader = res.body!.getReader()
