@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mira/embed"
+	"github.com/OptLTD/swiflow/embed"
 )
 
 // Skill is a discovered skill.

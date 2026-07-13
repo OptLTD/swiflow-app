@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"mira/internal/util"
-	"mira/internal/store"
+	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/internal/store"
 )
 
 func (s *Server) listCronJobs(w http.ResponseWriter, r *http.Request) {

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 func TestExecRun(t *testing.T) {

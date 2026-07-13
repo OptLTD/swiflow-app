@@ -1,5 +1,6 @@
 # Go build
 /mira
+/mira-desktop
 *.exe
 *.exe~
 *.dll
@@ -30,3 +31,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Desktop frontend (copied from webui/dist at build time)
+embed/desktop-frontend/dist/

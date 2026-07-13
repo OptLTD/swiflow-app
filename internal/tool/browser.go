@@ -12,9 +12,9 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 
-	"mira/internal/browser"
-	"mira/internal/secure"
-	"mira/internal/util"
+	"github.com/OptLTD/swiflow/internal/browser"
+	"github.com/OptLTD/swiflow/internal/secure"
+	"github.com/OptLTD/swiflow/internal/util"
 )
 
 const ToolBrowser = "browser"

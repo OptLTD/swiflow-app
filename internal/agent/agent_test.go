@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"mira/internal/llm"
+	"github.com/OptLTD/swiflow/internal/llm"
 )
 
 func TestToolCallKeyOrderIndependent(t *testing.T) {

@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mira/embed"
-	"mira/internal/config"
-	"mira/internal/migrate"
-	"mira/internal/store"
-	"mira/internal/store/sqlite"
+	"github.com/OptLTD/swiflow/embed"
+	"github.com/OptLTD/swiflow/internal/config"
+	"github.com/OptLTD/swiflow/internal/migrate"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/store/sqlite"
 )
 
 const (

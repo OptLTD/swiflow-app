@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"mira/internal/agent"
+	"github.com/OptLTD/swiflow/internal/agent"
 )
 
 // Hub fans out run events to SSE subscribers keyed by session.

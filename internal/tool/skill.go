@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mira/internal/skill"
+	"github.com/OptLTD/swiflow/internal/skill"
 )
 
 type skillStore interface {

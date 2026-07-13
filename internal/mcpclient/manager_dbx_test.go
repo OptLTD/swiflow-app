@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"mira/internal/mcpclient"
-	"mira/internal/store"
-	"mira/internal/testutil"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/mcpclient"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/testutil"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 // TestManagerSyncStdioDBX connects to the local dbx MCP server (stdio).

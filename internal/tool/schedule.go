@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"mira/internal/store"
-	"mira/internal/util"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/util"
 )
 
 type jobScheduler interface {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-rod/rod"
 
-	"mira/internal/browser"
+	"github.com/OptLTD/swiflow/internal/browser"
 )
 
 func TestNavigateGoogleSearchCN(t *testing.T) {

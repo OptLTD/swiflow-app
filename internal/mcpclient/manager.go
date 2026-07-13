@@ -17,8 +17,8 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"mira/internal/store"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 const toolPrefix = "mcp_"

@@ -10,8 +10,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"mira/embed"
-	"mira/internal/migrate"
+	"github.com/OptLTD/swiflow/embed"
+	"github.com/OptLTD/swiflow/internal/migrate"
 )
 
 func TestApplyIdempotent(t *testing.T) {

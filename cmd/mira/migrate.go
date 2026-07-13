@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"mira/embed"
-	"mira/internal/config"
-	"mira/internal/migrate"
-	"mira/internal/seed"
-	"mira/internal/store/sqlite"
+	"github.com/OptLTD/swiflow/embed"
+	"github.com/OptLTD/swiflow/internal/config"
+	"github.com/OptLTD/swiflow/internal/migrate"
+	"github.com/OptLTD/swiflow/internal/seed"
+	"github.com/OptLTD/swiflow/internal/store/sqlite"
 )
 
 func migrateCmd() *cobra.Command {

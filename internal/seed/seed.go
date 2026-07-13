@@ -5,8 +5,8 @@ import (
 	"context"
 	"log/slog"
 
-	"mira/internal/store"
-	"mira/internal/util"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/util"
 )
 
 // EnsureDefaults creates a default agent if the database has none.

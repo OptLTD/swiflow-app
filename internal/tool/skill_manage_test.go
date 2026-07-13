@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"mira/internal/skill"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/skill"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 type noopSkillStore struct{}

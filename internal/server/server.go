@@ -9,17 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"mira/internal/agent"
-	"mira/internal/config"
-	"mira/internal/mcpclient"
-	"mira/internal/schedule"
-	"mira/internal/secure"
-	"mira/internal/sesshub"
-	"mira/internal/skill"
-	"mira/internal/store"
-	"mira/internal/tool"
-	"mira/internal/util"
-	"mira/webui"
+	"github.com/OptLTD/swiflow/internal/agent"
+	"github.com/OptLTD/swiflow/internal/config"
+	"github.com/OptLTD/swiflow/internal/mcpclient"
+	"github.com/OptLTD/swiflow/internal/schedule"
+	"github.com/OptLTD/swiflow/internal/secure"
+	"github.com/OptLTD/swiflow/internal/sesshub"
+	"github.com/OptLTD/swiflow/internal/skill"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tool"
+	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/webui"
 )
 
 // Server is the HTTP API server.
@@ -142,7 +142,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		if strings.HasPrefix(r.URL.Path, "/api/") && !s.cfg.SkipAuth {
 			tok := r.Header.Get("Authorization")
 			tok = strings.TrimPrefix(tok, "Bearer ")
 			if tok == "" || tok != s.cfg.AuthToken {

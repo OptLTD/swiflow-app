@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"mira/internal/llm"
+	"github.com/OptLTD/swiflow/internal/llm"
 )
 
 // Tool is a capability an agent may invoke.

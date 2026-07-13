@@ -10,11 +10,11 @@ import (
 	"strings"
 	"sync"
 
-	"mira/internal/util"
-	"mira/internal/llm"
-	"mira/internal/skill"
-	"mira/internal/store"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/internal/llm"
+	"github.com/OptLTD/swiflow/internal/skill"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 const maxRounds = 12

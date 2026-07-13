@@ -10,15 +10,15 @@ import (
 	"strings"
 	"testing"
 
-	"mira/internal/agent"
-	"mira/internal/schedule"
-	"mira/internal/sesshub"
-	"mira/internal/mcpclient"
-	"mira/internal/server"
-	"mira/internal/skill"
-	"mira/internal/store"
-	"mira/internal/testutil"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/agent"
+	"github.com/OptLTD/swiflow/internal/schedule"
+	"github.com/OptLTD/swiflow/internal/sesshub"
+	"github.com/OptLTD/swiflow/internal/mcpclient"
+	"github.com/OptLTD/swiflow/internal/server"
+	"github.com/OptLTD/swiflow/internal/skill"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/testutil"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 type apiEnv struct {

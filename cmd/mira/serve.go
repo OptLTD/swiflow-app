@@ -13,18 +13,18 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"mira/embed"
-	"mira/internal/agent"
-	"mira/internal/browser"
-	"mira/internal/schedule"
-	"mira/internal/sesshub"
-	"mira/internal/mcpclient"
-	"mira/internal/migrate"
-	"mira/internal/seed"
-	"mira/internal/server"
-	"mira/internal/skill"
-	"mira/internal/store/sqlite"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/embed"
+	"github.com/OptLTD/swiflow/internal/agent"
+	"github.com/OptLTD/swiflow/internal/browser"
+	"github.com/OptLTD/swiflow/internal/schedule"
+	"github.com/OptLTD/swiflow/internal/sesshub"
+	"github.com/OptLTD/swiflow/internal/mcpclient"
+	"github.com/OptLTD/swiflow/internal/migrate"
+	"github.com/OptLTD/swiflow/internal/seed"
+	"github.com/OptLTD/swiflow/internal/server"
+	"github.com/OptLTD/swiflow/internal/skill"
+	"github.com/OptLTD/swiflow/internal/store/sqlite"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 var autoMigrate bool

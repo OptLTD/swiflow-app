@@ -1,5 +1,5 @@
 // Package embed holds assets compiled into the Mira binary: database schema,
-// incremental upgrades, and built-in skills.
+// incremental upgrades, built-in skills, and the desktop frontend.
 package embed
 
 import (
@@ -22,7 +22,18 @@ var upgrades embed.FS
 //go:embed all:init-skills
 var InitSkillsFS embed.FS
 
+// DesktopFrontend holds the built Vue UI for the wails3 desktop app.
+// Populated at build time by copying webui/dist → embed/frontend/dist.
+//
+//go:embed all:frontend/dist
+var DesktopFrontend embed.FS
+
 // UpgradesDir returns the embedded upgrades/ directory as an fs.FS.
 func UpgradesDir() (fs.FS, error) {
 	return fs.Sub(upgrades, "upgrades")
+}
+
+// DesktopFrontendDist returns the embedded frontend/dist/ directory as an fs.FS.
+func DesktopFrontendDist() (fs.FS, error) {
+	return fs.Sub(DesktopFrontend, "frontend/dist")
 }

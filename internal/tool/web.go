@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"mira/internal/secure"
+	"github.com/OptLTD/swiflow/internal/secure"
 )
 
 type webFetchTool struct {

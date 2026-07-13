@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"mira/internal/store"
-	"mira/internal/testutil"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/testutil"
 )
 
 func TestCronJobCRUD(t *testing.T) {

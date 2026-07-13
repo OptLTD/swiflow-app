@@ -8,10 +8,10 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"mira/internal/mcpclient"
-	"mira/internal/store"
-	"mira/internal/testutil"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/mcpclient"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/testutil"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 func startTestMCPServer(t *testing.T) *httptest.Server {

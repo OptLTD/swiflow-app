@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mira/internal/store"
+	"github.com/OptLTD/swiflow/internal/store"
 )
 
 type cronJobRow struct {

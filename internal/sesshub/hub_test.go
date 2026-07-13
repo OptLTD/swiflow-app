@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"mira/internal/agent"
-	"mira/internal/sesshub"
+	"github.com/OptLTD/swiflow/internal/agent"
+	"github.com/OptLTD/swiflow/internal/sesshub"
 )
 
 func TestHubPublishSubscribe(t *testing.T) {

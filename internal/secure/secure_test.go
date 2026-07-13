@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"mira/internal/secure"
+	"github.com/OptLTD/swiflow/internal/secure"
 )
 
 func TestSandboxPathRejectsEscape(t *testing.T) {

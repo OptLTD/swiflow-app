@@ -23,6 +23,7 @@ type Config struct {
 	WebDistDir     string      `json:"web_dist_dir"`
 	MaxHistoryMessages int         `json:"max_history_messages"`
 	Tools              ToolsConfig `json:"tools"`
+	SkipAuth           bool        `json:"skip_auth"`
 }
 
 // ToolsConfig controls optional tools.

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"mira/internal/store"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 type fakeSched struct {

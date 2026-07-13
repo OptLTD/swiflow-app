@@ -1,0 +1,1 @@
+import{E as s,k as e}from"./index-BXFdoKeF.js";const i=s("providers",{state:()=>({providers:[],loaded:!1}),actions:{async load(){const r=await e.listProviders();this.providers=r.providers,this.loaded=!0}}});export{i as u};

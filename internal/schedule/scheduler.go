@@ -10,8 +10,8 @@ import (
 
 	"github.com/agentine/cadence"
 
-	"mira/internal/agent"
-	"mira/internal/store"
+	"github.com/OptLTD/swiflow/internal/agent"
+	"github.com/OptLTD/swiflow/internal/store"
 )
 
 // EventPublisher broadcasts agent events to session watchers (optional).

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"mira/internal/secure"
-	"mira/internal/store"
+	"github.com/OptLTD/swiflow/internal/secure"
+	"github.com/OptLTD/swiflow/internal/store"
 
 	"github.com/jmoiron/sqlx"
 	_ "modernc.org/sqlite"

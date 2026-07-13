@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"mira/internal/browser"
-	"mira/internal/tool"
+	"github.com/OptLTD/swiflow/internal/browser"
+	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 func TestBrowserToolDisabled(t *testing.T) {

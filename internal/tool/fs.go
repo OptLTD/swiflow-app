@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mira/internal/secure"
+	"github.com/OptLTD/swiflow/internal/secure"
 )
 
 // WorkspaceRoots holds the agent workspace base.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"mira/internal/skill"
+	"github.com/OptLTD/swiflow/internal/skill"
 )
 
 func TestCreateSkill(t *testing.T) {
