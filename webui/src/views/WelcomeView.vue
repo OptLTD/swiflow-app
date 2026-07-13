@@ -1,0 +1,84 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { api } from '../api'
+import { useAgentsStore } from '../stores/agents'
+import { useLayoutStore } from '../stores/layout'
+import SvgIcon from '../components/SvgIcon.vue'
+import type { Session } from '../types'
+
+const layout = useLayoutStore()
+const agentsStore = useAgentsStore()
+const sessions = ref<Session[]>([])
+
+onMounted(async () => {
+  try {
+    const r = await api.listSessions()
+    sessions.value = (r.sessions || []).slice(0, 8)
+  } catch {}
+  agentsStore.load().catch(() => {})
+})
+</script>
+
+<template>
+  <div class="h-full overflow-y-auto overscroll-contain">
+    <div class="max-w-[600px] mx-auto px-8 py-16">
+      <!-- Brand -->
+      <div class="text-center mb-12">
+        <div class="inline-flex w-14 h-14 rounded-xl bg-neutral-800 text-white text-2xl font-bold items-center justify-center mb-4">S</div>
+        <h1 class="text-2xl font-bold text-neutral-900">Swiflow</h1>
+        <p class="text-neutral-500 mt-1">Self-hosted AI Agent Runtime</p>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="grid grid-cols-2 gap-3 mb-10">
+        <button
+          class="border border-neutral-200 rounded-lg p-4 text-left hover:bg-neutral-50 transition-colors"
+          @click="layout.chatPanelOpen = true"
+        >
+          <SvgIcon name="chat" class="text-neutral-600 mb-2" />
+          <div class="font-medium text-sm">New Chat</div>
+          <div class="text-xs text-neutral-400">Start a conversation</div>
+        </button>
+        <button
+          class="border border-neutral-200 rounded-lg p-4 text-left hover:bg-neutral-50 transition-colors"
+          @click="layout.openExplore()"
+        >
+          <SvgIcon name="folder" class="text-neutral-600 mb-2" />
+          <div class="font-medium text-sm">Explore</div>
+          <div class="text-xs text-neutral-400">Browse workspace</div>
+        </button>
+      </div>
+
+      <!-- Recent Sessions -->
+      <div v-if="sessions.length" class="mb-10">
+        <h2 class="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-3">Recent Sessions</h2>
+        <div class="space-y-1">
+          <button
+            v-for="s in sessions"
+            :key="s.key"
+            class="w-full text-left px-3 py-2 rounded hover:bg-neutral-100 flex items-center justify-between"
+            @click="layout.chatPanelOpen = true"
+          >
+            <span class="truncate text-sm">{{ s.title || s.key }}</span>
+            <span class="text-xs text-neutral-400 shrink-0 ml-2">{{ s.agent_key }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Agents -->
+      <div v-if="agentsStore.agents.length">
+        <h2 class="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-3">Agents</h2>
+        <div class="space-y-1">
+          <div
+            v-for="a in agentsStore.agents"
+            :key="a.key"
+            class="px-3 py-2 rounded flex items-center justify-between"
+          >
+            <span class="text-sm font-mono">{{ a.key }}</span>
+            <span class="text-xs text-neutral-400">{{ a.provider }} / {{ a.model }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OptLTD/swiflow/embed"
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/config"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
@@ -19,7 +20,6 @@ import (
 	"github.com/OptLTD/swiflow/internal/store"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/internal/util"
-	"github.com/OptLTD/swiflow/webui"
 )
 
 // Server is the HTTP API server.
@@ -81,6 +81,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/cron/jobs/{id}", s.updateCronJob)
 	mux.HandleFunc("DELETE /api/cron/jobs/{id}", s.deleteCronJob)
 	mux.HandleFunc("POST /api/cron/reload", s.reloadCron)
+
+	mux.HandleFunc("GET /api/workspace/list", s.listWorkspace)
+	mux.HandleFunc("GET /api/workspace/read", s.readWorkspaceFile)
 
 	var h http.Handler = mux
 	h = s.requestLogMiddleware(h)
@@ -184,7 +187,7 @@ func (s *Server) staticMiddleware(next http.Handler) http.Handler {
 	if s.cfg.WebDistDir != "" {
 		fileServer = http.FileServer(http.Dir(s.cfg.WebDistDir))
 	} else {
-		dist, _ := fs.Sub(webui.Dist, "dist")
+		dist, _ := embed.DesktopFrontendDist()
 		fileServer = http.FileServer(http.FS(dist))
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +199,7 @@ func (s *Server) staticMiddleware(next http.Handler) http.Handler {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
-		dist, _ := fs.Sub(webui.Dist, "dist")
+		dist, _ := embed.DesktopFrontendDist()
 		p := strings.TrimPrefix(r.URL.Path, "/")
 		if p == "" {
 			p = "index.html"

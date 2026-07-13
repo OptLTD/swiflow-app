@@ -23,9 +23,9 @@ var upgrades embed.FS
 var InitSkillsFS embed.FS
 
 // DesktopFrontend holds the built Vue UI for the wails3 desktop app.
-// Populated at build time by copying webui/dist → embed/frontend/dist.
+// Vite writes webui build output directly into embed/frontend/.
 //
-//go:embed all:frontend/dist
+//go:embed all:frontend
 var DesktopFrontend embed.FS
 
 // UpgradesDir returns the embedded upgrades/ directory as an fs.FS.
@@ -33,7 +33,7 @@ func UpgradesDir() (fs.FS, error) {
 	return fs.Sub(upgrades, "upgrades")
 }
 
-// DesktopFrontendDist returns the embedded frontend/dist/ directory as an fs.FS.
+// DesktopFrontendDist returns the embedded frontend/ directory as an fs.FS.
 func DesktopFrontendDist() (fs.FS, error) {
-	return fs.Sub(DesktopFrontend, "frontend/dist")
+	return fs.Sub(DesktopFrontend, "frontend")
 }

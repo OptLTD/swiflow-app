@@ -2,16 +2,15 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { api, chat, watchSession } from '../api'
 import { useAuthStore } from '../stores/auth'
-import { useChatStore } from '../stores/chat'
 import { useAgentsStore } from '../stores/agents'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js/lib/core'
 import jsonLang from 'highlight.js/lib/languages/json'
 import python from 'highlight.js/lib/languages/python'
 import bash from 'highlight.js/lib/languages/bash'
-import 'highlight.js/styles/github.min.css'
 import ToolCallBlock from '../components/ToolCallBlock.vue'
 import ThinkingBlock from '../components/ThinkingBlock.vue'
+import SvgIcon from '../components/SvgIcon.vue'
 import type { ChatEvent, Message, Session } from '../types'
 
 hljs.registerLanguage('json', jsonLang)
@@ -20,7 +19,6 @@ hljs.registerLanguage('bash', bash)
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const auth = useAuthStore()
-const chatStore = useChatStore()
 const agentsStore = useAgentsStore()
 
 interface Msg {
@@ -42,43 +40,21 @@ const messages = ref<Msg[]>([])
 const input = ref('')
 const streaming = ref(false)
 const error = ref('')
-const scrollEl = ref<HTMLElement | null>(null)
 let watchAbort: AbortController | null = null
-let bgCur: Msg | null = null
 
-function stopWatch() {
-  watchAbort?.abort()
-  watchAbort = null
+async function loadSessions() {
+  try {
+    const r = await api.listSessions()
+    sessions.value = r.sessions || []
+  } catch {}
 }
 
-async function startWatch(key: string) {
-  stopWatch()
-  if (!key) return
-  const ac = new AbortController()
-  watchAbort = ac
-  while (!ac.signal.aborted && currentKey.value === key) {
-    try {
-      await watchSession(key, (ev) => {
-        if (streaming.value) return
-        handleChatEvent(ev, () => bgCur, (m) => { bgCur = m })
-      }, ac.signal)
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') return
-    }
-    if (ac.signal.aborted || currentKey.value !== key) return
-    await new Promise((r) => setTimeout(r, 1000))
-  }
-}
-
-function handleChatEvent(
-  ev: ChatEvent,
-  getCur: () => Msg | null,
-  setCur: (m: Msg | null) => void,
-) {
+function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Msg | null) => void) {
   if (ev.type === 'user') {
     messages.value.push({ role: 'user', content: ev.content || '' })
     streaming.value = true
-    setCur(pushAssistant())
+    let cur = pushAssistant()
+    setCur(cur)
     scrollBottom()
     return
   }
@@ -120,12 +96,6 @@ function handleChatEvent(
       setCur(null)
     }
     streaming.value = false
-    if (ev.title) {
-      chatStore.currentTitle = ev.title
-      const s = sessions.value.find((s) => s.key === currentKey.value)
-      if (s) s.title = ev.title
-      else loadSessions()
-    }
   }
   scrollBottom()
 }
@@ -179,7 +149,7 @@ onMounted(() => {
     agentsStore.load().catch((e: Error) => { error.value = e.message })
   }
 })
-onUnmounted(() => stopWatch())
+
 watch(() => auth.isAuthed, (v) => {
   if (v) {
     loadSessions()
@@ -187,18 +157,8 @@ watch(() => auth.isAuthed, (v) => {
   }
 })
 
-async function loadSessions() {
-  try {
-    const r = await api.listSessions()
-    sessions.value = r.sessions || []
-  } catch (e: any) {
-    error.value = e.message
-  }
-}
-
 async function selectSession(key: string) {
   stopWatch()
-  chatStore.closeDrawer()
   currentKey.value = key
   messages.value = []
   try {
@@ -206,12 +166,33 @@ async function selectSession(key: string) {
     messages.value = mapStoredMessages(r.messages || [])
     sessionAgentKey.value = r.session?.agent_key || ''
     selectedAgentKey.value = sessionAgentKey.value || selectedAgentKey.value
-    chatStore.setSession(key, r.session?.title || '')
-    await nextTick()
-    scrollBottom()
     startWatch(key)
   } catch (e: any) {
     error.value = e.message
+  }
+}
+
+function stopWatch() {
+  watchAbort?.abort()
+  watchAbort = null
+}
+
+async function startWatch(key: string) {
+  stopWatch()
+  if (!key) return
+  const ac = new AbortController()
+  watchAbort = ac
+  while (!ac.signal.aborted && currentKey.value === key) {
+    try {
+      await watchSession(key, (ev) => {
+        if (streaming.value) return
+        handleChatEvent(ev, () => null, (m) => { /* no-op */ })
+      }, ac.signal)
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') return
+    }
+    if (ac.signal.aborted || currentKey.value !== key) return
+    await new Promise((r) => setTimeout(r, 1000))
   }
 }
 
@@ -219,9 +200,8 @@ function newSession() {
   stopWatch()
   currentKey.value = 'sess-' + Math.random().toString(36).slice(2, 10)
   sessionAgentKey.value = ''
+  selectedAgentKey.value = 'default'
   messages.value = []
-  chatStore.setSession(currentKey.value, '')
-  chatStore.closeDrawer()
   startWatch(currentKey.value)
 }
 
@@ -261,7 +241,7 @@ async function abortRun() {
 }
 
 function scrollBottom() {
-  if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
 }
 
 function render(content: string) {
@@ -289,78 +269,74 @@ function gapClass(m: Msg, i: number): string {
 </script>
 
 <template>
-  <div class="h-full">
-    <div
-      v-if="chatStore.drawerOpen"
-      class="fixed inset-0 bg-black/20 z-30"
-      @click="chatStore.closeDrawer()"
-    ></div>
-    <div
-      v-if="chatStore.drawerOpen"
-      class="absolute left-0 top-0 bottom-0 w-64 bg-white border-r border-neutral-200 z-40 flex flex-col"
-    >
-      <button class="px-4 py-3 bg-neutral-800 text-white text-sm border-y border-neutral-800" @click="newSession">
-        + New session
-      </button>
-      <div class="flex-1 overflow-y-auto">
-        <div
-          v-for="s in sessions"
-          :key="s.key"
-          class="px-4 py-2 cursor-pointer hover:bg-neutral-100 truncate text-sm border-b border-neutral-100"
-          :class="{ 'bg-neutral-100': s.key === currentKey }"
-          @click="selectSession(s.key)"
-        >
-          <div class="truncate">{{ s.title || s.key }}</div>
-          <div class="text-xs text-neutral-400">{{ s.agent_key }}</div>
-        </div>
+  <div class="h-full flex flex-col min-w-0">
+    <!-- Header -->
+    <div class="shrink-0 border-b border-neutral-200 px-4 py-2 flex items-center justify-between">
+      <select v-model="selectedAgentKey" class="text-sm border rounded px-2 py-1">
+        <option v-for="a in agentsStore.agents" :key="a.key" :value="a.key">{{ a.display_name || a.key }}</option>
+      </select>
+      <div class="flex items-center gap-1 text-xs text-neutral-500">
+        <span>{{ currentKey || 'new chat' }}</span>
+        <button v-if="streaming" class="hover:bg-neutral-200 rounded p-1 text-neutral-500" title="Abort" @click="abortRun">
+          <SvgIcon name="stop" :size="14" />
+        </button>
       </div>
     </div>
 
-    <div class="h-full flex flex-col min-w-0">
-      <div ref="scrollEl" class="flex-1 overflow-y-auto">
-        <div class="max-w-[960px] mx-auto px-4 py-6">
-          <div v-if="!auth.isAuthed" class="text-neutral-500">Authenticate to start chatting.</div>
-          <template v-else>
-            <div v-for="(m, i) in messages" :key="i" :class="gapClass(m, i)">
-              <div v-if="m.role === 'user'" class="flex justify-end">
-                <div class="bg-neutral-800 text-white rounded-lg px-3 py-2 max-w-[80%] whitespace-pre-wrap">{{ m.content }}</div>
-              </div>
-              <div v-else-if="m.role === 'assistant'">
-                <ThinkingBlock v-if="m.thinking" :content="m.thinking" />
-                <div v-if="m.content" class="prose-mira" v-html="render(m.content)"></div>
-                <span v-else-if="m.streaming" class="typing-dots">
-                  <span></span><span></span><span></span>
-                </span>
-              </div>
-              <div v-else-if="m.role === 'tool'">
-                <ToolCallBlock :name="m.tool_name || ''" :args="m.arguments" :content="m.content" :is-error="m.isError" />
-              </div>
+    <!-- Messages -->
+    <div ref="scrollEl" class="flex-1 overflow-y-auto p-4">
+      <div class="max-w-[960px] mx-auto">
+        <div v-if="!auth.isAuthed" class="text-neutral-500">Authenticate to start chatting.</div>
+        <template v-else>
+          <div v-for="(m, i) in messages" :key="i" :class="gapClass(m, i)">
+            <div v-if="m.role === 'user'" class="flex justify-end">
+              <div class="bg-neutral-800 text-white rounded-lg px-3 py-2 max-w-[80%] whitespace-pre-wrap">{{ m.content }}</div>
             </div>
-            <div v-if="error" class="text-red-600 text-sm">{{ error }}</div>
-          </template>
-        </div>
+            <div v-else-if="m.role === 'assistant'">
+              <ThinkingBlock v-if="m.thinking" :content="m.thinking" />
+              <div v-if="m.content" class="prose-mira" v-html="render(m.content)"></div>
+              <span v-else-if="m.streaming" class="typing-dots">
+                <span></span><span></span><span></span>
+              </span>
+            </div>
+            <div v-else-if="m.role === 'tool'">
+              <ToolCallBlock :name="m.tool_name || ''" :args="m.arguments" :content="m.content" :is-error="m.isError" />
+            </div>
+          </div>
+          <div v-if="error" class="text-red-600 text-sm">{{ error }}</div>
+        </template>
       </div>
+    </div>
 
-      <div>
-        <div class="max-w-[960px] mx-auto p-3 flex flex-col gap-2">
-          <div v-if="!sessionAgentKey" class="flex items-center gap-2 text-sm">
-            <label>Agent</label>
-            <select v-model="selectedAgentKey" class="border rounded px-2 py-1">
-              <option v-for="a in agentsStore.agents" :key="a.key" :value="a.key">{{ a.key }}</option>
-            </select>
-          </div>
-          <div class="flex gap-2">
-            <textarea
-              v-model="input"
-              @keydown.enter.exact.prevent="send"
-              rows="1"
-              class="flex-1 border border-neutral-300 rounded px-3 py-2 resize-none focus:outline-none focus:border-neutral-500"
-              placeholder="Message…"
-            ></textarea>
-            <button v-if="!streaming" class="px-4 py-2 bg-neutral-800 text-white rounded" @click="send">Send</button>
-            <button v-else class="px-4 py-2 bg-red-600 text-white rounded" @click="abortRun">Abort</button>
-          </div>
-        </div>
+    <!-- Input -->
+    <div class="border-t border-neutral-200 p-3">
+      <div class="relative">
+        <textarea
+          v-model="input"
+          @keydown.enter.exact.prevent="send"
+          rows="3"
+          class="w-full border border-neutral-300 rounded-lg px-3 py-2.5 pr-12 pb-11 resize-none focus:outline-none focus:border-neutral-500"
+          placeholder="Message…"
+        ></textarea>
+        <button
+          v-if="!streaming"
+          type="button"
+          class="absolute right-2.5 bottom-3.5 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
+          :disabled="!input.trim()"
+          title="Send"
+          @click="send"
+        >
+          <SvgIcon name="send" :size="16" />
+        </button>
+        <button
+          v-else
+          type="button"
+          class="absolute right-2.5 bottom-3.5 w-8 h-8 flex items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-500"
+          title="Abort"
+          @click="abortRun"
+        >
+          <SvgIcon name="stop" :size="14" />
+        </button>
       </div>
     </div>
   </div>

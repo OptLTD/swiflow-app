@@ -10,6 +10,7 @@ import type {
   MCPServer,
   MCPCapabilities,
   CronJob,
+  WorkspaceEntry,
 } from './types'
 
 const TOKEN_KEY = 'mira_token'
@@ -77,6 +78,10 @@ export const api = {
   updateCronJob: (id: string, j: Record<string, unknown>) => req<{ status: string }>('PUT', `/cron/jobs/${id}`, j),
   deleteCronJob: (id: string) => req<{ status: string }>('DELETE', `/cron/jobs/${id}`),
   reloadCron: () => req<{ status: string }>('POST', '/cron/reload'),
+  listWorkspace: (path = '.') =>
+    req<{ path: string; entries: WorkspaceEntry[] }>('GET', `/workspace/list?path=${encodeURIComponent(path)}`),
+  readWorkspaceFile: (path: string) =>
+    req<{ path: string; content: string; truncated?: boolean }>('GET', `/workspace/read?path=${encodeURIComponent(path)}`),
 }
 
 export async function chat(

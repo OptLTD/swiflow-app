@@ -1,1 +1,0 @@
-import{E as s,k as a}from"./index-BXFdoKeF.js";const n=s("agents",{state:()=>({agents:[],loaded:!1}),actions:{async load(){const t=await a.listAgents();this.agents=t.agents,this.loaded=!0}}});export{n as u};

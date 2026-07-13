@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useMCPStore } from '../stores/mcp'
 import { api } from '../api'
 import type { MCPServer } from '../types'
-import MCPCapabilitiesDialog from '../components/MCPCapabilitiesDialog.vue'
+import MCPDialog from '../components/MCPDialog.vue'
 
 const mcpStore = useMCPStore()
 const error = ref('')
@@ -161,6 +161,6 @@ function closeCapabilities() {
       </div>
       <div v-if="!mcpStore.servers.length" class="text-neutral-500 text-sm">No MCP servers configured.</div>
     </div>
-    <MCPCapabilitiesDialog :open="capsOpen" :server="capsServer" @close="closeCapabilities" />
+    <MCPDialog :open="capsOpen" :server="capsServer" @close="closeCapabilities" />
   </div>
 </template>

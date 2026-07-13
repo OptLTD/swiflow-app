@@ -53,7 +53,7 @@ func main() {
 		Description: "Self-hosted AI Agent Runtime",
 		Services:    []application.Service{},
 		Assets: application.AssetOptions{
-			Handler: mustDesktopFrontendHandler(),
+			Handler:    mustDesktopFrontendHandler(),
 			Middleware: apiProxyMiddleware(backendURL),
 		},
 		Mac: application.MacOptions{
@@ -61,16 +61,13 @@ func main() {
 		},
 	})
 
-	// 4. Create main window
+	// 4. Create main window (macOS fusion title bar: no system header, traffic lights kept)
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:          "Mira",
-		Width:          1200,
-		Height:         800,
-		MinWidth:       800,
-		MinHeight:      600,
-		Mac:            application.MacWindow{},
+		URL: "/", Title: "Mira", Mac: application.MacWindow{
+			TitleBar: application.MacTitleBarHiddenInset,
+		},
+		Width: 1200, Height: 800, MinWidth: 800, MinHeight: 600,
 		BackgroundColour: application.NewRGB(255, 255, 255),
-		URL:            "/",
 	})
 
 	// 5. Run
@@ -212,7 +209,9 @@ func startMiraBackend(ctx context.Context, cfg config.Config) func() {
 	}
 }
 
-// mustDesktopFrontendHandler returns the embedded desktop frontend as an http.Handler or exits on error.
+// mustDesktopFrontendHandler returns the desktop frontend as an http.Handler.
+// In development, set FRONTEND_DEVSERVER_URL (e.g. http://localhost:5173) so
+// AssetFileServerFS reverse-proxies to Vite HMR instead of embedded assets.
 func mustDesktopFrontendHandler() http.Handler {
 	dist, err := miraemb.DesktopFrontendDist()
 	if err != nil {

@@ -111,3 +111,11 @@ export interface ChatEvent {
   error?: string
   title?: string
 }
+
+export interface WorkspaceEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size?: number
+  mod_time?: string
+}

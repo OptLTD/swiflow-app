@@ -1,6 +1,7 @@
 # Go build
-/mira
-/mira-desktop
+/desktop
+/swiflow
+/swiflow-desktop
 *.exe
 *.exe~
 *.dll
@@ -32,5 +33,6 @@ Thumbs.db
 .env.*
 !.env.example
 
-# Desktop frontend (copied from webui/dist at build time)
-embed/desktop-frontend/dist/
+# Desktop frontend (vite → embed/frontend; keep placeholder for go:embed)
+embed/frontend/**
+!embed/frontend/.gitkeep

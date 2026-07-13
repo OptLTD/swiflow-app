@@ -4,6 +4,39 @@ html,
 body,
 #app {
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Prevent WKWebView rubber-banding from pulling the whole shell (header included). */
+.app-shell {
+  overscroll-behavior: none;
+}
+
+.header-tab-bar {
+  position: relative;
+  z-index: 20;
+}
+
+/* Desktop fusion title bar: reserve traffic-light space, Wails drag + double-click zoom */
+.traffic-light-spacer {
+  display: none;
+}
+
+html.desktop .traffic-light-spacer {
+  display: block;
+  width: 78px;
+  flex-shrink: 0;
+  --wails-draggable: drag;
+}
+
+html.desktop .header-tab-bar {
+  height: 38px;
+  --wails-draggable: drag;
+}
+
+html.desktop .header-tab-bar button {
+  --wails-draggable: no-drag;
 }
 
 .prose-mira p { margin: 0.4em 0; }
