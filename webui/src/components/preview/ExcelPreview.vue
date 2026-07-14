@@ -1,14 +1,35 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import jspreadsheet from 'jspreadsheet-ce'
 import LocalSvgIcon from '../LocalSvgIcon.vue'
 import type { ExcelSheet } from '../../lib/filePreview'
 import 'jsuites/dist/jsuites.css'
 import 'jspreadsheet-ce/dist/jspreadsheet.css'
 
+const LARGE_CELL_THRESHOLD = 50_000
+
 const props = defineProps<{ sheets: ExcelSheet[]; path: string }>()
 const emit = defineEmits<{ refresh: [] }>()
 const host = ref<HTMLDivElement | null>(null)
+
+function sheetCellCount(data: string[][]): number {
+  const rows = data.length
+  const cols = Math.max(...data.map((r) => r.length), 0)
+  return rows * cols
+}
+
+const totalCells = computed(() =>
+  props.sheets.reduce((sum, s) => sum + sheetCellCount(s.data), 0),
+)
+
+const isLarge = computed(() => totalCells.value > LARGE_CELL_THRESHOLD)
+
+/** Large workbooks open read-only by default; smaller ones start editable. */
+const editableMode = ref(false)
+
+function resetEditableDefault() {
+  editableMode.value = !isLarge.value
+}
 
 function columnsFor(data: string[][]) {
   const cols = Math.max(...data.map((row) => row.length), 1)
@@ -24,11 +45,16 @@ function minCols(data: string[][]) {
 }
 
 function buildWorksheets() {
+  const editable = editableMode.value
   return props.sheets.map((sheet) => ({
     worksheetName: sheet.name,
     data: sheet.data,
     columns: columnsFor(sheet.data),
-    editable: false,
+    editable,
+    allowInsertRow: editable,
+    allowInsertColumn: editable,
+    allowDeleteRow: editable,
+    allowDeleteColumn: editable,
     minDimensions: [minCols(sheet.data), minRows(sheet.data)] as [number, number],
   }))
 }
@@ -42,29 +68,54 @@ function destroyGrid() {
 function mountGrid() {
   if (!host.value || !props.sheets.length) return
   destroyGrid()
-  // Always show sheet tabs so single-sheet files align with chat header
   jspreadsheet(host.value, {
     tabs: true,
     worksheets: buildWorksheets(),
   })
 }
 
-watch(() => [props.path, props.sheets], mountGrid, { deep: true })
-onMounted(mountGrid)
+function toggleEditable() {
+  editableMode.value = !editableMode.value
+  mountGrid()
+}
+
+watch(
+  () => [props.path, props.sheets] as const,
+  () => {
+    resetEditableDefault()
+    mountGrid()
+  },
+  { deep: true },
+)
+onMounted(() => {
+  resetEditableDefault()
+  mountGrid()
+})
 onBeforeUnmount(destroyGrid)
 </script>
 
 <template>
   <div class="h-full min-h-0 overflow-hidden bg-white excel-preview-root relative">
     <div ref="host" class="excel-host h-full min-h-0 overflow-hidden" />
-    <button
-      title="刷新"
-      type="button"
-      class="excel-refresh absolute top-0 right-0 z-10 h-9 w-9 flex items-center justify-center text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
-      @click="emit('refresh')"
-    >
-      <LocalSvgIcon name="refresh" :size="15" />
-    </button>
+    <div class="excel-actions absolute top-0 right-0 z-10 h-9 flex items-center border-l border-neutral-200 bg-neutral-50">
+      <button
+        type="button"
+        class="h-9 w-9 flex items-center justify-center hover:bg-neutral-100"
+        :class="editableMode ? 'text-blue-600' : 'text-neutral-500 hover:text-neutral-800'"
+        :title="editableMode ? '切换为只读' : '切换为可编辑'"
+        @click="toggleEditable"
+      >
+        <LocalSvgIcon :name="editableMode ? 'edit' : 'lock'" :size="15" />
+      </button>
+      <button
+        type="button"
+        class="h-9 w-9 flex items-center justify-center text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+        title="刷新"
+        @click="emit('refresh')"
+      >
+        <LocalSvgIcon name="refresh" :size="15" />
+      </button>
+    </div>
   </div>
 </template>
 
@@ -86,8 +137,8 @@ onBeforeUnmount(destroyGrid)
   background: #fafafa;
   overflow-x: auto;
   overflow-y: hidden;
-  /* space for refresh button on the right */
-  padding-right: 36px;
+  /* space for edit + refresh */
+  padding-right: 72px;
 }
 
 .excel-preview-root :deep(.jtabs-headers > div:not(.jtabs-border)) {

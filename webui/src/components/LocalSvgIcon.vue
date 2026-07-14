@@ -16,6 +16,8 @@ withDefaults(
       | 'back'
       | 'history'
       | 'refresh'
+      | 'edit'
+      | 'lock'
     size?: number
   }>(),
   { size: 16 },
@@ -87,6 +89,14 @@ withDefaults(
     <template v-else-if="name === 'refresh'">
       <path d="M13 8a5 5 0 1 1-1.2-3.3" />
       <path d="M13 3.5V7h-3.5" />
+    </template>
+    <template v-else-if="name === 'edit'">
+      <path d="M3.5 12.5l1.2-4.2L11 2.5l2.5 2.5-6.3 6.3L3.5 12.5z" />
+      <path d="M9.2 4.3l2.5 2.5" />
+    </template>
+    <template v-else-if="name === 'lock'">
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
+      <path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7" />
     </template>
   </svg>
 </template>
