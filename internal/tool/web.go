@@ -1,4 +1,4 @@
-// Web tools: fetch (SSSF-safe) and search (stub in Phase 1). Spec §8.
+// Web tools: fetch (SSRF-safe) and search (provider-backed). Spec §8.
 package tool
 
 import (
@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OptLTD/swiflow/internal/httputil"
 	"github.com/OptLTD/swiflow/internal/secure"
 )
 
@@ -23,7 +24,7 @@ func (t *webFetchTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"url":      map[string]any{"type": "string"},
+			"url":       map[string]any{"type": "string"},
 			"max_chars": map[string]any{"type": "integer", "default": 20000},
 		},
 		"required": []string{"url"},
@@ -42,15 +43,14 @@ func (t *webFetchTool) Execute(ctx context.Context, args map[string]any) (string
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "Swiflow/1.0")
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Swiflow/1.0)")
+	resp, err := httputil.Do(req, 15*time.Second)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("http %d", resp.StatusCode)
+		return "", fmt.Errorf("http %d for %s", resp.StatusCode, rawURL)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	if err != nil {
@@ -77,26 +77,8 @@ func stripHTML(s string) string {
 	return wsRe.ReplaceAllString(s, " ")
 }
 
-type webSearchTool struct{}
-
-func (t *webSearchTool) Name() string        { return "web_search" }
-func (t *webSearchTool) Description() string { return "Search the web and return results." }
-func (t *webSearchTool) Parameters() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"query": map[string]any{"type": "string"},
-			"limit": map[string]any{"type": "integer", "default": 5},
-		},
-		"required": []string{"query"},
-	}
-}
-func (t *webSearchTool) Execute(_ context.Context, _ map[string]any) (string, error) {
-	return "", fmt.Errorf("web search is not configured in this build")
-}
-
 // RegisterWeb registers the web tools.
-func RegisterWeb(r *Registry) {
+func RegisterWeb(r *Registry, opts WebOptions) {
 	r.Register(&webFetchTool{})
-	r.Register(&webSearchTool{})
+	r.Register(&webSearchTool{opts: opts})
 }

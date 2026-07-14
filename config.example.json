@@ -12,6 +12,8 @@
     "exec_enabled": false,
     "browser_enabled": false,
     "browser_headless": true,
-    "web_search_provider": ""
+    "search_provider": "duckduckgo",
+    "search_api_key": "",
+    "search_base_url": ""
   }
 }

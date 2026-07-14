@@ -22,27 +22,43 @@ const layout = useLayoutStore()
 
     <!-- Main content area -->
     <div class="flex-1 flex min-h-0 overflow-hidden">
-      <!-- Left: keep each tab mounted while switching -->
-      <div class="flex-1 min-w-0 overflow-hidden relative">
+      <!-- Left: non-chat content tabs -->
+      <div
+        v-show="!layout.isChatTabActive"
+        class="flex-1 min-w-0 overflow-hidden relative"
+      >
         <div
           v-for="tab in layout.tabs"
           :key="tab.id"
-          v-show="tab.id === layout.activeTabId"
+          v-show="tab.id === layout.activeTabId && tab.type !== 'chat'"
           class="absolute inset-0 overflow-hidden"
         >
-          <WelcomeView v-if="tab.type === 'welcome'" />
+          <WelcomeView v-if="tab.type === 'home'" />
           <FilePreview v-else-if="tab.type === 'file'" :path="tab.path || ''" />
           <ExploreView v-else-if="tab.type === 'explore'" :path="tab.path" />
           <SettingsView v-else-if="tab.type === 'settings'" />
         </div>
       </div>
 
-      <!-- Resize handle -->
-      <ResizeHandle v-if="layout.chatPanelOpen" />
-
-      <!-- Right: Chat panel -->
+      <!-- Maximized chat tabs (one panel per session; same session = one tab) -->
       <div
-        v-if="layout.chatPanelOpen"
+        v-show="layout.isChatTabActive"
+        class="flex-1 min-w-0 bg-white overflow-hidden relative"
+      >
+        <div
+          v-for="tab in layout.chatTabs"
+          :key="tab.id"
+          v-show="tab.id === layout.activeTabId"
+          class="absolute inset-0 overflow-hidden"
+        >
+          <ChatPanel expanded :session-key="tab.path!" />
+        </div>
+      </div>
+
+      <!-- Sidebar chat (unmounted while a chat tab is focused to avoid dual SSE) -->
+      <ResizeHandle v-if="layout.showChatSidebar" />
+      <div
+        v-if="layout.showChatSidebar"
         class="shrink-0 bg-white overflow-hidden"
         :style="{ width: layout.chatPanelWidth + 'px' }"
       >

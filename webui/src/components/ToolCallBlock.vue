@@ -35,7 +35,10 @@ const intent = computed(() => {
       const act = pick(a, 'action')
       if (act === 'navigate') return '浏览器打开 ' + trim(pick(a, 'url'), 50)
       if (act === 'screenshot') return '浏览器截图'
-      if (act === 'click') return '浏览器点击 ' + trim(pick(a, 'selector'), 40)
+      if (act === 'click') {
+        const tip = pick(a, 'text') || pick(a, 'selector')
+        return '浏览器点击 ' + trim(tip, 40)
+      }
       if (act === 'type') return '浏览器输入 ' + trim(pick(a, 'selector'), 40)
       return '浏览器 ' + act
     }

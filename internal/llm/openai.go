@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/OptLTD/swiflow/internal/httputil"
 )
 
 // OpenAIProvider talks to any OpenAI-compatible /chat/completions endpoint.
@@ -39,7 +41,7 @@ func NewOpenAIProvider(name, apiBase, apiKey, defaultModel string) *OpenAIProvid
 		apiBase:      apiBase,
 		apiKey:       apiKey,
 		defaultModel: defaultModel,
-		client:       &http.Client{Timeout: 180 * time.Second},
+		client:       httputil.Client(180 * time.Second),
 	}
 }
 

@@ -58,9 +58,18 @@ function openEntry(entry: WorkspaceEntry) {
 <template>
   <div class="h-full flex flex-col bg-white">
     <!-- Path bar -->
-    <div class="shrink-0 border-b border-neutral-200 px-4 py-2 flex items-center gap-2 text-sm">
-      <LocalSvgIcon name="folder-open" class="text-neutral-400" />
-      <span class="font-mono text-neutral-700 truncate">{{ currentPath }}</span>
+    <div class="shrink-0 h-9 border-b border-neutral-200 px-3 flex items-center gap-2 text-sm">
+      <LocalSvgIcon name="folder-open" class="text-neutral-400 shrink-0" />
+      <span class="font-mono text-neutral-700 truncate flex-1 min-w-0">{{ currentPath }}</span>
+      <button
+        type="button"
+        class="cursor-pointer shrink-0 w-7 h-7 flex items-center justify-center rounded text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-default disabled:opacity-50"
+        title="刷新"
+        :disabled="loading"
+        @click="loadEntries(currentPath)"
+      >
+        <LocalSvgIcon name="refresh" :size="15" />
+      </button>
     </div>
 
     <!-- File list -->
@@ -74,10 +83,11 @@ function openEntry(entry: WorkspaceEntry) {
         <button
           v-for="entry in entries"
           :key="entry.path + entry.name"
-          class="w-full px-4 py-1.5 flex items-center gap-2.5 text-sm hover:bg-neutral-50 border-b border-neutral-100"
+          type="button"
+          class="cursor-pointer w-full px-4 py-1.5 flex items-center gap-2.5 text-sm hover:bg-neutral-50 border-b border-neutral-100"
           @click="openEntry(entry)"
         >
-          <LocalSvgIcon :name="entry.is_dir ? 'folder' : 'file'" class="text-neutral-400" />
+          <LocalSvgIcon :name="entry.is_dir ? 'folder' : 'file'" class="text-neutral-500" />
           <span class="truncate" :class="entry.is_dir ? 'font-medium' : ''">{{ entry.name }}</span>
           <span v-if="entry.is_dir && entry.name !== '..'" class="text-neutral-400">/</span>
           <span v-else-if="entry.size != null" class="ml-auto text-xs text-neutral-400 tabular-nums">

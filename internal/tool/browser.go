@@ -3,9 +3,11 @@ package tool
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -56,11 +58,11 @@ func (t *browserTool) Parameters() map[string]any {
 			},
 			"selector": map[string]any{
 				"type":        "string",
-				"description": "CSS selector for click or type.",
+				"description": "CSS selector for click or type. For click, optional when text is set (defaults to a,button,[role=button],input[type=button],input[type=submit]).",
 			},
 			"text": map[string]any{
 				"type":        "string",
-				"description": "Text to type when action is type.",
+				"description": "For type: text to input. For click: match element by visible text (substring).",
 			},
 			"expression": map[string]any{
 				"type":        "string",
@@ -176,19 +178,29 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		})
 	case "click":
 		sel, _ := args["selector"].(string)
-		if sel == "" {
-			return "", fmt.Errorf("selector is required for click")
+		text, _ := args["text"].(string)
+		if sel == "" && text == "" {
+			return "", fmt.Errorf("selector or text is required for click")
 		}
 		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
-			el, err := page.Element(sel)
+			el, label, err := findClickTarget(page, sel, text)
 			if err != nil {
 				return "", err
 			}
-			if err := el.Click(proto.InputMouseButtonLeft, 1); err != nil {
-				return "", err
+			// DOM click bypasses rod's WaitInteractable (hidden/covered nav links
+			// otherwise burn the full timeout as "context deadline exceeded").
+			if _, err := el.Eval(`() => { this.click(); return true }`); err != nil {
+				if err2 := el.Click(proto.InputMouseButtonLeft, 1); err2 != nil {
+					return "", fmt.Errorf("click %s: %w", label, wrapBrowserTimeout(err2))
+				}
 			}
-			_ = page.WaitStable(200 * time.Millisecond)
-			return "clicked " + sel, nil
+			_ = page.Timeout(3 * time.Second).WaitStable(200 * time.Millisecond)
+			info, _ := page.Info()
+			out := "clicked " + label
+			if info != nil && info.URL != "" {
+				out += "\nurl: " + info.URL
+			}
+			return out, nil
 		})
 	case "type":
 		sel, _ := args["selector"].(string)
@@ -199,10 +211,10 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
 			el, err := page.Element(sel)
 			if err != nil {
-				return "", err
+				return "", wrapBrowserTimeout(err)
 			}
 			if err := el.Input(text); err != nil {
-				return "", err
+				return "", wrapBrowserTimeout(err)
 			}
 			return fmt.Sprintf("typed into %s", sel), nil
 		})
@@ -243,6 +255,49 @@ func browserMaxChars(args map[string]any) int {
 		max = int(v)
 	}
 	return max
+}
+
+const defaultClickSelector = "a,button,[role=button],input[type=button],input[type=submit]"
+
+func findClickTarget(page *rod.Page, sel, text string) (*rod.Element, string, error) {
+	if sel == "" {
+		sel = defaultClickSelector
+	}
+	label := sel
+	if text != "" {
+		label = fmt.Sprintf("%s text=%q", sel, text)
+	}
+
+	var (
+		el  *rod.Element
+		err error
+	)
+	if text != "" {
+		el, err = page.ElementR(sel, jsLiteralRegex(text))
+	} else {
+		el, err = page.Element(sel)
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("element not found (%s): %w", label, wrapBrowserTimeout(err))
+	}
+	return el, label, nil
+}
+
+// jsLiteralRegex builds a JS /.../i pattern for rod ElementR.
+func jsLiteralRegex(s string) string {
+	escaped := regexp.QuoteMeta(s)
+	escaped = strings.ReplaceAll(escaped, "/", `\/`)
+	return "/" + escaped + "/i"
+}
+
+func wrapBrowserTimeout(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "context deadline exceeded") {
+		return fmt.Errorf("%w (element missing, hidden, or covered — try a tighter selector, text match, or navigate to the href directly)", err)
+	}
+	return err
 }
 
 // BrowserOptions configures the browser tool.

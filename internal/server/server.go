@@ -20,6 +20,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/store"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/internal/window"
 )
 
 // Server is the HTTP API server.
@@ -32,11 +33,12 @@ type Server struct {
 	mcp    *mcpclient.Manager
 	cron   *schedule.Scheduler
 	events *sesshub.Hub
+	window *window.Bridge
 }
 
 // New constructs a server.
-func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *sesshub.Hub) *Server {
-	return &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events}
+func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *sesshub.Hub, win *window.Bridge) *Server {
+	return &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, window: win}
 }
 
 // Handler returns the root http.Handler.
@@ -87,6 +89,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/workspace/download", s.downloadFile)
 	mux.HandleFunc("POST /api/workspace/download", s.downloadFile)
 	mux.HandleFunc("POST /api/workspace/upload", s.uploadWorkspace)
+
+	mux.HandleFunc("POST /api/window/reply", s.windowReply)
 
 	var h http.Handler = mux
 	h = s.requestLogMiddleware(h)
@@ -491,20 +495,53 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	ctx := r.Context()
-	err := s.runner.Run(ctx, key, in.AgentKey, in.Message, func(ev agent.Event) {
+	emit := func(ev agent.Event) {
 		data, _ := json.Marshal(ev)
 		_, werr := w.Write([]byte("data: " + string(data) + "\n\n"))
 		if werr == nil {
 			flusher.Flush()
 		}
-	})
+	}
+	if s.window != nil {
+		s.window.BindEmit(key, func(we window.Event) {
+			emit(agent.Event{
+				Type:      we.Type,
+				ID:        we.ID,
+				Name:      we.Name,
+				Arguments: we.Arguments,
+			})
+		})
+		defer s.window.UnbindEmit(key)
+	}
+	err := s.runner.Run(ctx, key, in.AgentKey, in.Message, emit)
 	if err != nil && err != agent.ErrBusy {
 		slog.Error("chat.run", "session", key, "error", err)
-		ev := agent.Event{Type: "error", Error: err.Error()}
-		data, _ := json.Marshal(ev)
-		_, _ = w.Write([]byte("data: " + string(data) + "\n\n"))
-		flusher.Flush()
+		emit(agent.Event{Type: "error", Error: err.Error()})
 	}
+}
+
+func (s *Server) windowReply(w http.ResponseWriter, r *http.Request) {
+	if s.window == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "window bridge unavailable"})
+		return
+	}
+	var in struct {
+		ID     string `json:"id"`
+		Result string `json:"result"`
+		Error  string `json:"error"`
+	}
+	if !bindJSON(w, r, &in) {
+		return
+	}
+	if in.ID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	if err := s.window.Reply(in.ID, in.Result, in.Error); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {

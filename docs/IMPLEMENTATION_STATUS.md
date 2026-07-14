@@ -24,6 +24,6 @@ Build chain, tests, CI, frontend features — see prior sections in git history.
 | Item | Phase |
 |------|-------|
 | Subagents | Phase 2 (not yet) |
-| `web_search` provider integration | Phase 1 stub |
+| `web_search` provider integration | done (`duckduckgo` / `brave` / `searxng`) |
 | Postgres / multi-tenancy | Phase 3 |
 | OTel / rate limiting | Phase 4 |

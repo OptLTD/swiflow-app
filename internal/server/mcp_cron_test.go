@@ -43,7 +43,7 @@ func newAPIEnv(t *testing.T) *apiEnv {
 	events := sesshub.New()
 	cron := schedule.New(st, runner, events)
 
-	srv := server.New(cfg, st, runner, reg, skills, mcpMgr, cron, events)
+	srv := server.New(cfg, st, runner, reg, skills, mcpMgr, cron, events, nil)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 

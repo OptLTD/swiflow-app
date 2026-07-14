@@ -27,10 +27,13 @@ type Config struct {
 
 // ToolsConfig controls optional tools.
 type ToolsConfig struct {
-	ExecEnabled       bool   `json:"exec_enabled"`
-	WebSearchProvider string `json:"web_search_provider"`
-	BrowserEnabled    bool   `json:"browser_enabled"`
-	BrowserHeadless   bool   `json:"browser_headless"`
+	ExecEnabled     bool `json:"exec_enabled"`
+	BrowserEnabled  bool `json:"browser_enabled"`
+	BrowserHeadless bool `json:"browser_headless"`
+	// web search
+	SearchProvider string `json:"search_provider"` // duckduckgo|brave|searxng; empty = disabled
+	SearchBaseURL  string `json:"search_base_url"` // searxng base URL
+	SearchAPIKey   string `json:"search_api_key"`  // brave (or similar)
 }
 
 // Default returns sensible local defaults.
@@ -101,6 +104,15 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("SWIFLOW_BROWSER"); v != "" {
 		cfg.Tools.BrowserEnabled = v == "1" || v == "true"
+	}
+	if v := os.Getenv("SWIFLOW_SEARCH_PROVIDER"); v != "" {
+		cfg.Tools.SearchProvider = v
+	}
+	if v := os.Getenv("SWIFLOW_SEARCH_API_KEY"); v != "" {
+		cfg.Tools.SearchAPIKey = v
+	}
+	if v := os.Getenv("SWIFLOW_SEARCH_BASE_URL"); v != "" {
+		cfg.Tools.SearchBaseURL = v
 	}
 }
 

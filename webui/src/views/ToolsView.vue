@@ -14,12 +14,13 @@ const groupLabels: Record<string, string> = {
   web: 'Web',
   browser: 'Browser',
   runtime: 'Runtime',
+  window: 'Window',
   skill: 'Skills',
   schedule: 'Scheduling',
   other: 'Other',
 }
 
-const groupOrder = ['fs', 'web', 'browser', 'runtime', 'skill', 'schedule', 'other']
+const groupOrder = ['fs', 'web', 'browser', 'runtime', 'window', 'skill', 'schedule', 'other']
 
 function toolGroup(name: string): string {
   if (runtimeTools.has(name)) return 'runtime'

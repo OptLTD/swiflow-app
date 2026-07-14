@@ -351,7 +351,7 @@ produces a markdown list injected into the system prompt. Disabled slugs (from
 ### 6.7 `agent`
 ```go
 type Event struct {
-    Type      string         // delta|thinking|tool_call|tool_result|done|error
+    Type      string         // delta|thinking|tool_call|tool_result|done|error|ui_request
     Content   string
     Thinking  string
     ID, Name  string
@@ -432,8 +432,15 @@ callback `onEvent`.
      newly set.
    - Emit `done`. Release guard. Return.
 
-**Loop exhausted:** if `MaxRounds` reached without a final answer → emit `error`
-("run exceeded max rounds"), release guard, return.
+**Stop policy (goal first, budget last):**
+1. **Goal reached** — model returns a final answer with no tool calls → `done`.
+2. **Diverged / stalled** — identical tool calls repeated 3×, or 3 consecutive
+   tool errors → force a no-tool wrap-up that explains the stuck state (not a
+   hard `error`).
+3. **Soft budget** — after ~75% of rounds, nudge the model to prefer finishing.
+4. **Hard safety fuse** — last round withholds tools and asks for a progress
+   summary. `MaxRounds` (default 32) is only a runaway guard, not the normal
+   completion signal.
 
 **Event ordering guarantees:** `delta`/`thinking` stream during a round;
 `tool_call` precedes its `tool_result`; exactly one terminal event (`done` or
@@ -525,12 +532,16 @@ patterns (`^[a-zA-Z0-9_-]+$`); dots are not permitted by OpenAI-compatible APIs.
 - Security: SSRF guard enforced; non-http(s) rejected.
 
 ### `web_search`
-- Description: "Search the web and return results."
-- Parameters: `query` (string, required), `limit` (int, default 5).
-- Behavior: Phase 1 may stub this to return an error "web search not configured"
-  unless a search backend is provided in config; if configured, query it and
-  return titles+URLs+snippets. (Config key `Tools.WebSearchProvider` optional;
-  Phase 1 default = disabled.)
+- Description: "Search the web and return titles, URLs, and snippets."
+- Parameters: `query` (string, required), `limit` (int, default 5, max 10).
+- Behavior: disabled when `tools.web_search_provider` is empty (returns
+  "web search is not configured"). Supported providers:
+  - `duckduckgo` — HTML results (no API key); falls back to Instant Answer API
+  - `brave` — Brave Search API; requires `tools.web_search_api_key`
+  - `searxng` — self-hosted SearXNG; requires `tools.web_search_url`
+  Returns a numbered list of title / URL / snippet. Env overlays:
+  `SWIFLOW_SEARCH_PROVIDER`, `SWIFLOW_SEARCH_API_KEY`,
+  `SWIFLOW_SEARCH_BASE_URL`.
 
 ### `cmd_run`
 - Description: "Run a shell command in the workspace."
@@ -557,6 +568,24 @@ patterns (`^[a-zA-Z0-9_-]+$`); dots are not permitted by OpenAI-compatible APIs.
   are not registered. When enabled, run with
   `sh -c` in the workspace dir, capture stdout+stderr, cap output 256 KB, enforce
   timeout via `context`. Returns combined output.
+
+### `window_opened`
+- Description: "List file tabs currently open in the user's Swiflow window."
+- Parameters: none (`{}`).
+- Behavior: SSE RPC `ui_request` to the connected UI; UI returns JSON
+  `{ files:[{path,title}], count }` (Welcome/Explore/Settings excluded).
+  Errors if no UI is bound for the session or reply times out (~8s).
+
+### `window_active`
+- Description: "Get the file tab currently focused in the user's Swiflow window."
+- Parameters: none (`{}`).
+- Behavior: same RPC; UI returns `{ path, title }` or `{ path:null, reason }`.
+
+### `window_open`
+- Description: "Open (or focus) a workspace file in the user's Swiflow window."
+- Parameters: `path` (string, required, workspace-relative).
+- Behavior: sandbox-resolve; require an existing non-directory file; then SSE
+  RPC so the UI calls `openFile(path)`. Returns `{ opened:true, path }`.
 
 ### `skill_use`
 - Description: "Load and apply a skill's instructions by slug."
@@ -630,10 +659,16 @@ routes serve embedded `webui/dist` (SPA fallback to `index.html`).
   - `{"type":"delta","content":"..."}` `{"type":"thinking","content":"..."}`
   - `{"type":"tool_call","id":"...","name":"...","arguments":{...}}`
   - `{"type":"tool_result","id":"...","name":"...","result":"...","isError":false}`
+  - `{"type":"ui_request","id":"...","name":"window_opened|window_active|window_open","arguments":{...}}` — mid-run RPC to the UI (not persisted as a chat message); UI must `POST /api/window/reply`.
   - `{"type":"done","title":"..."?}` `{"type":"error","error":"..."}`
   - A terminal event (`done`/`error`) ends the stream.
   - If the session is busy → a single `error` event `{"type":"error","error":"session busy"}` and close (HTTP 200; the stream is already started). (Alternative: `409` before streaming. Implementer picks; document the choice.)
 - `POST /api/sessions/{key}/abort` → `200 {"aborted": bool}`. Cancels the in-flight run for that session if any.
+
+### 10.4.1 Window UI reply
+- `POST /api/window/reply` body `{"id":"...","result":"..."?,"error":"..."?}` → `200 {"ok":true}`.
+  Completes a pending `ui_request` from `window_*` tools. `result` is a JSON
+  string forwarded to the tool; `error` fails the tool call.
 
 ### 10.5 Tools
 - `GET /api/tools` → `{"tools":[{name, description, enabled, parameters}]}`.
@@ -663,7 +698,9 @@ JSON file with env overlay (env wins). Defaults shown.
 | `allowed_origins` | — | `[]` | CORS; empty = allow all |
 | `web_dist_dir` | — | (embedded) | override for dev |
 | `tools.exec_enabled` | `SWIFLOW_EXEC` | `false` | register `cmd_run`, `exec_run`, `python_run`, `node_run` if true |
-| `tools.web_search_provider` | — | `""` | disabled if empty |
+| `tools.search_provider` | `SWIFLOW_SEARCH_PROVIDER` | `""` | `duckduckgo` \| `brave` \| `searxng`; empty disables |
+| `tools.search_api_key` | `SWIFLOW_SEARCH_API_KEY` | `""` | Brave Search API key |
+| `tools.search_base_url` | `SWIFLOW_SEARCH_BASE_URL` | `""` | SearXNG base URL |
 
 `config.example.json` ships documenting these. `Load` errors if `auth_token` or
 `encryption_key` are empty.

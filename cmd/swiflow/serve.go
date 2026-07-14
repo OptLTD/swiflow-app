@@ -25,6 +25,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store/sqlite"
 	"github.com/OptLTD/swiflow/internal/tool"
+	"github.com/OptLTD/swiflow/internal/window"
 )
 
 var autoMigrate bool
@@ -82,9 +83,16 @@ func runServe() error {
 
 	toolsReg := tool.NewRegistry()
 	tool.RegisterFS(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
-	tool.RegisterWeb(toolsReg)
+	tool.RegisterWeb(toolsReg, tool.WebOptions{
+		SearchProvider: cfg.Tools.SearchProvider,
+		SearchBaseURL:  cfg.Tools.SearchBaseURL,
+		SearchAPIKey:   cfg.Tools.SearchAPIKey,
+	})
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
+
+	winBridge := window.NewBridge()
+	tool.RegisterWindow(toolsReg, winBridge, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
 
 	browserPool := browser.NewPool(cfg.Tools.BrowserHeadless)
 	defer browserPool.Close()
@@ -133,7 +141,7 @@ func runServe() error {
 	}
 	defer cronSched.Stop()
 
-	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events)
+	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge)
 	httpServer := &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           srv.Handler(),

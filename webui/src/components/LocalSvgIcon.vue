@@ -2,22 +2,24 @@
 withDefaults(
   defineProps<{
     name:
-      | 'folder'
-      | 'file'
-      | 'settings'
-      | 'chat'
-      | 'chat-off'
-      | 'close'
-      | 'stop'
-      | 'folder-open'
-      | 'send'
-      | 'home'
-      | 'provider'
-      | 'back'
-      | 'history'
-      | 'refresh'
-      | 'edit'
-      | 'lock'
+    | 'file'
+    | 'chat'
+    | 'stop'
+    | 'send'
+    | 'home'
+    | 'back'
+    | 'edit'
+    | 'lock'
+    | 'close'
+    | 'folder'
+    | 'chat-off'
+    | 'history'
+    | 'refresh'
+    | 'provider'
+    | 'maximize'
+    | 'minimize'
+    | 'settings'
+    | 'folder-open'
     size?: number
   }>(),
   { size: 16 },
@@ -87,8 +89,9 @@ withDefaults(
       <path d="M3 4.5h10M3 8h7M3 11.5h4" />
     </template>
     <template v-else-if="name === 'refresh'">
-      <path d="M13 8a5 5 0 1 1-1.2-3.3" />
-      <path d="M13 3.5V7h-3.5" />
+      <!-- open arc (gap at top-right) + arrowhead -->
+      <path d="M12.8 5.2A4.8 4.8 0 1 0 13.5 9.5" />
+      <path d="M12.8 2.4v3.2h-3.2" />
     </template>
     <template v-else-if="name === 'edit'">
       <path d="M3.5 12.5l1.2-4.2L11 2.5l2.5 2.5-6.3 6.3L3.5 12.5z" />
@@ -97,6 +100,19 @@ withDefaults(
     <template v-else-if="name === 'lock'">
       <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
       <path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7" />
+    </template>
+    <template v-else-if="name === 'maximize'">
+      <!-- frame + large outbound arrows (readable at ~14px) -->
+      <rect x="1.75" y="1.75" width="12.5" height="12.5" rx="1.5" />
+      <path d="M8.5 8.5L3.75 3.75" />
+      <path d="M3.75 6.75V3.75H6.75" />
+      <path d="M7.5 7.5L12.25 12.25" />
+      <path d="M12.25 9.25V12.25H9.25" />
+    </template>
+    <template v-else-if="name === 'minimize'">
+      <!-- square frame + inset right bar (~1/3 width, gap from border) -->
+      <rect x="2" y="2" width="12" height="12" rx="1.5" />
+      <rect x="8.5" y="3.5" width="4" height="9" rx="0.75" fill="currentColor" stroke="none" />
     </template>
   </svg>
 </template>

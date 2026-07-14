@@ -86,6 +86,12 @@ export const api = {
     req<{ path: string; content: string; truncated?: boolean }>('GET', `/workspace/read?path=${encodeURIComponent(path)}`),
   downloadWorkspaceFile: (path: string) => downloadWorkspaceFile(path),
   uploadWorkspace: (path: string, files: File[]) => uploadWorkspaceFiles(path, files),
+  replyWindow: (id: string, result?: string, error?: string) =>
+    req<{ ok: boolean }>('POST', '/window/reply', {
+      id,
+      ...(result !== undefined ? { result } : {}),
+      ...(error !== undefined ? { error } : {}),
+    }),
 }
 
 function decodeBase64Payload(data: { encoding: string; content: string }): ArrayBuffer {

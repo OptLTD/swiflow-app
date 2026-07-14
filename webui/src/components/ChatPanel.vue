@@ -2,23 +2,49 @@
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { api, chat, watchSession } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useChatStore } from '../stores/chat'
+import { useLayoutStore } from '../stores/layout'
 import { DEFAULT_AGENT_KEY } from '../constants/defaults'
-import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js/lib/core'
-import jsonLang from 'highlight.js/lib/languages/json'
-import python from 'highlight.js/lib/languages/python'
-import bash from 'highlight.js/lib/languages/bash'
+import { renderMarkdown } from '../lib/markdown'
 import ToolCallBlock from '../components/ToolCallBlock.vue'
 import ThinkingBlock from '../components/ThinkingBlock.vue'
 import LocalSvgIcon from '../components/LocalSvgIcon.vue'
+import { handleUiRequest } from '../lib/windowBridge'
 import type { ChatEvent, Message, Session } from '../types'
 
-hljs.registerLanguage('bash', bash)
-hljs.registerLanguage('json', jsonLang)
-hljs.registerLanguage('python', python)
+const props = withDefaults(
+  defineProps<{
+    expanded?: boolean
+    /** Bound session for a maximized chat tab; omit for the sidebar panel. */
+    sessionKey?: string
+  }>(),
+  { expanded: false },
+)
 
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const auth = useAuthStore()
+const chatStore = useChatStore()
+const layout = useLayoutStore()
+
+const isTabMode = computed(() => !!props.sessionKey)
+const localTitle = ref('')
+
+function maximizeChat() {
+  let key = chatStore.currentKey
+  if (!key) {
+    key = 'sess-' + Math.random().toString(36).slice(2, 10)
+    chatStore.setSession(key, '')
+  }
+  layout.openChatTab(key, chatStore.currentTitle || 'New Chat')
+}
+
+function restoreChatSidebar() {
+  if (props.sessionKey) {
+    chatStore.setSession(props.sessionKey, localTitle.value || '')
+    layout.exitChatTab(props.sessionKey)
+  } else {
+    layout.exitChatTab()
+  }
+}
 
 interface Msg {
   role: string
@@ -32,20 +58,32 @@ interface Msg {
 }
 
 const sessions = ref<Session[]>([])
-const currentKey = ref('')
+const currentKey = computed(() => (isTabMode.value ? props.sessionKey || '' : chatStore.currentKey))
 const showHistory = ref(false)
 const messages = ref<Msg[]>([])
 const input = ref('')
 const streaming = ref(false)
 const error = ref('')
 let watchAbort: AbortController | null = null
+let bootstrapped = false
+/** Key whose messages are currently loaded in this panel. */
+let loadedKey = ''
 
 const headerTitle = computed(() => {
   if (showHistory.value) return 'History'
   if (!currentKey.value) return 'New Chat'
-  const s = sessions.value.find((x) => x.key === currentKey.value)
-  return s?.title || currentKey.value
+  if (isTabMode.value) return localTitle.value || currentKey.value
+  return chatStore.currentTitle || currentKey.value
 })
+
+function setSessionMeta(key: string, title: string) {
+  if (isTabMode.value) {
+    localTitle.value = title
+    if (title) layout.renameChatTab(key, title)
+  } else {
+    chatStore.setSession(key, title)
+  }
+}
 
 function openHistory() {
   showHistory.value = true
@@ -57,6 +95,13 @@ function closeHistory() {
 }
 
 async function pickSession(key: string) {
+  if (isTabMode.value) {
+    // Another (or same) session opens as its own tab; same key reuses that tab.
+    const known = sessions.value.find((s) => s.key === key)
+    layout.openChatTab(key, known?.title || '')
+    showHistory.value = false
+    return
+  }
   await selectSession(key)
   showHistory.value = false
 }
@@ -65,10 +110,14 @@ async function loadSessions() {
   try {
     const r = await api.listSessions()
     sessions.value = r.sessions || []
+    if (!currentKey.value) return
+    const s = sessions.value.find((x) => x.key === currentKey.value)
+    if (s?.title) setSessionMeta(s.key, s.title)
   } catch {}
 }
 
 function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Msg | null) => void) {
+  if (handleUiRequest(ev)) return
   if (ev.type === 'user') {
     messages.value.push({ role: 'user', content: ev.content || '' })
     streaming.value = true
@@ -162,26 +211,83 @@ function mapStoredMessages(raw: Message[]): Msg[] {
   return out
 }
 
-onMounted(() => {
-  if (auth.isAuthed) loadSessions()
-})
-
-watch(() => auth.isAuthed, (v) => {
-  if (v) loadSessions()
-})
-
 async function selectSession(key: string) {
+  if (!key) return
   stopWatch()
-  currentKey.value = key
+  const known = sessions.value.find((s) => s.key === key)
+  const fallbackTitle = isTabMode.value
+    ? localTitle.value
+    : key === chatStore.currentKey
+      ? chatStore.currentTitle
+      : ''
+  setSessionMeta(key, known?.title || fallbackTitle || '')
+  loadedKey = key
   messages.value = []
+  error.value = ''
   try {
     const r = await api.getSession(key)
     messages.value = mapStoredMessages(r.messages || [])
-    startWatch(key)
-  } catch (e: any) {
-    error.value = e.message
+    const title = r.session?.title || known?.title || ''
+    if (title) setSessionMeta(key, title)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // Draft key not yet on server — keep empty thread with this id.
+    if (!/not found|404/i.test(msg)) {
+      error.value = msg
+    }
+  }
+  startWatch(key)
+}
+
+async function restoreLastSession() {
+  await loadSessions()
+  const key = chatStore.currentKey
+  if (key) {
+    await selectSession(key)
+    return
+  }
+  if (sessions.value.length) {
+    await selectSession(sessions.value[0].key)
   }
 }
+
+async function bootstrap() {
+  if (!auth.isAuthed || bootstrapped) return
+  bootstrapped = true
+  if (props.sessionKey) {
+    await loadSessions()
+    await selectSession(props.sessionKey)
+    return
+  }
+  await restoreLastSession()
+}
+
+onMounted(() => {
+  bootstrap()
+})
+
+watch(() => auth.isAuthed, (v) => {
+  if (v) {
+    bootstrapped = false
+    bootstrap()
+  } else {
+    stopWatch()
+    messages.value = []
+    loadedKey = ''
+    bootstrapped = false
+  }
+})
+
+// Sidebar: external session switches (e.g. Welcome when not opening a tab)
+watch(
+  () => chatStore.currentKey,
+  (key) => {
+    if (isTabMode.value) return
+    if (!bootstrapped || !auth.isAuthed) return
+    if (!key || key === loadedKey) return
+    selectSession(key)
+  },
+)
 
 function stopWatch() {
   watchAbort?.abort()
@@ -197,7 +303,7 @@ async function startWatch(key: string) {
     try {
       await watchSession(key, (ev) => {
         if (streaming.value) return
-        handleChatEvent(ev, () => null, (m) => { /* no-op */ })
+        handleChatEvent(ev, () => null, (_m) => { /* no-op */ })
       }, ac.signal)
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return
@@ -208,16 +314,29 @@ async function startWatch(key: string) {
 }
 
 function newSession() {
+  const key = 'sess-' + Math.random().toString(36).slice(2, 10)
+  if (isTabMode.value) {
+    layout.openChatTab(key, 'New Chat')
+    showHistory.value = false
+    return
+  }
   stopWatch()
-  currentKey.value = 'sess-' + Math.random().toString(36).slice(2, 10)
+  chatStore.setSession(key, '')
+  loadedKey = key
   messages.value = []
+  error.value = ''
   showHistory.value = false
-  startWatch(currentKey.value)
+  startWatch(key)
 }
 
 async function send() {
   if (!input.value.trim() || streaming.value) return
-  if (!currentKey.value) newSession()
+  if (!currentKey.value) {
+    if (isTabMode.value) return
+    newSession()
+  }
+  const key = currentKey.value
+  if (!key) return
   const text = input.value
   input.value = ''
   messages.value.push({ role: 'user', content: text })
@@ -227,7 +346,7 @@ async function send() {
   await nextTick()
   scrollBottom()
   try {
-    await chat(currentKey.value, text, DEFAULT_AGENT_KEY, (ev) => {
+    await chat(key, text, DEFAULT_AGENT_KEY, (ev) => {
       handleChatEvent(ev, () => cur, (m) => { cur = m })
     })
   } catch (e: any) {
@@ -251,19 +370,7 @@ function scrollBottom() {
 }
 
 function render(content: string) {
-  const html = md.render(content || '')
-  const el = document.createElement('div')
-  el.innerHTML = html
-  el.querySelectorAll('pre code').forEach((node) => {
-    hljs.highlightElement(node as HTMLElement)
-  })
-  el.querySelectorAll('table').forEach((table) => {
-    const wrap = document.createElement('div')
-    wrap.className = 'prose-table-wrap'
-    table.parentNode?.insertBefore(wrap, table)
-    wrap.appendChild(table)
-  })
-  return el.innerHTML
+  return renderMarkdown(content)
 }
 
 function gapClass(m: Msg, i: number): string {
@@ -278,69 +385,97 @@ function gapClass(m: Msg, i: number): string {
   <div class="h-full flex flex-col min-w-0">
     <!-- Header -->
     <div
-      class="shrink-0 h-9 border-b border-neutral-200 flex items-center justify-between gap-2"
-      :class="showHistory ? 'pl-1.5 pr-2' : 'px-3'"
+      class="shrink-0 w-full"
+      :class="props.expanded ? 'max-w-[960px] mx-auto px-4' : 'border-b border-neutral-200'"
     >
-      <div class="flex items-center gap-1 min-w-0">
-        <button
-          v-if="showHistory"
-          type="button"
-          class="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
-          title="Back"
-          @click="closeHistory"
-        >
-          <LocalSvgIcon name="back" :size="16" />
-        </button>
-        <span class="text-sm font-medium truncate leading-none">{{ headerTitle }}</span>
-      </div>
-      <div class="shrink-0 flex items-center gap-0.5">
-        <button
-          v-if="streaming && !showHistory"
-          type="button"
-          class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-500"
-          title="Abort"
-          @click="abortRun"
-        >
-          <LocalSvgIcon name="stop" :size="13" />
-        </button>
-        <button
-          v-if="!showHistory"
-          type="button"
-          class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
-          title="History"
-          @click="openHistory"
-        >
-          <LocalSvgIcon name="history" :size="16" />
-        </button>
-        <button
-          v-else
-          type="button"
-          class="h-7 px-2.5 text-xs rounded bg-neutral-800 text-white hover:bg-neutral-700"
-          @click="newSession"
-        >New Chat</button>
+      <div
+        class="h-9 flex items-center justify-between gap-2"
+        :class="[
+          props.expanded ? 'border-b border-neutral-200' : '',
+          showHistory ? 'pl-1.5 pr-2' : (props.expanded ? '' : 'px-3'),
+        ]"
+      >
+        <div class="flex items-center gap-1 min-w-0">
+          <button
+            v-if="showHistory"
+            type="button"
+            class="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
+            title="Back"
+            @click="closeHistory"
+          >
+            <LocalSvgIcon name="back" :size="16" />
+          </button>
+          <span class="text-sm font-medium truncate leading-none">{{ headerTitle }}</span>
+        </div>
+        <div class="shrink-0 flex items-center gap-0.5">
+          <button
+            v-if="streaming && !showHistory"
+            type="button"
+            class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-500"
+            title="Abort"
+            @click="abortRun"
+          >
+            <LocalSvgIcon name="stop" :size="13" />
+          </button>
+          <button
+            v-if="!showHistory && !props.expanded"
+            type="button"
+            class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
+            title="Maximize chat"
+            @click="maximizeChat"
+          >
+            <LocalSvgIcon name="maximize" :size="16" />
+          </button>
+          <button
+            v-if="!showHistory && props.expanded"
+            type="button"
+            class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
+            title="Restore sidebar"
+            @click="restoreChatSidebar"
+          >
+            <LocalSvgIcon name="minimize" :size="16" />
+          </button>
+          <button
+            v-if="!showHistory"
+            type="button"
+            class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
+            title="History"
+            @click="openHistory"
+          >
+            <LocalSvgIcon name="history" :size="16" />
+          </button>
+          <button
+            v-else
+            type="button"
+            class="h-7 px-2.5 text-xs rounded bg-neutral-800 text-white hover:bg-neutral-700"
+            @click="newSession"
+          >New Chat</button>
+        </div>
       </div>
     </div>
 
     <!-- History list -->
     <div v-if="showHistory" class="flex-1 overflow-y-auto">
-      <div v-if="!sessions.length" class="p-6 text-base text-neutral-400 text-center">No sessions yet</div>
-      <div v-else class="py-1">
-        <button
-          v-for="s in sessions"
-          :key="s.key"
-          type="button"
-          class="w-full text-left pl-3 pr-4 py-2.5 text-base hover:bg-neutral-50 border-b border-neutral-100 flex items-center gap-2"
-          :class="s.key === currentKey ? 'bg-neutral-50 font-medium' : ''"
-          @click="pickSession(s.key)"
-        >
-          <span class="truncate flex-1">{{ s.title || s.key }}</span>
-        </button>
+      <div class="w-full" :class="props.expanded ? 'max-w-[960px] mx-auto' : ''">
+        <div v-if="!sessions.length" class="p-6 text-base text-neutral-400 text-center">No sessions yet</div>
+        <div v-else class="py-1">
+          <button
+            v-for="s in sessions"
+            :key="s.key"
+            type="button"
+            class="w-full text-left pl-3 pr-4 py-2.5 text-base hover:bg-neutral-50 border-b border-neutral-100 flex items-center gap-2"
+            :class="s.key === currentKey ? 'bg-neutral-50 font-medium' : ''"
+            @click="pickSession(s.key)"
+          >
+            <span class="truncate flex-1">{{ s.title || s.key }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Messages -->
-    <div v-else ref="scrollEl" class="flex-1 overflow-y-auto p-4">
-      <div class="max-w-[960px] mx-auto">
+    <div v-else ref="scrollEl" class="flex-1 overflow-y-auto">
+      <div class="w-full p-4" :class="props.expanded ? 'max-w-[960px] mx-auto' : ''">
         <div v-if="!auth.isAuthed" class="text-neutral-500">Authenticate to start chatting.</div>
         <template v-else>
           <div v-for="(m, i) in messages" :key="i" :class="gapClass(m, i)">
@@ -363,9 +498,18 @@ function gapClass(m: Msg, i: number): string {
       </div>
     </div>
 
-    <!-- Input -->
-    <div v-if="!showHistory" class="border-t border-neutral-200 p-3">
-      <div class="relative">
+    <!-- Input: same column width as messages (border lives on the column, not full page) -->
+    <div
+      v-if="!showHistory"
+      class="shrink-0 w-full"
+      :class="props.expanded ? 'max-w-[960px] mx-auto px-4 pb-4' : ''"
+    >
+      <div
+        class="relative"
+        :class="props.expanded
+          ? 'border border-neutral-200 rounded-xl p-3'
+          : 'border-t border-neutral-200 p-3'"
+      >
         <textarea
           v-model="input"
           @keydown.enter.exact.prevent="send"
@@ -376,7 +520,7 @@ function gapClass(m: Msg, i: number): string {
         <button
           v-if="!streaming"
           type="button"
-          class="absolute right-0 bottom-0 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
+          class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
           :disabled="!input.trim()"
           title="Send"
           @click="send"
@@ -386,7 +530,7 @@ function gapClass(m: Msg, i: number): string {
         <button
           v-else
           type="button"
-          class="absolute right-0 bottom-0 w-8 h-8 flex items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-500"
+          class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-500"
           title="Abort"
           @click="abortRun"
         >

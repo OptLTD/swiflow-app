@@ -7,7 +7,7 @@ import { html } from '@codemirror/lang-html'
 import { yaml } from '@codemirror/lang-yaml'
 import type { Extension } from '@codemirror/state'
 
-export type PreviewKind = 'text' | 'excel' | 'pdf' | 'doc' | 'unsupported'
+export type PreviewKind = 'text' | 'markdown' | 'excel' | 'pdf' | 'doc' | 'unsupported'
 
 const BINARY_KINDS: Record<string, PreviewKind> = {
   xlsx: 'excel',
@@ -17,6 +17,8 @@ const BINARY_KINDS: Record<string, PreviewKind> = {
   docx: 'doc',
   doc: 'doc',
 }
+
+const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown'])
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'json', 'yaml', 'yml', 'xml', 'html', 'htm', 'css',
@@ -58,6 +60,7 @@ export function fileExtension(path: string): string {
 export function previewKind(path: string): PreviewKind {
   const ext = fileExtension(path)
   if (BINARY_KINDS[ext]) return BINARY_KINDS[ext]
+  if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
   if (TEXT_EXTENSIONS.has(ext) || !ext) return 'text'
   return 'unsupported'
 }

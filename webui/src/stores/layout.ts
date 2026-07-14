@@ -2,24 +2,49 @@ import { defineStore } from 'pinia'
 
 export interface Tab {
   id: string
-  type: 'welcome' | 'file' | 'explore' | 'settings'
+  type: 'home' | 'file' | 'explore' | 'settings' | 'chat'
   title: string
+  /** File path, explore path, or chat session key. */
   path?: string
   closable: boolean
 }
 
-const WELCOME_TAB: Tab = { id: 'welcome', type: 'welcome', title: 'Home', closable: false }
+const HOME_TAB: Tab = { 
+  id: 'home',
+  type: 'home',
+  title: 'Home',
+  closable: false
+}
+
+function chatTabId(sessionKey: string) {
+  return 'chat:' + sessionKey
+}
 
 export const useLayoutStore = defineStore('layout', {
   state: () => ({
+    tabs: [HOME_TAB],
+    explorePath: '.',
+    activeTabId: 'home',
     chatPanelOpen: true,
     chatPanelWidth: 380,
-    tabs: [WELCOME_TAB] as Tab[],
-    activeTabId: 'welcome',
-    explorePath: '.',
   }),
   getters: {
-    activeTab: (s) => s.tabs.find((t) => t.id === s.activeTabId) || WELCOME_TAB,
+    activeTab: (s) => s.tabs.find((t) => t.id === s.activeTabId) || HOME_TAB,
+    isChatTabActive: (s) => {
+      const t = s.tabs.find((tab) => tab.id === s.activeTabId)
+      return t?.type === 'chat'
+    },
+    /** Sidebar chat is hidden while any Chat tab is focused. */
+    showChatSidebar: (s) => {
+      const t = s.tabs.find((tab) => tab.id === s.activeTabId)
+      return s.chatPanelOpen && t?.type !== 'chat'
+    },
+    chatTabs: (s) => s.tabs.filter((t) => t.type === 'chat' && !!t.path),
+    openFiles: (s) => s.tabs.filter((t) => t.type === 'file' && !!t.path),
+    activeFilePath: (s) => {
+      const t = s.tabs.find((tab) => tab.id === s.activeTabId)
+      return t?.type === 'file' && t.path ? t.path : null
+    },
   },
   actions: {
     toggleChatPanel() {
@@ -51,9 +76,8 @@ export const useLayoutStore = defineStore('layout', {
       const idx = this.tabs.indexOf(tab)
       this.tabs.splice(idx, 1)
       if (this.activeTabId === id) {
-        // Activate the nearest tab
         const next = this.tabs[Math.min(idx, this.tabs.length - 1)]
-        this.activeTabId = next ? next.id : 'welcome'
+        this.activeTabId = next ? next.id : 'home'
       }
     },
 
@@ -91,6 +115,40 @@ export const useLayoutStore = defineStore('layout', {
         title: 'Settings',
         closable: true,
       })
+    },
+
+    /** Open a chat session as a main tab. Same path (session key) reuses the existing tab. */
+    openChatTab(sessionKey: string, title = '') {
+      if (!sessionKey) return
+      const id = chatTabId(sessionKey)
+      const existing = this.tabs.find((t) => t.id === id)
+      if (existing) {
+        if (title) existing.title = title
+        this.activeTabId = id
+        return
+      }
+      this.openTab({
+        id,
+        type: 'chat',
+        title: title || 'New Chat',
+        path: sessionKey,
+        closable: true,
+      })
+    },
+
+    renameChatTab(sessionKey: string, title: string) {
+      if (!sessionKey || !title) return
+      const tab = this.tabs.find((t) => t.id === chatTabId(sessionKey))
+      if (tab) tab.title = title
+    },
+
+    /** Close one maximized chat tab (default: active) and ensure sidebar can show. */
+    exitChatTab(sessionKey?: string) {
+      const tab = sessionKey
+        ? this.tabs.find((t) => t.type === 'chat' && t.path === sessionKey)
+        : this.tabs.find((t) => t.id === this.activeTabId && t.type === 'chat')
+      if (tab) this.closeTab(tab.id)
+      this.chatPanelOpen = true
     },
 
     setExplorePath(path: string) {

@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Tailwind v4 preflight no longer sets pointer on buttons */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+}
+
 html,
 body,
 #app {
@@ -41,22 +49,89 @@ html.desktop .header-tab-bar button {
 
 .prose-swiflow {
   font-size: 0.9375rem;
-  line-height: 1.65;
+  line-height: 1.7;
+  color: #262626;
 }
-.prose-swiflow p { margin: 0.4em 0; }
+.prose-swiflow > :first-child { margin-top: 0; }
+.prose-swiflow > :last-child { margin-bottom: 0; }
+.prose-swiflow p { margin: 0.65em 0; }
+.prose-swiflow h1,
+.prose-swiflow h2,
+.prose-swiflow h3,
+.prose-swiflow h4,
+.prose-swiflow h5,
+.prose-swiflow h6 {
+  font-weight: 650;
+  line-height: 1.3;
+  color: #171717;
+  margin: 1.25em 0 0.45em;
+}
+.prose-swiflow h1 {
+  font-size: 1.65em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #e5e5e5;
+}
+.prose-swiflow h2 {
+  font-size: 1.35em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid #f0f0f0;
+}
+.prose-swiflow h3 { font-size: 1.15em; }
+.prose-swiflow h4 { font-size: 1.05em; }
+.prose-swiflow a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-swiflow a:hover { color: #1d4ed8; }
+.prose-swiflow strong { font-weight: 650; color: #171717; }
+.prose-swiflow em { font-style: italic; }
+.prose-swiflow blockquote {
+  margin: 0.85em 0;
+  padding: 0.15em 0 0.15em 0.9em;
+  border-left: 3px solid #d4d4d4;
+  color: #525252;
+}
+.prose-swiflow blockquote p { margin: 0.35em 0; }
+.prose-swiflow ul,
+.prose-swiflow ol {
+  margin: 0.55em 0;
+  padding-left: 1.5em;
+}
+.prose-swiflow li { margin: 0.25em 0; }
+.prose-swiflow li > ul,
+.prose-swiflow li > ol { margin: 0.15em 0; }
+.prose-swiflow img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.4rem;
+  margin: 0.75em 0;
+}
 .prose-swiflow pre {
   background: #0f172a;
   color: #e2e8f0;
-  padding: 0.75rem;
-  border-radius: 0.4rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.5rem;
   overflow-x: auto;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  margin: 0.85em 0;
 }
-.prose-swiflow code { font-family: ui-monospace, SFMono-Regular, monospace; }
-.prose-swiflow ul, .prose-swiflow ol { margin: 0.4em 0; padding-left: 1.4em; }
-.prose-swiflow h1, .prose-swiflow h2, .prose-swiflow h3 { font-weight: 600; margin: 0.6em 0 0.3em; }
-
-/* Horizontal rules */
+.prose-swiflow pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+  border-radius: 0;
+}
+.prose-swiflow :not(pre) > code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  background: #f5f5f5;
+  color: #b45309;
+  padding: 0.12em 0.4em;
+  border-radius: 0.3rem;
+}
 .prose-swiflow hr {
   border: none;
   height: 1px;
@@ -64,9 +139,9 @@ html.desktop .header-tab-bar button {
   background: linear-gradient(90deg, transparent, #d4d4d4 12%, #d4d4d4 88%, transparent);
 }
 
-/* Tables */
+/* Horizontal rules / Tables */
 .prose-swiflow .prose-table-wrap {
-  margin: 0.75em 0;
+  margin: 0.85em 0;
   overflow-x: auto;
   border: 1px solid #e5e5e5;
   border-radius: 0.5rem;
@@ -103,6 +178,31 @@ html.desktop .header-tab-bar button {
 .prose-swiflow tbody tr:hover {
   background: #f0f0f0;
 }
+
+/* highlight.js tokens inside dark code blocks */
+.prose-swiflow .hljs-comment,
+.prose-swiflow .hljs-quote { color: #94a3b8; font-style: italic; }
+.prose-swiflow .hljs-keyword,
+.prose-swiflow .hljs-selector-tag,
+.prose-swiflow .hljs-literal { color: #c084fc; }
+.prose-swiflow .hljs-string,
+.prose-swiflow .hljs-doctag,
+.prose-swiflow .hljs-template-variable { color: #86efac; }
+.prose-swiflow .hljs-number,
+.prose-swiflow .hljs-regexp { color: #fdba74; }
+.prose-swiflow .hljs-title,
+.prose-swiflow .hljs-section,
+.prose-swiflow .hljs-name { color: #7dd3fc; }
+.prose-swiflow .hljs-attr,
+.prose-swiflow .hljs-attribute,
+.prose-swiflow .hljs-variable,
+.prose-swiflow .hljs-template-tag { color: #fcd34d; }
+.prose-swiflow .hljs-built_in,
+.prose-swiflow .hljs-type { color: #67e8f9; }
+.prose-swiflow .hljs-meta,
+.prose-swiflow .hljs-symbol { color: #f9a8d4; }
+.prose-swiflow .hljs-emphasis { font-style: italic; }
+.prose-swiflow .hljs-strong { font-weight: 700; }
 
 /* Typing indicator (bouncing dots) for the streaming assistant bubble. */
 @keyframes swiflow-bounce {

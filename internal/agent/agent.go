@@ -10,20 +10,31 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/OptLTD/swiflow/internal/util"
 	"github.com/OptLTD/swiflow/internal/llm"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store"
 	"github.com/OptLTD/swiflow/internal/tool"
+	"github.com/OptLTD/swiflow/internal/util"
 )
 
-const maxRounds = 12
+// maxRounds is only a safety fuse against runaway tool use — not the primary
+// “done” signal. Prefer goal completion (final answer), early stop on
+// divergence/stall, then this budget as last resort.
+const maxRounds = 32
+
+const softBudgetNudge = "You are approaching the tool-call budget for this turn. Prefer finishing with a clear answer now if you already have enough information. Use another tool only if it is essential to complete the user's request."
+
+const hardBudgetNudge = "You have hit the tool-call safety limit for this turn. Do not call tools. Summarize what you completed, what you found, what is blocked or unfinished, and the most useful next step for the user."
+
+const stallNudge = "Progress has stalled (repeated tools or repeated failures). Do not call tools again. Tell the user what you tried, why it is stuck, and the best next step — ask them to continue if needed."
+
+const continueHint = "I could not fully finish this turn. Tell me to continue and I will pick up from here."
 
 type object = map[string]any
 
 // Event is one event streamed to the client during a run.
 type Event struct {
-	Type      string `json:"type"` // delta|thinking|tool_call|tool_result|done|error
+	Type      string `json:"type"` // delta|thinking|tool_call|tool_result|done|error|ui_request
 	Content   string `json:"content,omitempty"`
 	Thinking  string `json:"thinking,omitempty"`
 	ID        string `json:"id,omitempty"`
@@ -41,8 +52,8 @@ type RunnerDeps struct {
 	Tools  *tool.Registry
 	Skills *skill.Catalog
 
-	Workspace            string
-	MaxHistoryMessages   int
+	Workspace          string
+	MaxHistoryMessages int
 }
 
 // Runner executes agent runs and enforces single-run-per-session.
@@ -185,24 +196,49 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 
 	firstUser := firstUserMessage(history, userMessage)
 
-	var lastKey string
-	repeat := 0
+	var (
+		repeat       int
+		lastKey      string
+		consecErrors int
+		softNudged   bool
+		forceWrapUp  bool // true → next round is a no-tool wrap-up
+		wrapReason   string
+	)
+
 	for round := 0; round < maxRounds; round++ {
-		req := llm.ChatRequest{Model: ag.Model, Messages: llmMsgs, Tools: toolDefs}
+		roundTools := toolDefs
+
+		switch {
+		case forceWrapUp || round == maxRounds-1:
+			roundTools = nil
+			nudge := hardBudgetNudge
+			if forceWrapUp && wrapReason == "stall" {
+				nudge = stallNudge
+			}
+			forceWrapUp = false
+			wrapReason = ""
+			llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: nudge})
+		case !softNudged && round >= maxRounds*3/4:
+			softNudged = true
+			llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: softBudgetNudge})
+		}
+
+		req := llm.ChatRequest{Model: ag.Model, Messages: llmMsgs, Tools: roundTools}
 		resp, err := r.streamRound(runCtx, prov, req, onEvent)
 		if err != nil {
 			emit(onEvent, Event{Type: "error", Error: err.Error()})
 			return err
 		}
 
-		if len(resp.ToolCalls) > 0 {
+		if len(resp.ToolCalls) > 0 && len(roundTools) > 0 {
 			key := toolCallKey(resp.ToolCalls)
 			if key == lastKey {
 				repeat++
 				if repeat >= 3 {
-					e := fmt.Errorf("tool loop detected: repeated %s", resp.ToolCalls[0].Name)
-					emit(onEvent, Event{Type: "error", Error: e.Error()})
-					return e
+					// Diverged into a loop — stop early with a user-facing wrap-up.
+					forceWrapUp = true
+					wrapReason = "stall"
+					continue
 				}
 			} else {
 				repeat = 0
@@ -236,6 +272,9 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 				isErr := execErr != nil
 				if isErr {
 					result = "error: " + execErr.Error()
+					consecErrors++
+				} else {
+					consecErrors = 0
 				}
 				if result == "" {
 					result = "(no output)"
@@ -260,18 +299,29 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 					ToolName:   tc.Name,
 				})
 			}
+			if consecErrors >= 3 {
+				forceWrapUp = true
+				wrapReason = "stall"
+			}
 			continue
 		}
 
-		// Final answer.
+		// Final answer: model voluntarily stopped, or wrap-up after forced stop.
+		content := resp.Content
+		if strings.TrimSpace(content) == "" && (forceWrapUp || round == maxRounds-1) {
+			content = continueHint
+		}
 		assistantMsg := store.Message{
 			ID:       util.NewID(),
 			Role:     "assistant",
-			Content:  resp.Content,
+			Content:  content,
 			Thinking: resp.Thinking,
 		}
 		if _, err := st.AppendMessage(runCtx, sessionKey, assistantMsg); err != nil {
 			slog.Error("persist assistant message", "error", err)
+		}
+		if content != "" && content != resp.Content {
+			emit(onEvent, Event{Type: "delta", Content: content})
 		}
 
 		title := ""
@@ -285,9 +335,14 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 		return nil
 	}
 
-	e := fmt.Errorf("run exceeded max rounds (%d)", maxRounds)
-	emit(onEvent, Event{Type: "error", Error: e.Error()})
-	return e
+	if _, err := st.AppendMessage(runCtx, sessionKey, store.Message{
+		ID: util.NewID(), Role: "assistant", Content: continueHint,
+	}); err != nil {
+		slog.Error("persist wrap-up message", "error", err)
+	}
+	emit(onEvent, Event{Type: "delta", Content: continueHint})
+	emit(onEvent, Event{Type: "done"})
+	return nil
 }
 
 func (r *Runner) provider(ctx context.Context, name string) (llm.Provider, error) {
@@ -350,6 +405,11 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 			b.WriteString(summary)
 		}
 	}
+	b.WriteString("\n\n## When to stop\n")
+	b.WriteString("Primary goal: satisfy the user's request, then answer in natural language without more tools.\n")
+	b.WriteString("- Stop when you have enough information to answer clearly.\n")
+	b.WriteString("- If blocked, looping, or results are not helping the goal, stop early: explain what failed and what the user should do next.\n")
+	b.WriteString("- Do not keep calling tools hoping for a different outcome. Prefer short paths toward the goal over exhaustive exploration.\n")
 	b.WriteString("\n\n## Scheduling\n")
 	b.WriteString("Use schedule_run to re-invoke the agent in the current chat after a delay (delay_seconds + message as a new user turn). ")
 	b.WriteString("Use schedule_create for recurring cron jobs (@hourly, 0 9 * * *, @every 5m).")

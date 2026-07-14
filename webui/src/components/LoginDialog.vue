@@ -34,7 +34,7 @@ async function connect() {
   <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
     <div class="bg-white rounded-lg shadow-xl p-6 w-80">
       <div class="flex items-center gap-3 mb-4">
-        <img src="/images/icon-light.svg" alt="" class="w-10 h-10" />
+        <img src="/images/icon-dark.svg" alt="" class="w-10 h-10" />
         <div>
           <div class="font-bold text-lg leading-tight">Swiflow</div>
           <div class="text-sm text-neutral-500">Enter your auth token to continue.</div>
