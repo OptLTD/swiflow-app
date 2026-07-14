@@ -9,7 +9,8 @@ import { renderMarkdown } from '../lib/markdown'
 import ToolCallBlock from '../components/ToolCallBlock.vue'
 import ThinkingBlock from '../components/ThinkingBlock.vue'
 import LocalSvgIcon from '../components/LocalSvgIcon.vue'
-import { handleUiRequest } from '../lib/windowBridge'
+import { handleUiRequest, submitClarifyAnswer, cancelClarify } from '../lib/windowBridge'
+import { useClarifyStore } from '../stores/clarify'
 import type { ChatEvent, Message, Session } from '../types'
 
 const props = withDefaults(
@@ -24,6 +25,32 @@ const props = withDefaults(
 const auth = useAuthStore()
 const chatStore = useChatStore()
 const layout = useLayoutStore()
+const clarifyStore = useClarifyStore()
+
+const clarifyAnswer = ref('')
+const clarifyPending = computed(() => {
+  const key = currentKey.value
+  return key ? clarifyStore.bySession[key] || null : null
+})
+
+async function answerClarify(text?: string) {
+  const key = currentKey.value
+  if (!key) return
+  const ans = (text ?? clarifyAnswer.value).trim()
+  if (!ans) return
+  clarifyAnswer.value = ''
+  try {
+    await submitClarifyAnswer(key, ans)
+  } catch (e: any) {
+    error.value = e.message
+  }
+}
+
+async function dismissClarify() {
+  const key = currentKey.value
+  if (!key) return
+  await cancelClarify(key)
+}
 
 const isTabMode = computed(() => !!props.sessionKey)
 const localTitle = ref('')
@@ -117,8 +144,24 @@ async function loadSessions() {
 }
 
 function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Msg | null) => void) {
-  if (handleUiRequest(ev)) return
+  if (handleUiRequest(ev, currentKey.value)) return
+  if (ev.type === 'queued') {
+    messages.value.push({
+      role: 'assistant',
+      content: `Queued (position ${ev.position ?? '?'}). Will run after the current turn.`,
+    })
+    scrollBottom()
+    return
+  }
   if (ev.type === 'user') {
+    const last = messages.value[messages.value.length - 1]
+    if (last?.role === 'user' && last.content === (ev.content || '')) {
+      streaming.value = true
+      const cur = pushAssistant()
+      setCur(cur)
+      scrollBottom()
+      return
+    }
     messages.value.push({ role: 'user', content: ev.content || '' })
     streaming.value = true
     let cur = pushAssistant()
@@ -154,7 +197,7 @@ function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Ms
     const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
     if (t) {
       t.content = ev.result || ''
-      t.isError = ev.is_error
+      t.isError = !!ev.is_error || looksLikeToolError(ev.result)
     }
   } else if (ev.type === 'error') {
     error.value = ev.error || 'error'
@@ -176,6 +219,8 @@ function pushAssistant(): Msg {
 
 function mapStoredMessages(raw: Message[]): Msg[] {
   const out: Msg[] = []
+  const toolByID = new Map<string, Msg>()
+
   for (const m of raw) {
     if (m.role === 'assistant' && m.tool_calls_json) {
       let tcs: { id: string; name: string; arguments?: Record<string, unknown> }[] = []
@@ -186,29 +231,45 @@ function mapStoredMessages(raw: Message[]): Msg[] {
         out.push({ role: 'assistant', content: m.content, thinking: m.thinking })
       }
       for (const tc of tcs) {
-        out.push({
+        const entry: Msg = {
           role: 'tool',
           id: tc.id,
           tool_name: tc.name,
           arguments: tc.arguments,
           content: '',
-        })
+          isError: false,
+        }
+        out.push(entry)
+        if (tc.id) toolByID.set(tc.id, entry)
       }
       continue
     }
     if (m.role === 'tool') {
-      out.push({
-        role: 'tool',
-        id: m.tool_call_id,
-        tool_name: m.tool_name,
-        content: m.content,
-        isError: false,
-      })
+      const isErr = looksLikeToolError(m.content)
+      const existing = m.tool_call_id ? toolByID.get(m.tool_call_id) : undefined
+      if (existing) {
+        existing.content = m.content || ''
+        existing.isError = isErr
+        if (m.tool_name) existing.tool_name = m.tool_name
+      } else {
+        out.push({
+          role: 'tool',
+          id: m.tool_call_id,
+          tool_name: m.tool_name,
+          content: m.content || '',
+          isError: isErr,
+        })
+      }
       continue
     }
     out.push({ role: m.role, content: m.content, thinking: m.thinking })
   }
   return out
+}
+
+function looksLikeToolError(content: string | undefined): boolean {
+  if (!content) return false
+  return /^error:/i.test(content.trim())
 }
 
 async function selectSession(key: string) {
@@ -302,7 +363,8 @@ async function startWatch(key: string) {
   while (!ac.signal.aborted && currentKey.value === key) {
     try {
       await watchSession(key, (ev) => {
-        if (streaming.value) return
+        // Allow queue-continued runs via hub; drop only mid-stream duplicates except user/done.
+        if (streaming.value && ev.type !== 'user' && ev.type !== 'done' && ev.type !== 'error') return
         handleChatEvent(ev, () => null, (_m) => { /* no-op */ })
       }, ac.signal)
     } catch (e: unknown) {
@@ -330,7 +392,7 @@ function newSession() {
 }
 
 async function send() {
-  if (!input.value.trim() || streaming.value) return
+  if (!input.value.trim()) return
   if (!currentKey.value) {
     if (isTabMode.value) return
     newSession()
@@ -339,12 +401,25 @@ async function send() {
   if (!key) return
   const text = input.value
   input.value = ''
+  const wasStreaming = streaming.value
   messages.value.push({ role: 'user', content: text })
-  let cur: Msg | null = pushAssistant()
-  streaming.value = true
   error.value = ''
   await nextTick()
   scrollBottom()
+
+  if (wasStreaming) {
+    try {
+      await chat(key, text, DEFAULT_AGENT_KEY, (ev) => {
+        handleChatEvent(ev, () => null, () => {})
+      })
+    } catch (e: any) {
+      error.value = e.message
+    }
+    return
+  }
+
+  let cur: Msg | null = pushAssistant()
+  streaming.value = true
   try {
     await chat(key, text, DEFAULT_AGENT_KEY, (ev) => {
       handleChatEvent(ev, () => cur, (m) => { cur = m })
@@ -362,6 +437,10 @@ async function abortRun() {
   if (!currentKey.value) return
   try {
     await api.abortSession(currentKey.value)
+    messages.value.push({
+      role: 'assistant',
+      content: 'Aborted. Queued messages (if any) will continue after this turn ends.',
+    })
   } catch {}
 }
 
@@ -490,11 +569,53 @@ function gapClass(m: Msg, i: number): string {
               </span>
             </div>
             <div v-else-if="m.role === 'tool'">
-              <ToolCallBlock :name="m.tool_name || ''" :args="m.arguments" :content="m.content" :is-error="m.isError" />
+              <ToolCallBlock
+                :name="m.tool_name || ''"
+                :args="m.arguments"
+                :content="m.content"
+                :is-error="m.isError"
+                @open-session="(key, title) => layout.openChatTab(key, title || 'Subagent')"
+              />
             </div>
           </div>
           <div v-if="error" class="text-red-600 text-sm">{{ error }}</div>
         </template>
+      </div>
+    </div>
+
+    <!-- Clarify prompt (agent → user) -->
+    <div
+      v-if="clarifyPending && !showHistory"
+      class="shrink-0 w-full"
+      :class="props.expanded ? 'max-w-[960px] mx-auto px-4 pb-2' : 'px-3 pb-2'"
+    >
+      <div class="border border-amber-200 bg-amber-50/80 rounded-lg p-3 space-y-2">
+        <div class="text-sm font-medium text-neutral-800">{{ clarifyPending.question }}</div>
+        <div v-if="clarifyPending.options.length" class="flex flex-wrap gap-2">
+          <button
+            v-for="opt in clarifyPending.options"
+            :key="opt"
+            type="button"
+            class="px-2.5 py-1 text-sm rounded border border-neutral-300 bg-white hover:bg-neutral-100"
+            @click="answerClarify(opt)"
+          >{{ opt }}</button>
+        </div>
+        <div v-if="clarifyPending.allowFreeText" class="flex gap-2">
+          <input
+            v-model="clarifyAnswer"
+            type="text"
+            class="flex-1 text-sm border border-neutral-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-neutral-400"
+            placeholder="Your answer…"
+            @keydown.enter.prevent="answerClarify()"
+          />
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm rounded bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-40"
+            :disabled="!clarifyAnswer.trim()"
+            @click="answerClarify()"
+          >Send</button>
+        </div>
+        <button type="button" class="text-xs text-neutral-500 hover:underline" @click="dismissClarify">Cancel</button>
       </div>
     </div>
 
@@ -515,26 +636,16 @@ function gapClass(m: Msg, i: number): string {
           @keydown.enter.exact.prevent="send"
           rows="3"
           class="w-full border-0 bg-transparent px-0 py-0 pr-10 pb-9 text-[15px] leading-relaxed resize-none focus:outline-none"
-          placeholder="Message…"
+          :placeholder="streaming ? 'Message (queued while running)…' : 'Message…'"
         ></textarea>
         <button
-          v-if="!streaming"
           type="button"
           class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
           :disabled="!input.trim()"
-          title="Send"
+          :title="streaming ? 'Queue message' : 'Send'"
           @click="send"
         >
           <LocalSvgIcon name="send" :size="16" />
-        </button>
-        <button
-          v-else
-          type="button"
-          class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-500"
-          title="Abort"
-          @click="abortRun"
-        >
-          <LocalSvgIcon name="stop" :size="14" />
         </button>
       </div>
     </div>

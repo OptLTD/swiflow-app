@@ -12,6 +12,8 @@ import (
 )
 
 // Pool keeps a single Chromium instance for browser automation.
+// Sessions share this process-wide pool; max_concurrent_runs indirectly
+// limits contention. Only one page is active at a time.
 type Pool struct {
 	mu       sync.Mutex
 	headless bool

@@ -9,18 +9,20 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/OptLTD/swiflow/internal/llm"
+	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/internal/util"
 )
 
-// maxRounds is only a safety fuse against runaway tool use — not the primary
-// “done” signal. Prefer goal completion (final answer), early stop on
-// divergence/stall, then this budget as last resort.
-const maxRounds = 32
+// maxRoundsDefault is only a safety fuse against runaway tool use.
+const maxRoundsDefault = 32
+
+const defaultToolTimeout = 120 * time.Second
 
 const softBudgetNudge = "You are approaching the tool-call budget for this turn. Prefer finishing with a clear answer now if you already have enough information. Use another tool only if it is essential to complete the user's request."
 
@@ -34,7 +36,7 @@ type object = map[string]any
 
 // Event is one event streamed to the client during a run.
 type Event struct {
-	Type      string `json:"type"` // delta|thinking|tool_call|tool_result|done|error|ui_request
+	Type      string `json:"type"` // delta|thinking|tool_call|tool_result|done|error|ui_request|user|queued
 	Content   string `json:"content,omitempty"`
 	Thinking  string `json:"thinking,omitempty"`
 	ID        string `json:"id,omitempty"`
@@ -44,6 +46,12 @@ type Event struct {
 	IsError   bool   `json:"is_error,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Title     string `json:"title,omitempty"`
+	Position  int    `json:"position,omitempty"` // queued position (1-based)
+}
+
+// EventPublisher fans out events (typically sesshub.Hub).
+type EventPublisher interface {
+	Publish(sessionKey string, ev Event)
 }
 
 // RunnerDeps configures a Runner.
@@ -54,6 +62,28 @@ type RunnerDeps struct {
 
 	Workspace          string
 	MaxHistoryMessages int
+
+	// Publish is optional; when set, every emit is also published for watchers.
+	Publish EventPublisher
+
+	// MaxConcurrentRuns caps global in-flight runs; 0 = unlimited.
+	MaxConcurrentRuns int
+	// ToolTimeoutSec wraps each tool call; 0 = 120s.
+	ToolTimeoutSec int
+}
+
+type queuedMsg struct {
+	AgentKey string
+	Message  string
+}
+
+// RunOpts controls a single Run (used by subagents).
+type RunOpts struct {
+	MaxRounds int // 0 = default 32
+	// AllowTools: if non-nil, only these tool names are offered.
+	AllowTools map[string]bool
+	// DenyTools: always excluded (e.g. delegate_task for children).
+	DenyTools map[string]bool
 }
 
 // Runner executes agent runs and enforces single-run-per-session.
@@ -63,6 +93,7 @@ type Runner struct {
 	mu        sync.Mutex
 	busy      map[string]struct{}
 	cancels   map[string]context.CancelFunc
+	queue     map[string][]queuedMsg
 	provMu    sync.Mutex
 	provCache map[string]llm.Provider
 }
@@ -73,12 +104,16 @@ func NewRunner(deps RunnerDeps) *Runner {
 		deps:      deps,
 		busy:      map[string]struct{}{},
 		cancels:   map[string]context.CancelFunc{},
+		queue:     map[string][]queuedMsg{},
 		provCache: map[string]llm.Provider{},
 	}
 }
 
 // ErrBusy is returned when a session already has a run in flight.
 var ErrBusy = fmt.Errorf("session busy")
+
+// ErrConcurrent is returned when the global concurrent-run gate is full.
+var ErrConcurrent = fmt.Errorf("too many concurrent runs")
 
 // IsBusy reports whether a session has a run in flight.
 func (r *Runner) IsBusy(sessionKey string) bool {
@@ -88,8 +123,33 @@ func (r *Runner) IsBusy(sessionKey string) bool {
 	return ok
 }
 
-// Abort cancels an in-flight run for a session. Returns true if a run was
-// aborted.
+// AtCapacity reports whether the global concurrent-run gate is full.
+func (r *Runner) AtCapacity() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	max := r.deps.MaxConcurrentRuns
+	return max > 0 && len(r.busy) >= max
+}
+
+// QueueLen returns pending mid-run messages for a session.
+func (r *Runner) QueueLen(sessionKey string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.queue[sessionKey])
+}
+
+// Enqueue adds a message to the session FIFO while a run is in flight.
+// Returns 1-based queue position.
+func (r *Runner) Enqueue(sessionKey, agentKey, message string) (position int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.queue[sessionKey] = append(r.queue[sessionKey], queuedMsg{AgentKey: agentKey, Message: message})
+	position = len(r.queue[sessionKey])
+	observe.Queued(sessionKey, position)
+	return position
+}
+
+// Abort cancels an in-flight run for a session. Queue is retained.
 func (r *Runner) Abort(sessionKey string) bool {
 	r.mu.Lock()
 	cancel, ok := r.cancels[sessionKey]
@@ -97,6 +157,7 @@ func (r *Runner) Abort(sessionKey string) bool {
 	if !ok {
 		return false
 	}
+	observe.Abort(sessionKey)
 	cancel()
 	return true
 }
@@ -115,14 +176,39 @@ func (r *Runner) InvalidateProvider(name string) {
 	r.provMu.Unlock()
 }
 
-// Run executes one agent run, streaming events via onEvent.
+// Run executes one agent run with default options.
 func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage string, onEvent func(Event)) error {
-	// Claim the session (single-run guard).
+	return r.RunOpts(ctx, sessionKey, agentKey, userMessage, onEvent, RunOpts{})
+}
+
+// RunOpts executes one agent run with options (subagent budgets / tool filters).
+func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage string, onEvent func(Event), opts RunOpts) error {
+	rounds := opts.MaxRounds
+	if rounds <= 0 {
+		rounds = maxRoundsDefault
+	}
+
+	publisher := func(ev Event) {
+		emit(onEvent, ev)
+		if r.deps.Publish != nil {
+			r.deps.Publish.Publish(sessionKey, ev)
+		}
+	}
+
+	// Claim the session + optional global gate.
 	r.mu.Lock()
 	if _, busy := r.busy[sessionKey]; busy {
 		r.mu.Unlock()
-		emit(onEvent, Event{Type: "error", Error: "session busy"})
+		observe.BusyReject(sessionKey)
+		publisher(Event{Type: "error", Error: "session busy"})
 		return ErrBusy
+	}
+	if max := r.deps.MaxConcurrentRuns; max > 0 && len(r.busy) >= max {
+		n := len(r.busy)
+		r.mu.Unlock()
+		observe.ConcurrentReject(sessionKey, n, max)
+		publisher(Event{Type: "error", Error: "too many concurrent runs"})
+		return ErrConcurrent
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	r.busy[sessionKey] = struct{}{}
@@ -134,11 +220,11 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 		delete(r.cancels, sessionKey)
 		r.mu.Unlock()
 		cancel()
+		r.drainQueue(sessionKey)
 	}()
 
 	st := r.deps.Store
 
-	// Get-or-create session.
 	sess, err := st.GetSessionByKey(runCtx, sessionKey)
 	if err != nil {
 		if agentKey == "" {
@@ -146,10 +232,9 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 		}
 		sess = &store.Session{ID: util.NewID(), Key: sessionKey, AgentKey: agentKey}
 		if cerr := st.CreateSession(runCtx, sess); cerr != nil {
-			// Maybe created concurrently; try once more.
 			sess, err = st.GetSessionByKey(runCtx, sessionKey)
 			if err != nil {
-				emit(onEvent, Event{Type: "error", Error: "session unavailable"})
+				publisher(Event{Type: "error", Error: "session unavailable"})
 				return err
 			}
 		}
@@ -157,59 +242,59 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 		agentKey = sess.AgentKey
 	}
 
-	// Resolve agent.
 	ag, err := st.GetAgentByKey(runCtx, agentKey)
 	if err != nil {
-		emit(onEvent, Event{Type: "error", Error: "agent not found: " + agentKey})
+		publisher(Event{Type: "error", Error: "agent not found: " + agentKey})
 		return err
 	}
 
-	// Resolve provider (cached, invalidate on config change).
 	prov, err := r.provider(runCtx, ag.Provider)
 	if err != nil {
-		emit(onEvent, Event{Type: "error", Error: err.Error()})
+		publisher(Event{Type: "error", Error: err.Error()})
 		return err
 	}
 
-	// Load history.
 	history, err := st.ListMessages(runCtx, sessionKey)
 	if err != nil {
-		emit(onEvent, Event{Type: "error", Error: "load history failed"})
+		publisher(Event{Type: "error", Error: "load history failed"})
 		return err
 	}
 	history = truncateHistory(history, r.deps.MaxHistoryMessages)
 
-	// Persist the user message immediately (survives first-round failure).
 	userMsg := store.Message{ID: util.NewID(), Role: "user", Content: userMessage}
 	if _, err := st.AppendMessage(runCtx, sessionKey, userMsg); err != nil {
 		slog.Error("persist user message", "error", err)
 	}
 
-	// Build LLM messages: system + history + user.
 	llmMsgs := []llm.Message{{Role: "system", Content: r.buildSystem(ag)}}
 	for _, m := range history {
 		llmMsgs = append(llmMsgs, toLLM(m))
 	}
 	llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: userMessage})
 
-	toolDefs := r.deps.Tools.Definitions()
+	toolDefs := filterTools(r.deps.Tools.Definitions(), opts)
 
 	firstUser := firstUserMessage(history, userMessage)
+	toolTimeout := time.Duration(r.deps.ToolTimeoutSec) * time.Second
+	if toolTimeout <= 0 {
+		toolTimeout = defaultToolTimeout
+	}
 
 	var (
 		repeat       int
 		lastKey      string
 		consecErrors int
 		softNudged   bool
-		forceWrapUp  bool // true → next round is a no-tool wrap-up
+		forceWrapUp  bool
 		wrapReason   string
 	)
 
-	for round := 0; round < maxRounds; round++ {
+	for round := 0; round < rounds; round++ {
+		observe.RoundStart(sessionKey, round)
 		roundTools := toolDefs
 
 		switch {
-		case forceWrapUp || round == maxRounds-1:
+		case forceWrapUp || round == rounds-1:
 			roundTools = nil
 			nudge := hardBudgetNudge
 			if forceWrapUp && wrapReason == "stall" {
@@ -218,24 +303,24 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 			forceWrapUp = false
 			wrapReason = ""
 			llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: nudge})
-		case !softNudged && round >= maxRounds*3/4:
+		case !softNudged && round >= rounds*3/4:
 			softNudged = true
 			llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: softBudgetNudge})
 		}
 
 		req := llm.ChatRequest{Model: ag.Model, Messages: llmMsgs, Tools: roundTools}
-		resp, err := r.streamRound(runCtx, prov, req, onEvent)
+		resp, err := r.streamRound(runCtx, prov, req, publisher)
 		if err != nil {
-			emit(onEvent, Event{Type: "error", Error: err.Error()})
+			publisher(Event{Type: "error", Error: err.Error()})
 			return err
 		}
 
 		if len(resp.ToolCalls) > 0 && len(roundTools) > 0 {
+			observe.RoundEnd(sessionKey, round, true)
 			key := toolCallKey(resp.ToolCalls)
 			if key == lastKey {
 				repeat++
 				if repeat >= 3 {
-					// Diverged into a loop — stop early with a user-facing wrap-up.
 					forceWrapUp = true
 					wrapReason = "stall"
 					continue
@@ -258,17 +343,26 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 			llmMsgs = append(llmMsgs, toLLM(assistantMsg))
 
 			for _, tc := range resp.ToolCalls {
-				emit(onEvent, Event{Type: "tool_call", ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments})
+				publisher(Event{Type: "tool_call", ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments})
 				var result string
 				var execErr error
+				t0 := time.Now()
+				observe.ToolStart(sessionKey, tc.Name)
 				if !st.ToolEnabled(runCtx, tc.Name) {
 					execErr = fmt.Errorf("tool %q is disabled", tc.Name)
 				} else {
-					result, execErr = r.deps.Tools.Execute(tool.WithRunContext(runCtx, tool.RunContext{
+					timeout := toolTimeout
+					if tc.Name == "clarify" {
+						timeout = 15 * time.Minute
+					}
+					tctx, tcancel := context.WithTimeout(runCtx, timeout)
+					result, execErr = r.deps.Tools.Execute(tool.WithRunContext(tctx, tool.RunContext{
 						SessionKey: sessionKey,
 						AgentKey:   agentKey,
 					}), tc.Name, tc.Arguments)
+					tcancel()
 				}
+				observe.ToolEnd(sessionKey, tc.Name, time.Since(t0), execErr)
 				isErr := execErr != nil
 				if isErr {
 					result = "error: " + execErr.Error()
@@ -280,7 +374,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 					result = "(no output)"
 				}
 				truncated := truncateToolResult(result)
-				emit(onEvent, Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: truncated, IsError: isErr})
+				publisher(Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: truncated, IsError: isErr})
 
 				toolMsg := store.Message{
 					ID:         util.NewID(),
@@ -306,9 +400,9 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 			continue
 		}
 
-		// Final answer: model voluntarily stopped, or wrap-up after forced stop.
+		observe.RoundEnd(sessionKey, round, false)
 		content := resp.Content
-		if strings.TrimSpace(content) == "" && (forceWrapUp || round == maxRounds-1) {
+		if strings.TrimSpace(content) == "" && (forceWrapUp || round == rounds-1) {
 			content = continueHint
 		}
 		assistantMsg := store.Message{
@@ -321,7 +415,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 			slog.Error("persist assistant message", "error", err)
 		}
 		if content != "" && content != resp.Content {
-			emit(onEvent, Event{Type: "delta", Content: content})
+			publisher(Event{Type: "delta", Content: content})
 		}
 
 		title := ""
@@ -331,7 +425,7 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 				slog.Error("set session title", "error", err)
 			}
 		}
-		emit(onEvent, Event{Type: "done", Title: title})
+		publisher(Event{Type: "done", Title: title})
 		return nil
 	}
 
@@ -340,9 +434,57 @@ func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage stri
 	}); err != nil {
 		slog.Error("persist wrap-up message", "error", err)
 	}
-	emit(onEvent, Event{Type: "delta", Content: continueHint})
-	emit(onEvent, Event{Type: "done"})
+	publisher(Event{Type: "delta", Content: continueHint})
+	publisher(Event{Type: "done"})
 	return nil
+}
+
+func (r *Runner) drainQueue(sessionKey string) {
+	r.mu.Lock()
+	q := r.queue[sessionKey]
+	if len(q) == 0 {
+		r.mu.Unlock()
+		return
+	}
+	next := q[0]
+	r.queue[sessionKey] = q[1:]
+	if len(r.queue[sessionKey]) == 0 {
+		delete(r.queue, sessionKey)
+	}
+	r.mu.Unlock()
+
+	go func() {
+		time.Sleep(80 * time.Millisecond)
+		ctx := context.Background()
+		emit := func(ev Event) {
+			if r.deps.Publish != nil {
+				r.deps.Publish.Publish(sessionKey, ev)
+			}
+		}
+		if r.deps.Publish != nil {
+			r.deps.Publish.Publish(sessionKey, Event{Type: "user", Content: next.Message})
+		}
+		if err := r.Run(ctx, sessionKey, next.AgentKey, next.Message, emit); err != nil {
+			slog.Warn("queue drain run", "session", sessionKey, "error", err)
+		}
+	}()
+}
+
+func filterTools(defs []llm.ToolDef, opts RunOpts) []llm.ToolDef {
+	if opts.AllowTools == nil && len(opts.DenyTools) == 0 {
+		return defs
+	}
+	out := make([]llm.ToolDef, 0, len(defs))
+	for _, d := range defs {
+		if opts.DenyTools[d.Name] {
+			continue
+		}
+		if opts.AllowTools != nil && !opts.AllowTools[d.Name] {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 func (r *Runner) provider(ctx context.Context, name string) (llm.Provider, error) {
@@ -358,7 +500,6 @@ func (r *Runner) provider(ctx context.Context, name string) (llm.Provider, error
 	}
 	p := llm.NewOpenAIProvider(name, apiBase, apiKey, "")
 	r.provMu.Lock()
-	// Another goroutine may have cached; keep first.
 	if existing, ok := r.provCache[name]; ok {
 		r.provMu.Unlock()
 		return existing, nil
@@ -379,7 +520,6 @@ func (r *Runner) streamRound(ctx context.Context, p llm.Provider, req llm.ChatRe
 	})
 }
 
-// buildSystem builds the system prompt. Spec §7.1.
 func (r *Runner) buildSystem(ag *store.Agent) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are Swiflow agent %s.", ag.Key)
@@ -415,11 +555,19 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 	b.WriteString("Use schedule_create for recurring cron jobs (@hourly, 0 9 * * *, @every 5m).")
 	b.WriteString("\n\n## Skill authoring\n")
 	b.WriteString("Use skill_manage to save reusable workflows: action create with full SKILL.md content for new skills; ")
-	b.WriteString("action patch with old_string/new_string for small edits (preferred). User skills override built-ins by slug.")
+	b.WriteString("action patch with old_string/new_string for small edits (preferred). User skills override built-ins by slug. ")
+	b.WriteString("For skill *drafts* that need human review, use skill_draft instead of writing directly when unsure.")
+	b.WriteString("\n\n## Task tracking\n")
+	b.WriteString("For multi-step work, maintain a checklist with todo_write / todo_read. Prefer marking items done before claiming the overall goal is finished. ")
+	b.WriteString("When verification matters, run tests via exec (if enabled) before the final answer.")
+	b.WriteString("\n\n## Delegation\n")
+	b.WriteString("Use delegate_task to spawn an isolated sub-agent with its own session and round budget. ")
+	b.WriteString("You receive only a final summary — put large artifacts in workspace files and cite paths in the child goal if the parent will need them.")
+	b.WriteString("\n\n## Clarify\n")
+	b.WriteString("When you need a user choice, confirmation, or missing info before continuing, call clarify. ")
+	b.WriteString("Do not invent answers; wait for the tool result. Prefer short options when choices are discrete.")
 	return b.String()
 }
-
-// --- helpers ---
 
 func emit(onEvent func(Event), ev Event) {
 	if onEvent == nil {
@@ -492,4 +640,31 @@ func titleFromMessage(msg string) string {
 		return msg[:60] + "…"
 	}
 	return msg
+}
+
+// RunChild implements tool.ChildRunner for delegate_task.
+func (r *Runner) RunChild(ctx context.Context, opts tool.ChildRunOpts, onDelta func(string)) error {
+	allow := map[string]bool(nil)
+	if opts.AllowTools != nil {
+		allow = make(map[string]bool, len(opts.AllowTools))
+		for _, n := range opts.AllowTools {
+			allow[n] = true
+		}
+	}
+	return r.RunOpts(ctx, opts.SessionKey, opts.AgentKey, opts.UserMessage, func(ev Event) {
+		if ev.Type == "delta" && onDelta != nil && ev.Content != "" {
+			onDelta(ev.Content)
+		}
+	}, RunOpts{
+		MaxRounds:  opts.MaxRounds,
+		AllowTools: allow,
+		DenyTools:  map[string]bool{"delegate_task": true, "clarify": true},
+	})
+}
+
+// SetProvider injects a cached LLM provider (tests / overrides).
+func (r *Runner) SetProvider(name string, p llm.Provider) {
+	r.provMu.Lock()
+	defer r.provMu.Unlock()
+	r.provCache[name] = p
 }

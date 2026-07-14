@@ -68,13 +68,16 @@ Source: [`internal/agent/agent.go`](../internal/agent/agent.go).
 ### 3.1 Setup
 
 1. **Claim session** — insert `sessionKey` into in-memory `busy` map; if already
-   present → emit `error` / return `ErrBusy` (HTTP layer maps to **409**).
-2. Register `context.CancelFunc` for `Abort`.
+   present → return `ErrBusy` (HTTP layer **enqueues** with 202 instead of
+   calling `Run`). Optional global `max_concurrent_runs` → `ErrConcurrent` /
+   HTTP **409**.
+2. Register `context.CancelFunc` for `Abort` (queue is **retained**).
 3. Get-or-create session; resolve agent → provider (cached per provider name).
 4. Load history; truncate to `max_history_msgs`.
 5. **Persist user message immediately** (survives first-round LLM failure).
 6. Build messages: system (§3.3) + history + user; tool defs from
-   `Registry.Definitions()`.
+   `Registry.Definitions()` (filtered for subagents).
+7. Fan-out: every emit also `Publish`es to `sesshub` when configured.
 
 ### 3.2 Round loop (`maxRounds = 32`)
 
@@ -87,8 +90,9 @@ Each round:
    - Detect identical tool-call fingerprints; after **3** repeats → set
      `forceWrapUp` (stall), continue (do **not** hard-error).
    - Persist assistant + tool_calls; for each call: emit `tool_call`, execute
-     (respect `store.ToolEnabled`), emit `tool_result`, persist truncated result
-     (4000 chars).
+     under `context.WithTimeout` (`tool_timeout_sec`, default 120s; respect
+     `store.ToolEnabled`), emit `tool_result`, persist truncated result
+     (4000 chars). Obs: `ToolStart`/`ToolEnd`.
    - **3 consecutive tool errors** → stall wrap-up next round.
 4. Else (no tool calls, or wrap-up with empty tools): persist final assistant,
    set session title if empty (first ~60 chars of first user message), emit
@@ -118,71 +122,77 @@ Built by `buildSystem`:
   placeholder)
 - `## When to stop` — goal-first guidance
 - `## Scheduling` — `schedule_run` / `schedule_create`
-- `## Skill authoring` — `skill_manage`
+- `## Skill authoring` — `skill_manage` / `skill_draft`
+- `## Checklist` — `todo_write` / `todo_read`
+- `## Delegation` — `delegate_task` (summary-only child run)
 
 Built-in skill guides: `embed/init-skills/window-context/`, `example/`.
 
 ## 4. Concurrency (multi-chat ≈ multi-open)
 
-`Runner.busy` is keyed by **sessionKey**, not global.
+`Runner.busy` is keyed by **sessionKey**, not global. Optional
+`max_concurrent_runs` caps the size of `busy` across sessions.
 
 | Capability | Supported? |
 |------------|------------|
 | Different sessions running at once | **Yes** (multi Chat tabs, parallel requests, cron/`schedule_run` on other keys) |
-| Same session second run while busy | **No** → 409 / `session busy` |
-| Isolated subagent tree / nested spawn | **No** (Phase 2 gap) |
-| Global max concurrent runs / FS write mutex | **No** |
+| Same session second run while busy | **Queued** → HTTP **202** + FIFO; auto `Run` after exit |
+| Isolated subagent tree / nested spawn | **Yes** via `delegate_task` (child session; no nested delegate) |
+| Global max concurrent runs | **Yes** (`max_concurrent_runs`; 0 = unlimited) |
+| FS write mutex | **No** |
+| Browser multi-page | **No** — single shared page pool; concurrent gate helps |
 
 Resources (Registry, browser pool, LLM quotas) are **process-shared**. Frontend
 opens one Chat tab per session (same session reuses the tab).
 
 ## 5. Mid-run user input
 
-**Not supported.**
+**Message queue + Clarify (landed).**
 
-- UI: while `streaming`, `send()` returns; composer shows Abort.
-- API: second `POST /api/sessions/{key}/chat` → **409**.
-- No message queue and no “interrupt and continue with new text.”
-- User must `Abort` (optional), wait for idle, then send a new message.
+- Queue: while `streaming`, compose still sends → **202** / local “Queued” bubble;
+  `/watch` picks up auto-continued turns. Abort keeps queue.
+- Clarify: `clarify` tool emits `ui_request`; Chat UI answers via `/api/window/reply`;
+  same run continues with the answer as tool result (up to 15 minutes).
+- No interrupt-inside-other-tool-calls; queued items are still a fresh later `Run`.
 
 ## 6. Task verification & self-evolution
 
-**Not first-class product features.**
+**Soft checklist + draft confirm (landed); no hard gate.**
 
-- No acceptance gate, checklist protocol, or forced verify-before-`done`.
-- No autonomous skill/agent evolution pipeline.
-- The model may run tests or edit files **if** prompted / tools allow; that is
-  prompt-driven behavior.
-- `skill_manage` writes user skills when the model chooses to call it — not a
-  closed-loop self-improve system.
+- `todo_write` / `todo_read` + system nudge for long tasks; completion-before-done
+  is **policy**, not a runtime hard stop.
+- `skill_draft` → drafts API → Skills UI Accept/Reject → user-skills. **Does not**
+  auto-edit `system_extra`.
+- `skill_manage` still writes user skills when the model chooses create/patch.
 
 ## 7. SSE channels
 
 | Channel | Path | What it carries |
 |---------|------|-----------------|
-| Chat | `POST /api/sessions/{key}/chat` | Live `Runner` events for that request only |
-| Watch | `GET /api/sessions/{key}/watch` | `sesshub` fan-out (today mainly **scheduled** turns) |
+| Chat | `POST /api/sessions/{key}/chat` | Live `Runner` events for that request (idle → SSE; busy → 202) |
+| Watch | `GET /api/sessions/{key}/watch` | `sesshub` fan-out (chat emits + scheduled + queue auto-continue) |
 | Window reply | `POST /api/window/reply` | Completes `ui_request` from `window_*` tools (~8s timeout) |
 
-Chat emits do **not** currently Publish into `sesshub`; a watch subscriber does
-not see a concurrent live chat on the same session.
+Chat emits **Publish** into `sesshub` when `RunnerDeps.Publish` is set; watch
+subscribers see live and auto-continued turns.
 
 Event types from the runner: `delta`, `thinking`, `tool_call`, `tool_result`,
-`done`, `error`, plus `ui_request` via the window bridge.
+`user` (queue drain), `done`, `error`, plus `ui_request` via the window bridge.
 
 ## 8. Tools & config
 
 ### 8.1 Built-in tool names (code)
 
 `fs_read`, `fs_write`, `fs_list`, `fs_edit`, `web_fetch`, `web_search`, `exec`,
-`browser`, `skill_use`, `skill_search`, `skill_manage`, `schedule_run`,
-`schedule_create`, `window_opened`, `window_active`, `window_open`, plus MCP
-`mcp_*`.
+`browser`, `skill_use`, `skill_search`, `skill_manage`, `skill_draft`,
+`todo_write`, `todo_read`, `delegate_task`, `clarify`, `schedule_run`, `schedule_create`,
+`window_opened`, `window_active`, `window_open`, plus MCP `mcp_*`.
 
 Config gates: `tools.exec_enabled`, `tools.browser_enabled` /
-`browser_headless`. Search: `tools.search_provider` (`duckduckgo` \| `brave` \|
-`searxng`; empty = disabled), `search_api_key`, `search_base_url` (env
-`SWIFLOW_SEARCH_*`). See [`config.example.json`](../config.example.json).
+`browser_headless`, `max_concurrent_runs`, `tool_timeout_sec`. Search:
+`tools.search_provider` (`duckduckgo` \| `brave` \| `searxng`; empty = disabled),
+`search_api_key`, `search_base_url` (env `SWIFLOW_SEARCH_*`). See
+[`config.example.json`](../config.example.json).
 
 Enablement is dual-path: registry `disabled` map + DB `tool_policy` checked at
 execute time — a known consistency footgun.
@@ -191,51 +201,47 @@ execute time — a known consistency footgun.
 
 Init (embedded / `init_skills_dir`) + user dir; user overrides by slug.
 Summaries inject into system; full body via `skill_use`. Disable via
-`skill_disabled` + APIs.
+`skill_disabled` + APIs. Human-reviewed drafts under `user_skills/.drafts/`.
 
 ## 9. Known gaps
 
-1. SPEC historically drifted (MaxRounds, stall→error, exec naming, search keys) —
-   keep this file + SPEC in sync when changing behavior.
-2. Chat stream ≠ sesshub; multi-client sync for live chat is incomplete.
-3. Dual tool enable sources.
-4. Thin agent tests (no full mock loop coverage).
-5. Parallel runs: no global concurrency cap or workspace write serialization.
-6. No mid-run input queue; no verify/evolution subsystem.
+1. Keep SPEC ↔ this file in sync when changing behavior.
+2. Dual tool enable sources.
+3. Thin agent tests (no full mock loop / delegate loop coverage).
+4. No workspace write serialization; browser pool is single-page.
+5. Queue is **in-memory only** (restart drops pending messages).
+6. No hard acceptance gate; no OTel export (slog observe only).
 
 ## 10. Evolution recommendations
 
-Priority order (product + eng):
+> Concepts: [`AGENT_WORKFLOW_PATTERNS.md`](AGENT_WORKFLOW_PATTERNS.md).
 
-1. **Contract sync** — keep SPEC ↔ code aligned; add mock provider loop tests
-   (stall wrap-up, persist-before-LLM, busy guard).
-2. **Unify session events** — optionally Publish chat events to `sesshub` so
-   `/watch` mirrors live runs.
-3. **Harden multi-open** — optional `max_concurrent_runs`, browser quotas,
-   workspace write mutex; document clearly: multi-session ≠ subagent.
-4. **Mid-run input** — prefer **(A) queue**: accept user messages while busy,
-   start next `Run` after `done`; **(B) interrupt-and-rerun** is richer but
-   harder. Do A first.
-5. **Subagents** — child run on a dedicated sessionKey (fits existing busy
-   model); define budget, event surface, and how the final answer returns to
-   the parent.
-6. **Task verification** — orchestration policy (e.g. require tests / checklist
-   skill before declaring done), not a new core loop primitive.
-7. **Self-evolution** — draft skills from trajectories with **human confirm**;
-   do not auto-mutate system prompts unattended.
-8. **Single tool-policy source** — collapse Registry.disabled vs DB policy.
-9. **Observability** — per-round metrics, tool timeouts, configurable window RPC
-   timeout.
-10. **Later** — Postgres / multi-tenancy, OTel (SPEC Phases 3–4).
+Status vs earlier backlog:
 
+| # | Item | Status |
+|---|------|--------|
+| 1 | Contract sync / mock loop tests | Ongoing |
+| 2 | Unify session events to sesshub | **Done** |
+| 3 | `max_concurrent_runs` / tool timeouts / observe | **Done** (FS mutex still open) |
+| 4 | Mid-run message queue + clarify | **Done** |
+| 5 | Subagents summary-only | **Done** (deepen tool later) |
+| 6 | Task verification | Soft todos; hard gate open |
+| 7 | Skill draft + human confirm | **Done** |
+| 8 | Single tool-policy source | Open |
+| 9 | Full OTel | Phase 4 |
+| 10 | Postgres / multi-tenancy | Phase 3 |
+| — | Queue persistence (SQLite) | Open |
+
+Next priorities: queue durability, harden FS/browser sharing, richer tests.
 ## 11. Primary source map
 
 | Area | Path |
 |------|------|
 | Run loop | `internal/agent/agent.go` |
+| Observe | `internal/observe/` |
 | LLM stream | `internal/llm/` |
-| Tools | `internal/tool/` |
-| Skills | `internal/skill/` |
+| Tools | `internal/tool/` (incl. `delegate.go`, todos, drafts) |
+| Skills / drafts | `internal/skill/` |
 | HTTP + SSE | `internal/server/server.go` |
 | Session fan-out | `internal/sesshub/` |
 | Window RPC | `internal/window/` |

@@ -9,6 +9,7 @@ import MarkdownPreview from './preview/MarkdownPreview.vue'
 import ExcelPreview from './preview/ExcelPreview.vue'
 import PdfPreview from './preview/PdfPreview.vue'
 import DocPreview from './preview/DocPreview.vue'
+import ImagePreview from './preview/ImagePreview.vue'
 
 const props = defineProps<{ path: string }>()
 
@@ -113,6 +114,7 @@ watch(() => props.path, load, { immediate: true })
       />
       <PdfPreview v-else-if="kind === 'pdf' && binaryData" :data="binaryData" />
       <DocPreview v-else-if="kind === 'doc' && binaryData" :path="path" :data="binaryData" />
+      <ImagePreview v-else-if="kind === 'image' && binaryData" :path="path" :data="binaryData" />
     </div>
   </div>
 </template>

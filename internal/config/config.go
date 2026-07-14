@@ -21,6 +21,10 @@ type Config struct {
 	UserSkillsDir  string      `json:"user_skills_dir"`
 	AllowedOrigins []string    `json:"allowed_origins"`
 	MaxHistoryMsgs int         `json:"max_history_msgs"`
+	// MaxConcurrentRuns caps in-flight Runner.Run calls globally; 0 = unlimited.
+	MaxConcurrentRuns int `json:"max_concurrent_runs"`
+	// ToolTimeoutSec wraps each tool Execute; 0 = 120s default.
+	ToolTimeoutSec int         `json:"tool_timeout_sec"`
 	Tools          ToolsConfig `json:"tools"`
 	SkipAuth       bool        `json:"skip_auth"`
 }
@@ -113,6 +117,16 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("SWIFLOW_SEARCH_BASE_URL"); v != "" {
 		cfg.Tools.SearchBaseURL = v
+	}
+	if v := os.Getenv("SWIFLOW_MAX_CONCURRENT_RUNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxConcurrentRuns = n
+		}
+	}
+	if v := os.Getenv("SWIFLOW_TOOL_TIMEOUT_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.ToolTimeoutSec = n
+		}
 	}
 }
 

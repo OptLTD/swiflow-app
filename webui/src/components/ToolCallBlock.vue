@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 
 const props = defineProps<{ name: string; args?: any; content: string; isError?: boolean }>()
+const emit = defineEmits<{ openSession: [key: string, title?: string] }>()
 const open = ref(false) // collapsed by default
 
 function pick(a: any, k: string): string {
@@ -11,6 +12,16 @@ function pick(a: any, k: string): string {
 function trim(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + '…' : s
 }
+
+const childSession = computed(() => {
+  if (props.name !== 'delegate_task' || !props.content) return ''
+  try {
+    const j = JSON.parse(props.content)
+    return typeof j.child_session === 'string' ? j.child_session : ''
+  } catch {
+    return ''
+  }
+})
 
 // Human-readable intent derived from the tool name + arguments, so the header
 // reads like an action rather than a raw function call.
@@ -63,6 +74,14 @@ const intent = computed(() => {
       if (act === 'patch') return '更新技能 ' + slug
       return '管理技能 ' + slug
     }
+    case 'skill_draft':
+      return '技能草案 ' + trim(pick(a, 'slug'), 40)
+    case 'delegate_task':
+      return '委派子任务 ' + trim(pick(a, 'goal'), 50)
+    case 'todo_write':
+      return '更新任务清单'
+    case 'todo_read':
+      return '读取任务清单'
     case 'schedule_run':
       return `将在 ${pick(a, 'delay_seconds') || '?'} 秒后执行任务: ` + trim(pick(a, 'message'), 50)
     case 'schedule_create':
@@ -81,8 +100,13 @@ const body = computed(() => {
   return out
 })
 
-// Running = call emitted but no result yet (empty content, not an error).
-const running = computed(() => !props.content && !props.isError)
+// Done when we have a result body or an explicit error (empty body alone = still running).
+const running = computed(() => !props.isError && !(props.content && props.content.length > 0))
+
+function openChild(e: Event) {
+  e.stopPropagation()
+  if (childSession.value) emit('openSession', childSession.value, 'Subagent')
+}
 </script>
 
 <template>
@@ -101,6 +125,13 @@ const running = computed(() => !props.content && !props.isError)
         <template v-else>{{ isError ? 'error' : 'ok' }}</template>
       </span>
     </button>
-    <pre v-show="open" class="p-2 whitespace-pre-wrap max-h-64 overflow-y-auto bg-neutral-50">{{ body }}</pre>
+    <div v-if="childSession && !isError" class="px-2 py-1 bg-neutral-50 border-t border-neutral-100">
+      <button
+        type="button"
+        class="text-neutral-700 hover:underline font-mono"
+        @click="openChild"
+      >Open {{ childSession }}</button>
+    </div>
+    <pre v-show="open" class="p-2 whitespace-pre-wrap max-h-64 overflow-y-auto bg-neutral-50 border-t border-neutral-100">{{ body }}</pre>
   </div>
 </template>

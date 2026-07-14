@@ -71,3 +71,32 @@ func (t *skillManageTool) Execute(ctx context.Context, args map[string]any) (str
 		return "", fmt.Errorf("unknown action %q (use create or patch)", action)
 	}
 }
+
+type skillDraftTool struct{ base *skillTools }
+
+func (t *skillDraftTool) Name() string { return "skill_draft" }
+func (t *skillDraftTool) Description() string {
+	return "Submit a skill draft for human confirmation (does not install until accepted in the UI)."
+}
+func (t *skillDraftTool) Parameters() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"slug":    map[string]any{"type": "string"},
+			"content": map[string]any{"type": "string", "description": "Full SKILL.md"},
+			"note":    map[string]any{"type": "string", "description": "Why this skill / when to use"},
+		},
+		"required": []string{"slug", "content"},
+	}
+}
+
+func (t *skillDraftTool) Execute(_ context.Context, args map[string]any) (string, error) {
+	slug, _ := args["slug"].(string)
+	content, _ := args["content"].(string)
+	note, _ := args["note"].(string)
+	d, err := t.base.cat.SaveDraft(slug, content, note)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("draft %s saved for slug %q — awaiting human accept", d.ID, d.Slug), nil
+}

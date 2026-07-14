@@ -276,18 +276,24 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		slog.Warn("mcp initial sync", "error", err)
 	}
 
+	events := sesshub.New()
+
 	runner := agent.NewRunner(agent.RunnerDeps{
 		Store:              st,
 		Tools:              toolsReg,
 		Skills:             skillsCat,
 		Workspace:          cfg.WorkspaceDir,
 		MaxHistoryMessages: cfg.MaxHistoryMsgs,
+		Publish:            events,
+		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
+		ToolTimeoutSec:     cfg.ToolTimeoutSec,
 	})
-
-	events := sesshub.New()
 
 	cronSched := schedule.New(st, runner, events)
 	tool.RegisterSchedule(toolsReg, st, cronSched)
+	tool.RegisterTodo(toolsReg)
+	tool.RegisterDelegate(toolsReg, runner)
+	tool.RegisterClarify(toolsReg, winBridge)
 	if err := cronSched.Start(ctx); err != nil {
 		slog.Warn("cron start", "error", err)
 	}

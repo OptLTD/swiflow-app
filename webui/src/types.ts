@@ -110,6 +110,15 @@ export interface ChatEvent {
   is_error?: boolean
   error?: string
   title?: string
+  position?: number
+}
+
+export interface SkillDraft {
+  id: string
+  slug: string
+  content: string
+  note?: string
+  created_at?: string
 }
 
 export interface WorkspaceEntry {

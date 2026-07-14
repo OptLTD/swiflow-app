@@ -38,7 +38,15 @@ type Server struct {
 
 // New constructs a server.
 func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *sesshub.Hub, win *window.Bridge) *Server {
-	return &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, window: win}
+	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, window: win}
+	if win != nil && events != nil {
+		win.SetFallback(func(sessionKey string, ev window.Event) {
+			events.Publish(sessionKey, agent.Event{
+				Type: ev.Type, ID: ev.ID, Name: ev.Name, Arguments: ev.Arguments,
+			})
+		})
+	}
+	return s
 }
 
 // Handler returns the root http.Handler.
@@ -69,6 +77,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/skills", s.listSkills)
 	mux.HandleFunc("PUT /api/skills/{slug}", s.setSkillEnabled)
 	mux.HandleFunc("POST /api/skills/reload", s.reloadSkills)
+	mux.HandleFunc("GET /api/skills/drafts", s.listSkillDrafts)
+	mux.HandleFunc("POST /api/skills/drafts/{id}/accept", s.acceptSkillDraft)
+	mux.HandleFunc("DELETE /api/skills/drafts/{id}", s.deleteSkillDraft)
 
 	mux.HandleFunc("POST /api/mcp/reload", s.reloadMCP)
 	mux.HandleFunc("GET /api/mcp/servers", s.listMCPServers)
@@ -478,8 +489,18 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "message required"})
 		return
 	}
+
+	// Mid-run: enqueue instead of 409 when session is busy.
 	if s.runner.IsBusy(key) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "session busy"})
+		pos := s.runner.Enqueue(key, in.AgentKey, in.Message)
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"queued":   true,
+			"position": pos,
+		})
+		return
+	}
+	if s.runner.AtCapacity() {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "too many concurrent runs"})
 		return
 	}
 
@@ -504,16 +525,21 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.window != nil {
 		s.window.BindEmit(key, func(we window.Event) {
-			emit(agent.Event{
-				Type:      we.Type,
-				ID:        we.ID,
-				Name:      we.Name,
-				Arguments: we.Arguments,
-			})
+			ae := agent.Event{
+				Type: we.Type, ID: we.ID, Name: we.Name, Arguments: we.Arguments,
+			}
+			emit(ae)
+			if s.events != nil {
+				s.events.Publish(key, ae)
+			}
 		})
 		defer s.window.UnbindEmit(key)
 	}
 	err := s.runner.Run(ctx, key, in.AgentKey, in.Message, emit)
+	if err == agent.ErrConcurrent {
+		emit(agent.Event{Type: "error", Error: err.Error()})
+		return
+	}
 	if err != nil && err != agent.ErrBusy {
 		slog.Error("chat.run", "session", key, "error", err)
 		emit(agent.Event{Type: "error", Error: err.Error()})
@@ -679,4 +705,42 @@ func (s *Server) reloadSkills(w http.ResponseWriter, _ *http.Request) {
 	// Discovery is on-demand; nothing to cache-clear here besides the disabled
 	// set, which is read fresh. Acknowledge.
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded"})
+}
+
+func (s *Server) listSkillDrafts(w http.ResponseWriter, _ *http.Request) {
+	drafts, err := s.skills.ListDrafts()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if drafts == nil {
+		drafts = []skill.Draft{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"drafts": drafts})
+}
+
+func (s *Server) acceptSkillDraft(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	if err := s.skills.AcceptDraft(id); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "accepted"})
+}
+
+func (s *Server) deleteSkillDraft(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	if err := s.skills.DeleteDraft(id); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

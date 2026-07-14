@@ -8,6 +8,8 @@
   "user_skills_dir": "./data/user-skills",
   "allowed_origins": ["http://localhost:5173"],
   "max_history_msgs": 100,
+  "max_concurrent_runs": 0,
+  "tool_timeout_sec": 120,
   "tools": {
     "exec_enabled": false,
     "browser_enabled": false,

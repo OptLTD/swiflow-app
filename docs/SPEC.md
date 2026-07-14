@@ -37,16 +37,16 @@ backend.
 
 **Non-goals (original Phase 1 scope; status as of v1.1)**
 - Multi-tenancy, RBAC, users/membership (**still Phase 3**).
-- **Subagents** (**still deferred**). MCP client and cron scheduling have
-  **landed** (see `IMPLEMENTATION_STATUS.md`).
+- Nested subagent deepen tools / reading child-session transcripts (**deferred**;
+  `delegate_task` summary-only subagents **have landed**).
 - Voice/audio, knowledge graphs, RAG, memory vaults.
 - A first-party LLM. Swiflow is provider-agnostic.
 - Training or fine-tuning.
-- Mid-run message queue / interrupt-and-continue; automatic task verification
-  or self-evolution pipelines (see `AGENT_ARCHITECTURE.md`).
+- Clarify mid-run protocol; automatic hard acceptance gates; unattended
+  `system_extra` mutation (see `AGENT_ARCHITECTURE.md` / `AGENT_WORKFLOW_PATTERNS.md`).
 
-Browser automation (`browser` tool) and window UI RPC (`window_*`) have
-**landed** beyond the original Phase 1 non-goals list.
+Mid-run **message queue**, per-round **obs** + run gates, `todo_*` /
+`skill_draft` + draft confirm UI, and browser/window tools have **landed**.
 
 ---
 
@@ -60,7 +60,7 @@ implementing from this document.
   architecture reference (agent loop, skills, gateway shape, scheduled
   automations, subagents).
 - **ZeroClaw** — `zeroclaw-labs/zeroclaw`, MIT OR Apache-2.0, Rust. Secondary
-  reference (security hardening, sandboxing, observability approach).
+  reference (security hardening, sandboxing, observe approach).
 
 **Authoring boundary:** implementers work only from this document, the public
 standards it cites, and the permitted references above. Other private or
@@ -397,8 +397,11 @@ callback `onEvent`.
 1. Resolve agent by key from `store`. If missing → emit `error`, return.
 2. Resolve provider by `agent.Provider`. Build the `llm.Provider` client (cached
    per provider name; invalidated when the provider row changes — see §7.3).
-3. Acquire the session guard for `sessionKey` (§7.2). If busy → emit `error`
-   with "session busy", return. Register the run's `ctx` cancel for `Abort`.
+3. Acquire the session guard for `sessionKey` (§7.2). If busy → caller should
+   have enqueued (HTTP layer); `Run` returns `ErrBusy`. Also enforce optional
+   `max_concurrent_runs`. Register the run's `ctx` cancel for `Abort`.
+   Each tool `Execute` is wrapped with `tool_timeout_sec` (default 120s).
+   Structured observe: round/tool start-end via `internal/observe`.
 4. Load session (create if absent, binding `agent_key`). Load history
    (`store.ListMessages`).
 5. **Persist the user message immediately** (`AppendMessage`, role=user). This
@@ -480,8 +483,13 @@ busy set; if already present → busy). On any exit path, the run removes its ke
 from the busy set and the cancel map. `Abort(key)` looks up the cancel func,
 calls it, and removes both entries. `IsBusy` checks the busy set.
 
-This is stricter and simpler than queuing: a second chat on a busy session is
-rejected with `409`/error rather than queued.
+This is stricter and simpler than nesting interrupts into the round loop: a
+second chat on a busy session is **queued** (HTTP **202**) rather than rejected.
+`Abort` cancels the in-flight run but **retains** the FIFO; when the run exits,
+`drainQueue` starts the next message as a new `Run`. Chat events are also
+published to `sesshub` so `/watch` clients see auto-continued turns. A global
+`max_concurrent_runs` gate (0 = unlimited) rejects new runs with HTTP **409**
+when full (busy sessions still enqueue).
 
 ### 7.3 Provider/agent cache invalidation
 The `Runner` may cache the resolved `llm.Provider` per provider name. The cache
@@ -616,6 +624,32 @@ patterns (`^[a-zA-Z0-9_-]+$`); dots are not permitted by OpenAI-compatible APIs.
 - Parameters: `action` (`create` \| `patch`) and content/edit fields. User skills
   override built-ins by slug.
 
+### `skill_draft`
+- Description: "Save a skill draft for human review (does not write user-skills)."
+- Parameters: `slug`, `content` (SKILL.md body), optional `note`.
+- Behavior: writes under `user_skills/.drafts/`; UI Accept promotes to user skill.
+
+### `todo_write` / `todo_read`
+- Session-scoped checklist (in-memory). Long tasks should maintain items via
+  system guidance. Acceptance before `done` is **prompt policy**, not a hard gate.
+
+### `clarify`
+- Description: "Ask the user a clarifying question and wait for their answer."
+- Parameters: `question` (required), `options` (optional string[]), `allow_free_text` (bool, default true).
+- Behavior: emits SSE `ui_request` `{name:"clarify",...}` via the window bridge; waits up to
+  15 minutes for `POST /api/window/reply` with `{"answer":"..."}`. Session stays busy while
+  waiting; mid-run user messages still queue. Abort cancels the wait. Subagents cannot use
+  `clarify`.
+
+### `delegate_task`
+- Description: "Spawn an isolated sub-agent; returns final summary only."
+- Parameters: `goal` (required), `context` (optional), `max_rounds` (default 8, max 16),
+  `tools` (optional string array whitelist; `delegate_task` always excluded).
+- Behavior: child `sessionKey` `sub-{parent}-{id}`; child cannot nest
+  `delegate_task`; parent cancel cancels child; counts toward `max_concurrent_runs`.
+  v1 does **not** expose a tool to read the child session transcript (UI may open
+  the child session tab read-only via existing chat tabs).
+
 **Panic recovery:** `Registry.Execute` wraps every tool call in a recover; a
 panic becomes a tool-error result (`"error: panic: <msg>"`), not a run crash.
 
@@ -671,15 +705,25 @@ routes serve embedded `webui/dist` (SPA fallback to `index.html`).
 ### 10.4 Sessions & chat
 - `GET /api/sessions` → `{"sessions":[{id,key,agent_key,title,created_at,updated_at}]}`.
 - `GET /api/sessions/{key}` → `{"session":{...}, "messages":[message]}`.
-- `POST /api/sessions/{key}/chat` body `{"message":"...", "agent_key":"..."?}` → **SSE stream**. `agent_key` optional (defaults to session's agent, or `"default"`). Response headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`. Each event is `data: <json>\n\n`. Event JSON shapes:
+- `POST /api/sessions/{key}/chat` body `{"message":"...", "agent_key":"..."?}`:
+  - If session **idle** and under global concurrent cap → **SSE stream** (HTTP 200).
+  - If session **busy** → HTTP **202** `{"queued":true,"position":N}` (1-based FIFO).
+  - If global concurrent gate full (and not busy-enqueue) → HTTP **409**
+    `{"error":"too many concurrent runs"}`.
+  - `agent_key` optional (defaults to session's agent, or `"default"`). SSE headers:
+  `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`. Each event is `data: <json>\n\n`. Event JSON shapes:
   - `{"type":"delta","content":"..."}` `{"type":"thinking","content":"..."}`
   - `{"type":"tool_call","id":"...","name":"...","arguments":{...}}`
   - `{"type":"tool_result","id":"...","name":"...","result":"...","isError":false}`
   - `{"type":"ui_request","id":"...","name":"window_opened|window_active|window_open","arguments":{...}}` — mid-run RPC to the UI (not persisted as a chat message); UI must `POST /api/window/reply`.
+  - `{"type":"user","content":"..."}` — emitted on auto-dequeue (watch/hub).
+  - `{"type":"queued","position":N}` — client-side convenience from 202 (not SSE).
   - `{"type":"done","title":"..."?}` `{"type":"error","error":"..."}`
-  - A terminal event (`done`/`error`) ends the stream.
-  - If the session is busy → a single `error` event `{"type":"error","error":"session busy"}` and close (HTTP 200; the stream is already started). (Alternative: `409` before streaming. Implementer picks; document the choice.)
-- `POST /api/sessions/{key}/abort` → `200 {"aborted": bool}`. Cancels the in-flight run for that session if any.
+  - A terminal event (`done`/`error`) ends the stream. Auto-continued queue runs
+    publish via `sesshub`; clients use `/watch` after the original SSE closes.
+- `POST /api/sessions/{key}/abort` → `200 {"aborted": bool}`. Cancels the in-flight
+  run; **queue is retained** and drained after the run exits.
+- `GET /api/sessions/{key}/watch` → SSE of `sesshub` events for live / auto-continue.
 
 ### 10.4.1 Window UI reply
 - `POST /api/window/reply` body `{"id":"...","result":"..."?,"error":"..."?}` → `200 {"ok":true}`.
@@ -694,6 +738,9 @@ routes serve embedded `webui/dist` (SPA fallback to `index.html`).
 - `GET /api/skills` → `{"skills":[{slug,name,description,source,enabled}]}`.
 - `PUT /api/skills/{slug}` body `{"enabled": bool}` → `200`.
 - `POST /api/skills/reload` → `200 {"status":"reloaded"}`.
+- `GET /api/skills/drafts` → `{"drafts":[{id,slug,note,content,created_at}]}`.
+- `POST /api/skills/drafts/{id}/accept` → promotes draft into `user_skills` + reload.
+- `DELETE /api/skills/drafts/{id}` → discard draft. Never auto-mutate `system_extra`.
 
 ---
 
@@ -713,6 +760,9 @@ JSON file with env overlay (env wins). Defaults shown.
 | `user_skills_dir` | `SWIFLOW_USER_SKILLS` | `./data/user-skills` | user skills |
 | `allowed_origins` | — | `[]` | CORS; empty = allow all |
 | `web_dist_dir` | — | (embedded) | override for dev |
+| `max_history_msgs` | — | `100` | truncate chat history per run |
+| `max_concurrent_runs` | `SWIFLOW_MAX_CONCURRENT_RUNS` | `0` | global in-flight Run cap; `0` = unlimited |
+| `tool_timeout_sec` | `SWIFLOW_TOOL_TIMEOUT_SEC` | `120` | default per-tool `context` deadline |
 | `tools.exec_enabled` | `SWIFLOW_EXEC` | `false` | register `exec` if true |
 | `tools.browser_enabled` | — | `false` | register `browser` if true |
 | `tools.browser_headless` | — | `true` | browser headless mode |
@@ -772,7 +822,8 @@ to `webui/dist`, embedded into the Go binary via `//go:embed`.
   model, system_extra).
 - **Providers** (`/providers`): list + create/edit (name, display_name, api_base,
   api_key, enabled). API key field masked on edit.
-- **Skills** (`/skills`): list with enable/disable toggles + reload button.
+- **Skills** (`/skills`): list with enable/disable toggles + reload; pending
+  skill drafts (preview / accept / reject).
 - **Settings** (`/settings`): read-only view of tools + their enable state with
   toggles.
 
@@ -891,13 +942,13 @@ monotonicity, round-trip encrypt/decrypt of provider key).
 ## Appendix A — Open questions for the owner
 
 1. **`LICENSE` choice** for Swiflow (proprietary / MIT / Apache-2.0 / other).
-2. **SSE busy behavior** (§10.4): implemented as HTTP **409** before streaming
-   when the session is already busy. Confirm retain.
+2. **SSE busy behavior** (§10.4): busy → HTTP **202** queue; global gate full →
+   **409**. Clarify protocol still deferred.
 3. **`web_search`:** implemented (`duckduckgo` / `brave` / `searxng` via
    `tools.search_*`). Closed.
 4. **Session title generation** (§7): Phase 1 uses truncated first user message;
    LLM-generated titles move to Phase 4. Confirm.
 5. **Default provider/model** names (`openai` / `gpt-4o-mini`) — confirm or
    change.
-6. **Mid-run input / task verify / self-evolution** — deferred product questions;
-   see `AGENT_ARCHITECTURE.md` §5–6 and §10.
+6. **Clarify / hard verify gates** — still deferred; mid-run queue + draft
+   confirm have landed (see `AGENT_ARCHITECTURE.md` §5–6 and §10).

@@ -7,7 +7,7 @@ import { html } from '@codemirror/lang-html'
 import { yaml } from '@codemirror/lang-yaml'
 import type { Extension } from '@codemirror/state'
 
-export type PreviewKind = 'text' | 'markdown' | 'excel' | 'pdf' | 'doc' | 'unsupported'
+export type PreviewKind = 'text' | 'markdown' | 'excel' | 'pdf' | 'doc' | 'image' | 'unsupported'
 
 const BINARY_KINDS: Record<string, PreviewKind> = {
   xlsx: 'excel',
@@ -16,6 +16,15 @@ const BINARY_KINDS: Record<string, PreviewKind> = {
   pdf: 'pdf',
   docx: 'doc',
   doc: 'doc',
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  gif: 'image',
+  webp: 'image',
+  bmp: 'image',
+  ico: 'image',
+  avif: 'image',
+  svg: 'image',
 }
 
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown'])
@@ -24,7 +33,7 @@ const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'json', 'yaml', 'yml', 'xml', 'html', 'htm', 'css',
   'js', 'jsx', 'ts', 'tsx', 'vue', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h',
   'hpp', 'cs', 'rb', 'php', 'swift', 'kt', 'scala', 'sql', 'sh', 'bash', 'zsh',
-  'fish', 'env', 'ini', 'toml', 'cfg', 'conf', 'log', 'csv', 'svg', 'gitignore',
+  'fish', 'env', 'ini', 'toml', 'cfg', 'conf', 'log', 'csv', 'gitignore',
   'dockerfile', 'makefile', 'gradle', 'properties',
 ])
 
@@ -74,4 +83,21 @@ export function codemirrorLanguage(path: string): Extension | null {
 export interface ExcelSheet {
   name: string
   data: string[][]
+}
+
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  avif: 'image/avif',
+  svg: 'image/svg+xml',
+}
+
+export function imageMimeType(path: string): string {
+  const ext = fileExtension(path)
+  return IMAGE_MIME[ext] || 'application/octet-stream'
 }

@@ -19,16 +19,22 @@ Tracked against [`SPEC.md`](SPEC.md) and [`AGENT_ARCHITECTURE.md`](AGENT_ARCHITE
 | `schedule_run` / `schedule_create` tools | Done |
 | Multi Chat tabs (one tab per session; sidebar hides while chat tab active) | Done (frontend) |
 | Multi-session parallel runs (`busy` per sessionKey) | Done |
+| Per-round observe (`internal/observe`) + `tool_timeout_sec` + `max_concurrent_runs` | Done |
+| Mid-run message queue (busy → 202 + FIFO; Abort keeps queue; drain → sesshub) | Done |
+| Chat event Publish to sesshub; UI watch for auto-continue | Done |
+| `delegate_task` subagent (summary-only; tools whitelist; child session tab UI) | Done |
+| `todo_write` / `todo_read` (session checklist; soft acceptance via prompt) | Done |
+| `skill_draft` + drafts API/UI (accept → user-skills; no auto `system_extra`) | Done |
+| Clarify mid-run (`clarify` tool + Chat UI; ≤15m wait via window reply) | Done |
 
 ## Deferred / not product features yet
 
 | Item | Notes |
 |------|--------|
-| Subagents | Phase 2 remaining |
-| Mid-run message queue / interrupt-and-continue | Reject while busy (409); UI blocks send |
-| Task-level auto verification | Prompt/tools only, no gate |
-| Self-evolution of skills/agents | No closed loop; `skill_manage` is opt-in tool |
-| Chat events fan-out to `sesshub` | Watch mainly sees scheduled turns |
-| Global concurrent-run cap / workspace write mutex | Shared process resources |
+| Subagent deepen: tool to read child session transcript | v1 summary + workspace paths only |
+| Hard acceptance gate before `done` | Prompt/skill policy only |
+| Unattended skill/`system_extra` evolution | Drafts require human Accept |
+| Queue persistence across process restart | In-memory FIFO; restart drops pending messages |
+| Full OTel / Prometheus export | Phase 4; v1 is slog + optional counters |
 | Postgres / multi-tenancy | Phase 3 |
-| OTel / rate limiting / LLM titles | Phase 4 |
+| Workspace write mutex / browser multi-page pool | Single-page browser pool; concurrent gate helps |

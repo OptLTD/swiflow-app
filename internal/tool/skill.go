@@ -94,10 +94,11 @@ func (t *skillSearchTool) Execute(ctx context.Context, args map[string]any) (str
 	return b.String(), nil
 }
 
-// RegisterSkill registers skill discovery, use, search, and manage tools.
+// RegisterSkill registers skill discovery, use, search, manage, and draft tools.
 func RegisterSkill(r *Registry, cat *skill.Catalog, st skillStore) {
 	base := &skillTools{cat: cat, st: st}
 	r.Register(&useSkillTool{base: base})
 	r.Register(&skillSearchTool{base: base})
 	r.Register(&skillManageTool{base: base})
+	r.Register(&skillDraftTool{base: base})
 }

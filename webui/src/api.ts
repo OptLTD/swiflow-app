@@ -8,6 +8,7 @@ import type {
   Provider,
   Session,
   SkillInfo,
+  SkillDraft,
   ToolInfo,
   MCPServer,
   MCPCapabilities,
@@ -69,6 +70,9 @@ export const api = {
   listSkills: () => req<{ skills: SkillInfo[] }>('GET', '/skills'),
   setSkill: (slug: string, enabled: boolean) => req<{ status: string }>('PUT', `/skills/${slug}`, { enabled }),
   reloadSkills: () => req<{ status: string }>('POST', '/skills/reload'),
+  listSkillDrafts: () => req<{ drafts: SkillDraft[] }>('GET', '/skills/drafts'),
+  acceptSkillDraft: (id: string) => req<{ status: string }>('POST', `/skills/drafts/${id}/accept`),
+  deleteSkillDraft: (id: string) => req<{ status: string }>('DELETE', `/skills/drafts/${id}`),
   listMCPServers: () => req<{ servers: MCPServer[] }>('GET', '/mcp/servers'),
   getMCPCapabilities: (id: string) => req<MCPCapabilities>('GET', `/mcp/servers/${id}/capabilities`),
   createMCPServer: (s: Partial<MCPServer>) => req<MCPServer>('POST', '/mcp/servers', s),
@@ -154,11 +158,49 @@ export async function chat(
   message: string,
   agentKey: string,
   onEvent: (ev: ChatEvent) => void,
-): Promise<void> {
-  await streamSSE(`/api/sessions/${encodeURIComponent(sessionKey)}/chat`, {
+): Promise<{ queued?: boolean; position?: number }> {
+  const token = getToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionKey)}/chat`, {
     method: 'POST',
+    headers,
     body: JSON.stringify({ message, agent_key: agentKey }),
-  }, onEvent)
+  })
+  if (res.status === 202) {
+    const data = (await res.json()) as { queued?: boolean; position?: number }
+    onEvent({ type: 'queued', position: data.position })
+    return data
+  }
+  if (!res.ok) {
+    const text = await res.text()
+    let msg = `HTTP ${res.status}`
+    try {
+      msg = JSON.parse(text).error || msg
+    } catch {}
+    throw new Error(msg)
+  }
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let idx
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, idx)
+      buf = buf.slice(idx + 2)
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('data: ')) {
+          try {
+            onEvent(JSON.parse(line.slice(6)))
+          } catch {}
+        }
+      }
+    }
+  }
+  return {}
 }
 
 /** Subscribe to background runs (e.g. schedule_run) for a session. */
