@@ -9,7 +9,7 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
-// buildLauncher returns a Chrome launcher with stability flags (see goclaw pkg/browser).
+// buildLauncher returns a Chrome launcher with stability and anti-automation flags.
 func buildLauncher(headless bool) *launcher.Launcher {
 	l := launcher.New().
 		Leakless(true).

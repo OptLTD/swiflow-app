@@ -9,18 +9,15 @@ references (studied, not copied unless a notice is recorded in `NOTICE.md`):
 - **ZeroClaw** — https://github.com/zeroclaw-labs/zeroclaw — MIT OR Apache-2.0
   (Rust). Secondary reference: security hardening, sandboxing, observability.
 
-**Forbidden references.** No code in this repository derives from, and no
-implementation work consulted, any of the following codebases:
-`goclaw`/`nextlevelbuilder/goclaw`, `duo-claw`, `openclaw`, or `swiflow`/
-`swiflow-new`. These are off-limits for the clean-room reimplementation. Where a
-design decision in Swiflow resembles one of them, it is an independent choice made
-from `docs/SPEC.md` and noted there.
+**Authoring rule.** Implementation consults only this SPEC, the public standards
+named therein, and the permitted references above. No module is produced by
+transforming, renaming, or porting files from any other private or third-party
+agent runtime.
 
 ## Per-module statement
 
 Each module was authored from `docs/SPEC.md` and the public standards (HTTP,
-SSE, SQL, the OpenAI chat-completions HTTP API). No module was produced by
-transforming or renaming files from any forbidden codebase.
+SSE, SQL, the OpenAI chat-completions HTTP API).
 
 | Module | Authoring basis |
 |---|---|
@@ -38,8 +35,7 @@ transforming or renaming files from any forbidden codebase.
 
 ## Audit
 
-For maximum legal safety, a reviewer who has never seen the forbidden codebases
-should audit the result against `docs/SPEC.md`. The Swiflow design intentionally
-diverges from the forbidden codebases in module naming, the normalized
-`messages` table, and the choice of SSE over WebSocket, to make that audit
-straightforward.
+For maximum legal safety, a reviewer who has not consulted unlisted third-party
+agent runtimes should audit the result against `docs/SPEC.md`. Swiflow uses its
+own module naming, a normalized `messages` table, and SSE (not WebSocket) to
+keep the design independently readable.

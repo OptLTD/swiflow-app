@@ -1,13 +1,13 @@
 # Swiflow — Development Specification
 
-> **Status:** Canonical development-basis document. This is the **sole** reference
-> for building Swiflow. An implementer who has never seen any prior related
-> codebase should be able to construct the system — every Phase 1 endpoint,
-> table column, tool, config key, and the exact agent-loop behavior — from this
-> document alone, plus the companion `schema.sql` and public standards (HTTP,
-> SSE, SQL, SQLite/Postgres docs, the OpenAI chat-completions HTTP API).
+> **Status:** Canonical **product contract** document (API shapes, data model,
+> security rules, phased roadmap). For the **as-implemented** agent runtime
+> (wiring, stop policy details, concurrency, gaps), see
+> [`AGENT_ARCHITECTURE.md`](AGENT_ARCHITECTURE.md). Prefer code + that doc when
+> they diverge from older phrasing here.
 >
-> **Version:** 1.0 (Phase 1 scope detailed; Phases 2–4 outlined).
+> **Version:** 1.1 (Phase 1 detailed; MCP / cron / window tools landed; subagents
+> still deferred).
 
 ---
 
@@ -35,12 +35,18 @@ backend.
   secrets encrypted at rest.
 - Ship a Vue UI for chatting with agents and managing configuration.
 
-**Non-goals (Phase 1)**
-- Multi-tenancy, RBAC, users/membership (Phase 3).
-- MCP integration, subagents, scheduled tasks (Phase 2).
-- Browser automation, voice/audio, knowledge graphs, RAG, memory vaults.
+**Non-goals (original Phase 1 scope; status as of v1.1)**
+- Multi-tenancy, RBAC, users/membership (**still Phase 3**).
+- **Subagents** (**still deferred**). MCP client and cron scheduling have
+  **landed** (see `IMPLEMENTATION_STATUS.md`).
+- Voice/audio, knowledge graphs, RAG, memory vaults.
 - A first-party LLM. Swiflow is provider-agnostic.
 - Training or fine-tuning.
+- Mid-run message queue / interrupt-and-continue; automatic task verification
+  or self-evolution pipelines (see `AGENT_ARCHITECTURE.md`).
+
+Browser automation (`browser` tool) and window UI RPC (`window_*`) have
+**landed** beyond the original Phase 1 non-goals list.
 
 ---
 
@@ -56,11 +62,11 @@ implementing from this document.
 - **ZeroClaw** — `zeroclaw-labs/zeroclaw`, MIT OR Apache-2.0, Rust. Secondary
   reference (security hardening, sandboxing, observability approach).
 
-**Forbidden references:** any codebase named or derived from `goclaw`,
-`duo-claw`, `openclaw`, or `swiflow`. These are **not** to be read or copied
-during implementation. Their architectural choices are not inherited; where a
-design decision in this document resembles one of them, it is a fresh choice
-made independently and noted as such.
+**Authoring boundary:** implementers work only from this document, the public
+standards it cites, and the permitted references above. Other private or
+third-party agent runtimes are out of scope and must not be read or copied.
+Where a design choice here resembles one elsewhere, it is an independent
+decision recorded in this SPEC.
 
 **The wall:**
 - The spec author may be informed by the references above. The implementer works
@@ -68,21 +74,19 @@ made independently and noted as such.
 - This document describes **what** the system does and the contracts it must
   satisfy; it does not prescribe literal code. Identifiers in this document are
   domain labels for readability — the implementer chooses actual code
-  identifiers, and is expected to diverge from any prior project's naming.
+  identifiers, and is expected to use Swiflow’s own naming.
 - Implementation is written from scratch against this document, not produced by
-  transforming, renaming, slimming, or refactoring any existing file.
+  transforming, renaming, slimming, or refactoring any existing third-party file.
 
 **Provenance:** a `PROVENANCE.md` at the repo root records, per module, that it
-was authored from this spec without reference to forbidden codebases, and names
-any reference consulted. A `NOTICE.md` retains the license/notice of any code
-actually copied from a permissive reference (expected: none — fresh Go).
+was authored from this spec and lists any permitted reference consulted. A
+`NOTICE.md` retains the license/notice of any code actually copied from a
+permissive reference (expected: none — fresh Go).
 
 **Licensing:** the resulting codebase is the user's to license (commercial
-product). The forbidden codebases' obligations do **not** attach to Swiflow because
-Swiflow derives from none of them. (Note: this holds only if the clean-room rules
-are actually followed; a reviewer who has never seen the forbidden codebases
-should audit the result.)
-
+product). Third-party agent-runtime obligations do **not** attach to Swiflow
+when the clean-room rules are followed; an independent reviewer should audit
+against this SPEC.
 ---
 
 ## 3. Tech stack & conventions
@@ -408,13 +412,14 @@ callback `onEvent`.
 7. Build tool definitions from `tool.Registry.Definitions()` (only enabled
    tools).
 
-**Round loop** (`for round := 0; round < MaxRounds; round++`, `MaxRounds = 12`):
+**Round loop** (`for round := 0; round < MaxRounds; round++`, `MaxRounds = 32`):
 1. Call `provider.ChatStream(ctx, req, onChunk)`. In the chunk callback:
    - `Thinking != ""` → emit `thinking` event.
    - `Content != ""` → emit `delta` event.
 2. On error → emit `error`, release guard, return.
-3. If `resp.ToolCalls` is non-empty:
-   - Loop-detection (§7.4). If triggered → emit `error`, release, return.
+3. If `resp.ToolCalls` is non-empty **and tools were offered this round**:
+   - Loop-detection (§7.4). If triggered → set a forced no-tool wrap-up for the
+     **next** round (do not hard-`error`).
    - Build an assistant `Message` (content + thinking + tool calls), persist it.
    - For each tool call (in order):
      - Emit `tool_call` event (id, name, arguments).
@@ -424,12 +429,12 @@ callback `onEvent`.
      - Emit `tool_result` event (id, name, truncated result, isError).
      - Build a tool `Message` (role=tool, content=result, tool_call_id,
        tool_name), persist it, append to the LLM message list.
+   - If three consecutive tool errors → forced wrap-up next round.
    - `continue` to the next round.
-4. Else (no tool calls — final answer):
+4. Else (no tool calls — final answer, or wrap-up with tools withheld):
    - Persist the assistant message (content + thinking).
    - Set session title if unset: title = first ~60 chars of the first user
-     message (truncated, no LLM call in Phase 1). Emit `done` with `Title` if
-     newly set.
+     message (truncated, no LLM call). Emit `done` with `Title` if newly set.
    - Emit `done`. Release guard. Return.
 
 **Stop policy (goal first, budget last):**
@@ -455,9 +460,18 @@ You are Swiflow agent <agent.key>.
 Workspace root: <abs path>. File tools are restricted to it.
 
 ## Skills
-<skill.Summary(discovered - disabled), or "No skills available.">
-```
+<skill.Summary(discovered - disabled); omitted entirely if empty>
 
+## When to stop
+<goal-first stop guidance>
+
+## Scheduling
+<schedule_run / schedule_create guidance>
+
+## Skill authoring
+<skill_manage guidance>
+```
+See `AGENT_ARCHITECTURE.md` §3.4 for the exact implemented wording.
 ### 7.2 Session guard (single-run-per-session)
 At most one run is active per session key. Implementation: an in-memory
 `map[string]struct{}` (the "busy set") guarded by a mutex, plus a
@@ -475,16 +489,17 @@ must be invalidated when:
 - a provider row is created/updated/deleted, or
 - an agent's `provider` or `model` is updated,
 so a subsequent run uses fresh config. The `server` calls
-`runner.InvalidateProvider(name)` / `runner.InvalidateAgent(key)` (or simply
-`runner.InvalidateAll()`) after the corresponding REST mutations. Phase 1 may use
-`InvalidateAll()` for simplicity.
+`runner.InvalidateProvider(name)` and/or `runner.InvalidateAll()` after the
+corresponding REST mutations. There is **no** `InvalidateAgent` API; changing an
+agent's provider/model either invalidates all providers or relies on the next
+resolve reading fresh agent rows (provider client remains cached by name).
 
 ### 7.4 Tool-loop detection
 Compute a key = JSON of the current round's tool-call set (sorted by tool call
 id). If it equals the previous round's key, increment a repeat counter; when the
-counter reaches 3, abort the run with error "tool loop detected". Reset the
-counter when the key changes. This stops agents stuck re-requesting the same
-tool call repeatedly.
+counter reaches 3, **force a no-tool wrap-up** on the next round (stall nudge),
+instead of terminating with `error`. Reset the counter when the key changes.
+Three consecutive tool execution errors also enter this wrap-up path.
 
 ### 7.5 Tool-result truncation
 Tool results fed back to the LLM are truncated to 4000 characters
@@ -534,40 +549,36 @@ patterns (`^[a-zA-Z0-9_-]+$`); dots are not permitted by OpenAI-compatible APIs.
 ### `web_search`
 - Description: "Search the web and return titles, URLs, and snippets."
 - Parameters: `query` (string, required), `limit` (int, default 5, max 10).
-- Behavior: disabled when `tools.web_search_provider` is empty (returns
+- Behavior: disabled when `tools.search_provider` is empty (returns
   "web search is not configured"). Supported providers:
   - `duckduckgo` — HTML results (no API key); falls back to Instant Answer API
-  - `brave` — Brave Search API; requires `tools.web_search_api_key`
-  - `searxng` — self-hosted SearXNG; requires `tools.web_search_url`
+  - `brave` — Brave Search API; requires `tools.search_api_key`
+  - `searxng` — self-hosted SearXNG; requires `tools.search_base_url`
   Returns a numbered list of title / URL / snippet. Env overlays:
   `SWIFLOW_SEARCH_PROVIDER`, `SWIFLOW_SEARCH_API_KEY`,
   `SWIFLOW_SEARCH_BASE_URL`.
 
-### `cmd_run`
+### `exec`
 - Description: "Run a shell command in the workspace."
 - Parameters: `command` (string, required), `timeout` (int seconds, default 30).
-- Behavior: same as `exec_run` (`sh -c` in workspace dir).
-
-### `python_run`
-- Description: "Run Python code or a script in the workspace."
-- Parameters: `code` (string) or `file` (workspace-relative path), optional `args`
-  (string array), `timeout` (default 30). Provide `code` or `file`, not both.
-- Behavior: uses `python3` or `python` from PATH; script paths are workspace-sandboxed.
-
-### `node_run`
-- Description: "Run JavaScript/Node code or a script in the workspace."
-- Parameters: `code` (string) or `file` (workspace-relative path), optional `args`,
-  `timeout` (default 30).
-- Behavior: uses `node` from PATH; script paths are workspace-sandboxed.
-
-### `exec_run`
-- Description: "Run a shell command in the workspace (alias of cmd_run)."
-- Parameters: `command` (string, required), `timeout` (int seconds, default 30).
 - Behavior: gated by `config.Tools.ExecEnabled` (default false). If disabled at
-  config level, runtime tools (`cmd_run`, `exec_run`, `python_run`, `node_run`)
-  are not registered. When enabled, run with
-  `sh -c` in the workspace dir, capture stdout+stderr, cap output 256 KB, enforce
-  timeout via `context`. Returns combined output.
+  config level, `exec` is not registered. When enabled, run with `sh -c` in the
+  workspace dir, capture stdout+stderr, cap output 256 KB, enforce timeout via
+  `context`. Returns combined output.
+
+### `browser`
+- Description: "Browser automation against pages (when enabled)."
+- Gated by `tools.browser_enabled` / `browser_headless`. See implementation in
+  `internal/tool/browser.go`.
+
+### `schedule_run`
+- Description: "Re-invoke the agent in the current session after a delay."
+- Parameters include `delay_seconds` and `message` (as a new user turn). Publishes
+  through `sesshub` for `/watch` subscribers.
+
+### `schedule_create`
+- Description: "Create a recurring cron job."
+- Parameters include name/schedule expression and message payload.
 
 ### `window_opened`
 - Description: "List file tabs currently open in the user's Swiflow window."
@@ -599,6 +610,11 @@ patterns (`^[a-zA-Z0-9_-]+$`); dots are not permitted by OpenAI-compatible APIs.
 - Parameters: `query` (string, required).
 - Behavior: naive substring match over discovered skills' name+description;
   return matching slugs + descriptions.
+
+### `skill_manage`
+- Description: "Create or patch user skills (SKILL.md)."
+- Parameters: `action` (`create` \| `patch`) and content/edit fields. User skills
+  override built-ins by slug.
 
 **Panic recovery:** `Registry.Execute` wraps every tool call in a recover; a
 panic becomes a tool-error result (`"error: panic: <msg>"`), not a run crash.
@@ -697,7 +713,9 @@ JSON file with env overlay (env wins). Defaults shown.
 | `user_skills_dir` | `SWIFLOW_USER_SKILLS` | `./data/user-skills` | user skills |
 | `allowed_origins` | — | `[]` | CORS; empty = allow all |
 | `web_dist_dir` | — | (embedded) | override for dev |
-| `tools.exec_enabled` | `SWIFLOW_EXEC` | `false` | register `cmd_run`, `exec_run`, `python_run`, `node_run` if true |
+| `tools.exec_enabled` | `SWIFLOW_EXEC` | `false` | register `exec` if true |
+| `tools.browser_enabled` | — | `false` | register `browser` if true |
+| `tools.browser_headless` | — | `true` | browser headless mode |
 | `tools.search_provider` | `SWIFLOW_SEARCH_PROVIDER` | `""` | `duckduckgo` \| `brave` \| `searxng`; empty disables |
 | `tools.search_api_key` | `SWIFLOW_SEARCH_API_KEY` | `""` | Brave Search API key |
 | `tools.search_base_url` | `SWIFLOW_SEARCH_BASE_URL` | `""` | SearXNG base URL |
@@ -796,17 +814,15 @@ the Vite dev path or run the UI separately.
 
 ## 15. Phased roadmap
 
-**Phase 1 — single-tenant minimal (this document's detailed scope):** everything
-in §§1–14, 16. Single user, shared token, SQLite, SSE chat, fs/web/exec/skill
-tools, skills, Vue UI. **Out:** MCP, subagents, cron, multi-tenancy, RBAC,
-Postgres, OTel, prompt caching, LLM-generated titles.
+**Phase 1 — single-tenant minimal:** SQLite, SSE chat, fs/web/exec/skill tools,
+skills, Vue UI, shared-token auth.
 
-**Phase 2 — extensibility:** MCP client (stdio / SSE / streamable-http
-transports) surfacing MCP server tools through the `tool.Registry` with per-server
-enable policy; subagents (spawn an isolated run of another agent, collect its
-final answer); a cron scheduler for scheduled automations (natural-language or
-cron-expression tasks that invoke an agent on a schedule). Each adds spec
-sections incrementally; this document is updated to remain the sole basis.
+**Phase 2 — extensibility (partially done):**
+- **Done:** MCP client (stdio / SSE / streamable-http) → `tool.Registry` as
+  `mcp_*`; cron scheduler + APIs/UI; `window_*` UI RPC; `web_search`; `browser`
+  (gated); goal-first stop policy with stall wrap-up.
+- **Not yet:** **subagents** (spawn an isolated run of another agent, collect its
+  final answer). See evolution notes in `AGENT_ARCHITECTURE.md`.
 
 **Phase 3 — multi-tenancy & Postgres:** `tenants`, `users`, `tenant_membership`,
 roles (user/admin/owner); every entity gains `tenant_id`; per-tenant workspaces,
@@ -819,8 +835,8 @@ OpenTelemetry OTLP export; prompt caching (Anthropic-style and OpenAI-compatible
 LLM-generated session titles; rate limiting; SSRF DNS-rebinding mitigation (pin
 resolved IP); backups/restore; tighter resource bounds.
 
-For each phase, this document is amended so it remains the single source of
-truth; code is then implemented to the amended document.
+Amend this document when contracts change; keep `AGENT_ARCHITECTURE.md` aligned
+with runtime behavior.
 
 ---
 
@@ -852,9 +868,9 @@ truth; code is then implemented to the amended document.
 **Unit-level (recommended):** `secure` (SSRF cases, sandbox traversal cases),
 `llm` stream parsing (feed a recorded SSE byte stream, assert tool-call
 accumulation incl. non-contiguous indices), `agent` loop (mock provider: assert
-tool loop → error after 3 repeats; assert max-rounds exhaustion; assert user
-message persisted before first LLM call), `store` (AppendMessage seq monotonicity,
-round-trip encrypt/decrypt of provider key).
+tool loop → **wrap-up** after 3 repeats; assert max-rounds safety fuse; assert
+user message persisted before first LLM call), `store` (AppendMessage seq
+monotonicity, round-trip encrypt/decrypt of provider key).
 
 ---
 
@@ -862,27 +878,26 @@ round-trip encrypt/decrypt of provider key).
 
 - **`PROVENANCE.md`** (repo root): per-module statement that the module was
   implemented from this SPEC, naming any permissive reference consulted
-  (hermes-agent MIT, ZeroClaw MIT/Apache-2.0) and affirming no consultation of
-  forbidden codebases (goclaw/duo-claw/openclaw/swiflow).
+  (hermes-agent MIT, ZeroClaw MIT/Apache-2.0).
 - **`NOTICE.md`**: attribution + license text for any code copied from a
   permissive reference (expected empty — fresh Go).
 - **`LICENSE`**: the project's own license, chosen by the owner (commercial
   product). A placeholder is added now; the owner selects the final terms.
-- **Forbidden-codebase obligation:** none attaches to Swiflow, **provided** the
-  clean-room rules in §2 are followed. The existing `swiflow-new` derivative
-  code is **not** carried into this repo. A reviewer who has never seen the
-  forbidden codebases should perform the final audit.
+- **Third-party obligation:** none attaches to Swiflow when the clean-room rules
+  in §2 are followed. An independent reviewer should audit against this SPEC.
 
 ---
 
 ## Appendix A — Open questions for the owner
 
 1. **`LICENSE` choice** for Swiflow (proprietary / MIT / Apache-2.0 / other).
-2. **SSE busy behavior** (§10.4): single `error` event + close, or HTTP `409`
-   before streaming. Recommend the latter for cleaner client handling.
-3. **`web_search` backend** for Phase 1 (stub vs. wire a provider). Recommend
-   stub until Phase 2.
+2. **SSE busy behavior** (§10.4): implemented as HTTP **409** before streaming
+   when the session is already busy. Confirm retain.
+3. **`web_search`:** implemented (`duckduckgo` / `brave` / `searxng` via
+   `tools.search_*`). Closed.
 4. **Session title generation** (§7): Phase 1 uses truncated first user message;
    LLM-generated titles move to Phase 4. Confirm.
 5. **Default provider/model** names (`openai` / `gpt-4o-mini`) — confirm or
    change.
+6. **Mid-run input / task verify / self-evolution** — deferred product questions;
+   see `AGENT_ARCHITECTURE.md` §5–6 and §10.

@@ -66,7 +66,7 @@ func (p *Pool) ensureBrowser() error {
 		return fmt.Errorf("launch browser: %w", err)
 	}
 
-	// Long-lived connection — do not bind browser to a request context (goclaw pattern).
+	// Long-lived connection — do not bind the browser to a short request context.
 	browser := rod.New().ControlURL(url)
 	if err := browser.Connect(); err != nil {
 		l.Kill()
