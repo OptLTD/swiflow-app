@@ -91,10 +91,14 @@ const messages = ref<Msg[]>([])
 const input = ref('')
 const streaming = ref(false)
 const error = ref('')
+const scrollEl = ref<HTMLElement | null>(null)
 let watchAbort: AbortController | null = null
 let bootstrapped = false
 /** Key whose messages are currently loaded in this panel. */
 let loadedKey = ''
+/** Skip auto-scroll when the user has scrolled up to read history. */
+let stickToBottom = true
+let scrollRaf = 0
 
 const headerTitle = computed(() => {
   if (showHistory.value) return 'History'
@@ -298,6 +302,8 @@ async function selectSession(key: string) {
     }
   }
   startWatch(key)
+  await nextTick()
+  scrollBottom(true)
 }
 
 async function restoreLastSession() {
@@ -405,7 +411,7 @@ async function send() {
   messages.value.push({ role: 'user', content: text })
   error.value = ''
   await nextTick()
-  scrollBottom()
+  scrollBottom(true)
 
   if (wasStreaming) {
     try {
@@ -444,8 +450,22 @@ async function abortRun() {
   } catch {}
 }
 
-function scrollBottom() {
-  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+function onMessagesScroll() {
+  const el = scrollEl.value
+  if (!el) return
+  const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+  stickToBottom = gap < 80
+}
+
+function scrollBottom(force = false) {
+  if (!force && !stickToBottom) return
+  if (scrollRaf) cancelAnimationFrame(scrollRaf)
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = 0
+    const el = scrollEl.value
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  })
 }
 
 function render(content: string) {
@@ -553,7 +573,7 @@ function gapClass(m: Msg, i: number): string {
     </div>
 
     <!-- Messages -->
-    <div v-else ref="scrollEl" class="flex-1 overflow-y-auto">
+    <div v-else ref="scrollEl" class="flex-1 overflow-y-auto" @scroll.passive="onMessagesScroll">
       <div class="w-full p-4" :class="props.expanded ? 'max-w-[960px] mx-auto' : ''">
         <div v-if="!auth.isAuthed" class="text-neutral-500">Authenticate to start chatting.</div>
         <template v-else>
