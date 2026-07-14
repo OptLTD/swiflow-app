@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { api } from '../api'
 import { useAgentsStore } from '../stores/agents'
 import { useLayoutStore } from '../stores/layout'
-import SvgIcon from '../components/SvgIcon.vue'
+import LocalSvgIcon from '../components/LocalSvgIcon.vue'
 import type { Session } from '../types'
 
 const layout = useLayoutStore()
@@ -35,7 +35,7 @@ onMounted(async () => {
           class="border border-neutral-200 rounded-lg p-4 text-left hover:bg-neutral-50 transition-colors"
           @click="layout.chatPanelOpen = true"
         >
-          <SvgIcon name="chat" class="text-neutral-600 mb-2" />
+          <LocalSvgIcon name="chat" class="text-neutral-600 mb-2" />
           <div class="font-medium text-sm">New Chat</div>
           <div class="text-xs text-neutral-400">Start a conversation</div>
         </button>
@@ -43,7 +43,7 @@ onMounted(async () => {
           class="border border-neutral-200 rounded-lg p-4 text-left hover:bg-neutral-50 transition-colors"
           @click="layout.openExplore()"
         >
-          <SvgIcon name="folder" class="text-neutral-600 mb-2" />
+          <LocalSvgIcon name="folder" class="text-neutral-600 mb-2" />
           <div class="font-medium text-sm">Explore</div>
           <div class="text-xs text-neutral-400">Browse workspace</div>
         </button>
@@ -62,21 +62,6 @@ onMounted(async () => {
             <span class="truncate text-sm">{{ s.title || s.key }}</span>
             <span class="text-xs text-neutral-400 shrink-0 ml-2">{{ s.agent_key }}</span>
           </button>
-        </div>
-      </div>
-
-      <!-- Agents -->
-      <div v-if="agentsStore.agents.length">
-        <h2 class="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-3">Agents</h2>
-        <div class="space-y-1">
-          <div
-            v-for="a in agentsStore.agents"
-            :key="a.key"
-            class="px-3 py-2 rounded flex items-center justify-between"
-          >
-            <span class="text-sm font-mono">{{ a.key }}</span>
-            <span class="text-xs text-neutral-400">{{ a.provider }} / {{ a.model }}</span>
-          </div>
         </div>
       </div>
     </div>

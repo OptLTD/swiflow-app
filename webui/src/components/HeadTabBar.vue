@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useLayoutStore } from '../stores/layout'
 import { isDesktop, toggleMaximize } from '../lib/desktop'
-import SvgIcon from './SvgIcon.vue'
+import LocalSvgIcon from './LocalSvgIcon.vue'
 
 const layout = useLayoutStore()
 
@@ -34,7 +34,7 @@ function onTitlebarDblClick(e: MouseEvent) {
         :title="tab.type === 'welcome' ? 'Home' : tab.title"
         @click="layout.activateTab(tab.id)"
       >
-        <SvgIcon v-if="tab.type === 'welcome'" name="home" :size="15" />
+        <LocalSvgIcon v-if="tab.type === 'welcome'" name="home" :size="15" />
         <template v-else>
           <span class="truncate max-w-[120px] leading-none">{{ tab.title }}</span>
           <span
@@ -42,7 +42,7 @@ function onTitlebarDblClick(e: MouseEvent) {
             class="w-4 h-4 flex items-center justify-center rounded hover:bg-neutral-300 text-neutral-500"
             @click.stop="layout.closeTab(tab.id)"
           >
-            <SvgIcon name="close" :size="12" />
+            <LocalSvgIcon name="close" :size="12" />
           </span>
         </template>
       </button>
@@ -55,7 +55,7 @@ function onTitlebarDblClick(e: MouseEvent) {
         title="Settings"
         @click="layout.openSettings()"
       >
-        <SvgIcon name="settings" :size="16" />
+        <LocalSvgIcon name="settings" :size="16" />
       </button>
       <button
         class="w-8 h-8 flex items-center justify-center rounded transition-colors"
@@ -65,7 +65,7 @@ function onTitlebarDblClick(e: MouseEvent) {
         :title="layout.chatPanelOpen ? 'Hide Chat' : 'Show Chat'"
         @click="layout.toggleChatPanel()"
       >
-        <SvgIcon :name="layout.chatPanelOpen ? 'chat' : 'chat-off'" :size="16" />
+        <LocalSvgIcon :name="layout.chatPanelOpen ? 'chat' : 'chat-off'" :size="16" />
       </button>
     </div>
   </div>

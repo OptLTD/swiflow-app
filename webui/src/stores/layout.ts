@@ -16,6 +16,7 @@ export const useLayoutStore = defineStore('layout', {
     chatPanelWidth: 380,
     tabs: [WELCOME_TAB] as Tab[],
     activeTabId: 'welcome',
+    explorePath: '.',
   }),
   getters: {
     activeTab: (s) => s.tabs.find((t) => t.id === s.activeTabId) || WELCOME_TAB,
@@ -90,6 +91,10 @@ export const useLayoutStore = defineStore('layout', {
         title: 'Settings',
         closable: true,
       })
+    },
+
+    setExplorePath(path: string) {
+      this.explorePath = path || '.'
     },
   },
 })

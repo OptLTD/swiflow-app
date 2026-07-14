@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { api, chat, watchSession } from '../api'
 import { useAuthStore } from '../stores/auth'
-import { useAgentsStore } from '../stores/agents'
+import { DEFAULT_AGENT_KEY } from '../constants/defaults'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js/lib/core'
 import jsonLang from 'highlight.js/lib/languages/json'
@@ -10,16 +10,15 @@ import python from 'highlight.js/lib/languages/python'
 import bash from 'highlight.js/lib/languages/bash'
 import ToolCallBlock from '../components/ToolCallBlock.vue'
 import ThinkingBlock from '../components/ThinkingBlock.vue'
-import SvgIcon from '../components/SvgIcon.vue'
+import LocalSvgIcon from '../components/LocalSvgIcon.vue'
 import type { ChatEvent, Message, Session } from '../types'
 
+hljs.registerLanguage('bash', bash)
 hljs.registerLanguage('json', jsonLang)
 hljs.registerLanguage('python', python)
-hljs.registerLanguage('bash', bash)
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const auth = useAuthStore()
-const agentsStore = useAgentsStore()
 
 interface Msg {
   role: string
@@ -34,13 +33,33 @@ interface Msg {
 
 const sessions = ref<Session[]>([])
 const currentKey = ref('')
-const sessionAgentKey = ref('')
-const selectedAgentKey = ref('default')
+const showHistory = ref(false)
 const messages = ref<Msg[]>([])
 const input = ref('')
 const streaming = ref(false)
 const error = ref('')
 let watchAbort: AbortController | null = null
+
+const headerTitle = computed(() => {
+  if (showHistory.value) return 'History'
+  if (!currentKey.value) return 'New Chat'
+  const s = sessions.value.find((x) => x.key === currentKey.value)
+  return s?.title || currentKey.value
+})
+
+function openHistory() {
+  showHistory.value = true
+  loadSessions()
+}
+
+function closeHistory() {
+  showHistory.value = false
+}
+
+async function pickSession(key: string) {
+  await selectSession(key)
+  showHistory.value = false
+}
 
 async function loadSessions() {
   try {
@@ -144,17 +163,11 @@ function mapStoredMessages(raw: Message[]): Msg[] {
 }
 
 onMounted(() => {
-  if (auth.isAuthed) {
-    loadSessions()
-    agentsStore.load().catch((e: Error) => { error.value = e.message })
-  }
+  if (auth.isAuthed) loadSessions()
 })
 
 watch(() => auth.isAuthed, (v) => {
-  if (v) {
-    loadSessions()
-    agentsStore.load().catch((e: Error) => { error.value = e.message })
-  }
+  if (v) loadSessions()
 })
 
 async function selectSession(key: string) {
@@ -164,8 +177,6 @@ async function selectSession(key: string) {
   try {
     const r = await api.getSession(key)
     messages.value = mapStoredMessages(r.messages || [])
-    sessionAgentKey.value = r.session?.agent_key || ''
-    selectedAgentKey.value = sessionAgentKey.value || selectedAgentKey.value
     startWatch(key)
   } catch (e: any) {
     error.value = e.message
@@ -199,14 +210,9 @@ async function startWatch(key: string) {
 function newSession() {
   stopWatch()
   currentKey.value = 'sess-' + Math.random().toString(36).slice(2, 10)
-  sessionAgentKey.value = ''
-  selectedAgentKey.value = 'default'
   messages.value = []
+  showHistory.value = false
   startWatch(currentKey.value)
-}
-
-function chatAgentKey(): string {
-  return sessionAgentKey.value || selectedAgentKey.value || 'default'
 }
 
 async function send() {
@@ -221,7 +227,7 @@ async function send() {
   await nextTick()
   scrollBottom()
   try {
-    await chat(currentKey.value, text, chatAgentKey(), (ev) => {
+    await chat(currentKey.value, text, DEFAULT_AGENT_KEY, (ev) => {
       handleChatEvent(ev, () => cur, (m) => { cur = m })
     })
   } catch (e: any) {
@@ -271,26 +277,75 @@ function gapClass(m: Msg, i: number): string {
 <template>
   <div class="h-full flex flex-col min-w-0">
     <!-- Header -->
-    <div class="shrink-0 border-b border-neutral-200 px-4 py-2 flex items-center justify-between">
-      <select v-model="selectedAgentKey" class="text-sm border rounded px-2 py-1">
-        <option v-for="a in agentsStore.agents" :key="a.key" :value="a.key">{{ a.display_name || a.key }}</option>
-      </select>
-      <div class="flex items-center gap-1 text-xs text-neutral-500">
-        <span>{{ currentKey || 'new chat' }}</span>
-        <button v-if="streaming" class="hover:bg-neutral-200 rounded p-1 text-neutral-500" title="Abort" @click="abortRun">
-          <SvgIcon name="stop" :size="14" />
+    <div
+      class="shrink-0 h-9 border-b border-neutral-200 flex items-center justify-between gap-2"
+      :class="showHistory ? 'pl-1.5 pr-2' : 'px-3'"
+    >
+      <div class="flex items-center gap-1 min-w-0">
+        <button
+          v-if="showHistory"
+          type="button"
+          class="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
+          title="Back"
+          @click="closeHistory"
+        >
+          <LocalSvgIcon name="back" :size="16" />
+        </button>
+        <span class="text-sm font-medium truncate leading-none">{{ headerTitle }}</span>
+      </div>
+      <div class="shrink-0 flex items-center gap-0.5">
+        <button
+          v-if="streaming && !showHistory"
+          type="button"
+          class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-500"
+          title="Abort"
+          @click="abortRun"
+        >
+          <LocalSvgIcon name="stop" :size="13" />
+        </button>
+        <button
+          v-if="!showHistory"
+          type="button"
+          class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
+          title="History"
+          @click="openHistory"
+        >
+          <LocalSvgIcon name="history" :size="16" />
+        </button>
+        <button
+          v-else
+          type="button"
+          class="h-7 px-2.5 text-xs rounded bg-neutral-800 text-white hover:bg-neutral-700"
+          @click="newSession"
+        >New Chat</button>
+      </div>
+    </div>
+
+    <!-- History list -->
+    <div v-if="showHistory" class="flex-1 overflow-y-auto">
+      <div v-if="!sessions.length" class="p-6 text-base text-neutral-400 text-center">No sessions yet</div>
+      <div v-else class="py-1">
+        <button
+          v-for="s in sessions"
+          :key="s.key"
+          type="button"
+          class="w-full text-left pl-3 pr-4 py-2.5 text-base hover:bg-neutral-50 border-b border-neutral-100 flex items-center gap-2"
+          :class="s.key === currentKey ? 'bg-neutral-50 font-medium' : ''"
+          @click="pickSession(s.key)"
+        >
+          <span class="truncate flex-1">{{ s.title || s.key }}</span>
         </button>
       </div>
     </div>
 
     <!-- Messages -->
-    <div ref="scrollEl" class="flex-1 overflow-y-auto p-4">
+    <div v-else ref="scrollEl" class="flex-1 overflow-y-auto p-4">
       <div class="max-w-[960px] mx-auto">
         <div v-if="!auth.isAuthed" class="text-neutral-500">Authenticate to start chatting.</div>
         <template v-else>
           <div v-for="(m, i) in messages" :key="i" :class="gapClass(m, i)">
             <div v-if="m.role === 'user'" class="flex justify-end">
-              <div class="bg-neutral-800 text-white rounded-lg px-3 py-2 max-w-[80%] whitespace-pre-wrap">{{ m.content }}</div>
+              <div class="bg-neutral-800 text-white text-[15px] leading-relaxed rounded-lg px-3 py-2 max-w-[80%] whitespace-pre-wrap">{{ m.content }}</div>
             </div>
             <div v-else-if="m.role === 'assistant'">
               <ThinkingBlock v-if="m.thinking" :content="m.thinking" />
@@ -309,33 +364,33 @@ function gapClass(m: Msg, i: number): string {
     </div>
 
     <!-- Input -->
-    <div class="border-t border-neutral-200 p-3">
+    <div v-if="!showHistory" class="border-t border-neutral-200 p-3">
       <div class="relative">
         <textarea
           v-model="input"
           @keydown.enter.exact.prevent="send"
           rows="3"
-          class="w-full border border-neutral-300 rounded-lg px-3 py-2.5 pr-12 pb-11 resize-none focus:outline-none focus:border-neutral-500"
+          class="w-full border-0 bg-transparent px-0 py-0 pr-10 pb-9 text-[15px] leading-relaxed resize-none focus:outline-none"
           placeholder="Message…"
         ></textarea>
         <button
           v-if="!streaming"
           type="button"
-          class="absolute right-2.5 bottom-3.5 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
+          class="absolute right-0 bottom-0 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
           :disabled="!input.trim()"
           title="Send"
           @click="send"
         >
-          <SvgIcon name="send" :size="16" />
+          <LocalSvgIcon name="send" :size="16" />
         </button>
         <button
           v-else
           type="button"
-          class="absolute right-2.5 bottom-3.5 w-8 h-8 flex items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-500"
+          class="absolute right-0 bottom-0 w-8 h-8 flex items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-500"
           title="Abort"
           @click="abortRun"
         >
-          <SvgIcon name="stop" :size="14" />
+          <LocalSvgIcon name="stop" :size="14" />
         </button>
       </div>
     </div>

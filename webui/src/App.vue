@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { useLayoutStore } from './stores/layout'
 import { useAuthStore } from './stores/auth'
+import { useLayoutStore } from './stores/layout'
+import ToastHost from './components/ToastHost.vue'
 import ChatPanel from './components/ChatPanel.vue'
 import HeadTabBar from './components/HeadTabBar.vue'
+import LoginDialog from './components/LoginDialog.vue'
 import ResizeHandle from './components/ResizeHandle.vue'
+import FileDropZone from './components/FileDropZone.vue'
 import WelcomeView from './views/WelcomeView.vue'
 import FilePreview from './views/FilePreview.vue'
 import ExploreView from './views/ExploreView.vue'
 import SettingsView from './views/SettingsView.vue'
-import LoginDialog from './components/LoginDialog.vue'
 
-const layout = useLayoutStore()
 const auth = useAuthStore()
+const layout = useLayoutStore()
 </script>
 
 <template>
-  <div class="app-shell h-full flex flex-col overflow-hidden">
+  <FileDropZone class="app-shell">
     <HeadTabBar />
 
     <!-- Main content area -->
@@ -48,7 +50,9 @@ const auth = useAuthStore()
       </div>
     </div>
 
-    <!-- Login dialog (server mode) -->
-    <LoginDialog v-if="!auth.isAuthed" />
-  </div>
+    <!-- Login dialog (server mode only) -->
+    <LoginDialog v-if="auth.needsLogin" />
+
+    <ToastHost />
+  </FileDropZone>
 </template>

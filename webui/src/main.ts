@@ -2,6 +2,8 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import { isDesktop } from './lib/desktop'
+import { useAuthStore } from './stores/auth'
+import { useUploadStore } from './stores/upload'
 import './style.css'
 
 if (isDesktop()) {
@@ -9,5 +11,8 @@ if (isDesktop()) {
 }
 
 const app = createApp(App)
-app.use(createPinia())
+const pinia = createPinia()
+app.use(pinia)
+useAuthStore(pinia).probe()
+useUploadStore(pinia).bindDesktopDrop()
 app.mount('#app')

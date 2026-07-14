@@ -1,105 +1,142 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAgentsStore } from '../stores/agents'
 import { useProvidersStore } from '../stores/providers'
 import { api } from '../api'
-import type { Agent } from '../types'
+import LocalSvgIcon from '../components/LocalSvgIcon.vue'
+import ProviderDialog from '../components/ProviderDialog.vue'
+import { DEFAULT_AGENT_KEY, DEFAULT_PROVIDER_NAME } from '../constants/defaults'
 
 const agentsStore = useAgentsStore()
 const providersStore = useProvidersStore()
 const error = ref('')
-const showForm = ref(false)
-const editingKey = ref('')
-const form = ref({ key: '', display_name: '', provider: '', model: 'gpt-4o-mini', system_extra: '' })
+const saving = ref(false)
+const providerOpen = ref(false)
+const form = ref({
+  display_name: '',
+  system_extra: '',
+})
+
+const defaultAgent = computed(() =>
+  agentsStore.agents.find((a) => a.key === DEFAULT_AGENT_KEY) || agentsStore.agents[0] || null,
+)
+
+const defaultProvider = computed(() =>
+  providersStore.providers.find((p) => p.name === DEFAULT_PROVIDER_NAME) || null,
+)
 
 onMounted(load)
+
 async function load() {
   try {
     await Promise.all([agentsStore.load(), providersStore.load()])
-  } catch (e: any) { error.value = e.message }
+    syncForm()
+  } catch (e: any) {
+    error.value = e.message
+  }
 }
-async function create() {
-  try {
-    await api.createAgent(form.value)
-    showForm.value = false
-    resetForm()
-    await load()
-  } catch (e: any) { error.value = e.message }
-}
-function resetForm() {
-  form.value = { key: '', display_name: '', provider: '', model: 'gpt-4o-mini', system_extra: '' }
-}
-function startEdit(a: Agent) {
-  editingKey.value = a.key
+
+function syncForm() {
+  const a = defaultAgent.value
+  if (!a) return
   form.value = {
-    key: a.key,
     display_name: a.display_name || '',
-    provider: a.provider,
-    model: a.model,
     system_extra: a.system_extra || '',
   }
 }
-async function saveEdit() {
+
+async function onProviderSaved(model: string) {
+  await Promise.all([providersStore.load(), agentsStore.load()])
+  if (!defaultAgent.value && defaultProvider.value) {
+    try {
+      await api.createAgent({
+        key: DEFAULT_AGENT_KEY,
+        display_name: 'Default Agent',
+        provider: DEFAULT_PROVIDER_NAME,
+        model,
+      })
+      await agentsStore.load()
+    } catch (e: any) {
+      error.value = e.message
+    }
+  }
+  syncForm()
+}
+
+async function save() {
+  const a = defaultAgent.value
+  if (!a) return
+  saving.value = true
+  error.value = ''
   try {
-    await api.updateAgent(editingKey.value, {
+    await api.updateAgent(a.key, {
       display_name: form.value.display_name,
-      provider: form.value.provider,
-      model: form.value.model,
+      provider: DEFAULT_PROVIDER_NAME,
       system_extra: form.value.system_extra,
     })
-    editingKey.value = ''
-    resetForm()
-    await load()
-  } catch (e: any) { error.value = e.message }
-}
-function cancelEdit() {
-  editingKey.value = ''
-  resetForm()
+    await agentsStore.load()
+    syncForm()
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
 <template>
-  <div class="p-6 max-w-[960px] mx-auto">
-    <div class="flex justify-between items-center mb-4">
-      <h1 class="text-xl font-bold">Agents</h1>
-      <button class="px-3 py-1 bg-neutral-800 text-white rounded text-sm" @click="showForm = !showForm">+ New</button>
-    </div>
-    <div v-if="error" class="text-red-600 mb-2">{{ error }}</div>
-    <div v-if="showForm" class="border border-neutral-200 rounded p-4 mb-4 bg-white space-y-2">
-      <input v-model="form.key" placeholder="key (e.g. default)" class="w-full border rounded px-2 py-1" />
-      <input v-model="form.display_name" placeholder="display name" class="w-full border rounded px-2 py-1" />
-      <select v-model="form.provider" class="w-full border rounded px-2 py-1">
-        <option value="" disabled>select provider</option>
-        <option v-for="p in providersStore.providers" :key="p.id" :value="p.name">{{ p.name }}</option>
-      </select>
-      <input v-model="form.model" placeholder="model" class="w-full border rounded px-2 py-1" />
-      <textarea v-model="form.system_extra" placeholder="system_extra (optional)" class="w-full border rounded px-2 py-1" rows="2"></textarea>
-      <button class="px-3 py-1 bg-neutral-800 text-white rounded text-sm" @click="create">Create</button>
-    </div>
-    <div class="space-y-2">
-      <div v-for="a in agentsStore.agents" :key="a.id" class="border border-neutral-200 rounded p-3 bg-white">
-        <template v-if="editingKey === a.key">
-          <input v-model="form.display_name" class="w-full border rounded px-2 py-1 mb-1" placeholder="display name" />
-          <select v-model="form.provider" class="w-full border rounded px-2 py-1 mb-1">
-            <option v-for="p in providersStore.providers" :key="p.id" :value="p.name">{{ p.name }}</option>
-          </select>
-          <input v-model="form.model" class="w-full border rounded px-2 py-1 mb-1" />
-          <textarea v-model="form.system_extra" class="w-full border rounded px-2 py-1 mb-1" rows="2"></textarea>
-          <div class="flex gap-2">
-            <button class="px-3 py-1 bg-neutral-800 text-white rounded text-sm" @click="saveEdit">Save</button>
-            <button class="px-3 py-1 border rounded text-sm" @click="cancelEdit">Cancel</button>
-          </div>
-        </template>
-        <template v-else>
-          <div class="flex justify-between">
-            <div>
-              <div class="font-mono font-semibold">{{ a.key }}</div>
-              <div class="text-sm text-neutral-600">{{ a.display_name || '—' }} · {{ a.provider }} / {{ a.model }}</div>
-            </div>
-            <button class="text-sm text-neutral-600" @click="startEdit(a)">edit</button>
-          </div>
-        </template>
+  <div class="p-6 max-w-[640px] mx-auto">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <h1 class="text-xl font-bold mb-1">Agent</h1>
+      </div>
+      <div class="shrink-0 flex items-center gap-2">
+        <button
+          type="button"
+          class="h-8 px-3 flex items-center gap-1.5 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-sm text-neutral-700"
+          title="Provider 配置"
+          @click="providerOpen = true"
+        >
+          <LocalSvgIcon name="provider" :size="15" />
+          Provider
+        </button>
+        <button
+          type="button"
+          class="h-8 px-3 bg-neutral-800 text-white rounded text-sm disabled:opacity-50"
+          :disabled="saving || !defaultAgent"
+          @click="save"
+        >{{ saving ? 'Saving…' : 'Save' }}</button>
       </div>
     </div>
+
+    <div v-if="error" class="text-red-600 mb-2 text-sm">{{ error }}</div>
+
+    <div v-if="!defaultProvider" class="text-sm text-neutral-500 border border-neutral-200 rounded p-4 bg-neutral-50 mb-4">
+      尚未配置 Provider，请点击右上角 <strong>Provider</strong> 按钮添加 API 连接。
+    </div>
+
+    <div v-else-if="defaultAgent" class="border border-neutral-200 rounded p-4 bg-white space-y-3">
+      <div v-if="defaultProvider" class="text-xs text-neutral-400 font-mono truncate pb-1 border-b border-neutral-100">
+        {{ defaultProvider.api_base }}
+        <span v-if="defaultAgent.model"> · {{ defaultAgent.model }}</span>
+      </div>
+
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Title</label>
+        <input v-model="form.display_name" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Default Agent" />
+      </div>
+
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">Prompt</label>
+        <textarea
+          v-model="form.system_extra"
+          class="w-full border rounded px-2 py-1.5 text-sm"
+          rows="4"
+          placeholder="Optional additional system instructions"
+        />
+      </div>
+    </div>
+
+    <ProviderDialog :open="providerOpen" @close="providerOpen = false" @saved="onProviderSaved" />
   </div>
 </template>

@@ -57,10 +57,13 @@ func main() {
 
 	// 3. Create wails3 application
 	backendURL := fmt.Sprintf("http://%s", cfg.Addr())
+	workspaceSvc := &Workspace{cfg: cfg}
 	app := application.New(application.Options{
 		Name:        "Swiflow",
 		Description: "Self-hosted AI Agent Runtime",
-		Services:    []application.Service{},
+		Services: []application.Service{
+			application.NewService(workspaceSvc),
+		},
 		Assets: application.AssetOptions{
 			Handler:    mustDesktopFrontendHandler(),
 			Middleware: apiProxyMiddleware(backendURL),
@@ -73,13 +76,16 @@ func main() {
 	app.SetIcon(emb.AppIconPNG)
 
 	// 4. Create main window (macOS fusion title bar: no system header, traffic lights kept)
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		URL: "/", Title: "Swiflow", Mac: application.MacWindow{
+	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		URL: "/", Title: "Swiflow",
+		EnableFileDrop: true,
+		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarHiddenInset,
 		},
 		Width: 1200, Height: 800, MinWidth: 800, MinHeight: 600,
 		BackgroundColour: application.NewRGB(255, 255, 255),
 	})
+	bindWorkspaceFileDrop(win, cfg)
 
 	// 5. Run
 	if err := app.Run(); err != nil {
@@ -280,8 +286,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 
 	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events)
 	httpServer := &http.Server{
-		Addr:              cfg.Addr(),
-		Handler:           srv.Handler(),
+		Addr: cfg.Addr(), Handler: srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

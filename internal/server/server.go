@@ -57,8 +57,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/sessions", s.listSessions)
 	mux.HandleFunc("GET /api/sessions/{key}", s.getSession)
-	mux.HandleFunc("POST /api/sessions/{key}/chat", s.chat)
 	mux.HandleFunc("GET /api/sessions/{key}/watch", s.watchSession)
+	mux.HandleFunc("POST /api/sessions/{key}/chat", s.chat)
 	mux.HandleFunc("POST /api/sessions/{key}/abort", s.abort)
 
 	mux.HandleFunc("GET /api/tools", s.listTools)
@@ -78,12 +78,15 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/cron/jobs", s.listCronJobs)
 	mux.HandleFunc("POST /api/cron/jobs", s.createCronJob)
+	mux.HandleFunc("POST /api/cron/reload", s.reloadCron)
 	mux.HandleFunc("PUT /api/cron/jobs/{id}", s.updateCronJob)
 	mux.HandleFunc("DELETE /api/cron/jobs/{id}", s.deleteCronJob)
-	mux.HandleFunc("POST /api/cron/reload", s.reloadCron)
 
 	mux.HandleFunc("GET /api/workspace/list", s.listWorkspace)
 	mux.HandleFunc("GET /api/workspace/read", s.readWorkspaceFile)
+	mux.HandleFunc("GET /api/workspace/download", s.downloadFile)
+	mux.HandleFunc("POST /api/workspace/download", s.downloadFile)
+	mux.HandleFunc("POST /api/workspace/upload", s.uploadWorkspace)
 
 	var h http.Handler = mux
 	h = s.requestLogMiddleware(h)
@@ -223,7 +226,10 @@ func bindJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 // --- health ---
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":    "ok",
+		"skip_auth": s.cfg.SkipAuth,
+	})
 }
 
 // --- providers ---

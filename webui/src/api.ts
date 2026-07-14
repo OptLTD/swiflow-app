@@ -1,4 +1,6 @@
 // API client for the Swiflow backend. Auth token is stored in localStorage.
+import { desktopDownloadWorkspaceFile } from './lib/desktopWorkspace'
+import { isDesktop } from './lib/desktop'
 import type {
   Agent,
   ChatEvent,
@@ -82,6 +84,63 @@ export const api = {
     req<{ path: string; entries: WorkspaceEntry[] }>('GET', `/workspace/list?path=${encodeURIComponent(path)}`),
   readWorkspaceFile: (path: string) =>
     req<{ path: string; content: string; truncated?: boolean }>('GET', `/workspace/read?path=${encodeURIComponent(path)}`),
+  downloadWorkspaceFile: (path: string) => downloadWorkspaceFile(path),
+  uploadWorkspace: (path: string, files: File[]) => uploadWorkspaceFiles(path, files),
+}
+
+function decodeBase64Payload(data: { encoding: string; content: string }): ArrayBuffer {
+  if (data.encoding !== 'base64' || typeof data.content !== 'string') {
+    throw new Error('unexpected download encoding')
+  }
+  const binary = atob(data.content)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes.buffer
+}
+
+async function downloadWorkspaceFile(path: string): Promise<ArrayBuffer> {
+  if (isDesktop()) {
+    const data = await desktopDownloadWorkspaceFile(path)
+    if (data) return decodeBase64Payload(data)
+  }
+  const data = await req<{ path: string; encoding: string; content: string; size: number }>(
+    'POST',
+    '/workspace/download',
+    { path },
+  )
+  return decodeBase64Payload(data)
+}
+
+async function uploadWorkspaceFiles(
+  path: string,
+  files: File[],
+): Promise<{ path: string; uploaded: { name: string; path: string; size: number }[] }> {
+  const fd = new FormData()
+  fd.append('path', path)
+  for (const file of files) {
+    fd.append('files', file, file.name)
+  }
+  const token = getToken()
+  const res = await fetch('/api/workspace/upload', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  })
+  const text = await res.text()
+  let data: { error?: string } | null = null
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    }
+  }
+  if (!res.ok) {
+    throw new Error(data?.error || `HTTP ${res.status}`)
+  }
+  return data as { path: string; uploaded: { name: string; path: string; size: number }[] }
 }
 
 export async function chat(

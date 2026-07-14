@@ -12,6 +12,10 @@ withDefaults(
       | 'folder-open'
       | 'send'
       | 'home'
+      | 'provider'
+      | 'back'
+      | 'history'
+      | 'refresh'
     size?: number
   }>(),
   { size: 16 },
@@ -68,6 +72,21 @@ withDefaults(
     <template v-else-if="name === 'home'">
       <path d="M2.5 7.5L8 2.5l5.5 5" />
       <path d="M4 6.75V13h3.25V9.5h1.5V13H12V6.75" />
+    </template>
+    <template v-else-if="name === 'provider'">
+      <rect x="2.5" y="3" width="11" height="4" rx="0.75" />
+      <path d="M5 7v2.5M11 7v2.5" />
+      <rect x="4" y="9.5" width="8" height="3.5" rx="0.75" />
+    </template>
+    <template v-else-if="name === 'back'">
+      <path d="M9 3L4 8l5 5M4 8h9" />
+    </template>
+    <template v-else-if="name === 'history'">
+      <path d="M3 4.5h10M3 8h7M3 11.5h4" />
+    </template>
+    <template v-else-if="name === 'refresh'">
+      <path d="M13 8a5 5 0 1 1-1.2-3.3" />
+      <path d="M13 3.5V7h-3.5" />
     </template>
   </svg>
 </template>

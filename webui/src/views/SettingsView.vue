@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import AgentsView from './AgentsView.vue'
-import ProvidersView from './ProvidersView.vue'
 import SkillsView from './SkillsView.vue'
 import ToolsView from './ToolsView.vue'
 import MCPServersView from './MCPServersView.vue'
 import CronView from './CronView.vue'
 
 const tabs = [
-  { key: 'agents', label: 'Agents' },
-  { key: 'providers', label: 'Providers' },
+  { key: 'agents', label: 'Agent' },
   { key: 'skills', label: 'Skills' },
   { key: 'tools', label: 'Tools' },
   { key: 'mcp', label: 'MCP' },
@@ -34,7 +32,6 @@ const activeSubTab = ref<SubTab>('agents')
 
     <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain">
       <AgentsView v-if="activeSubTab === 'agents'" />
-      <ProvidersView v-else-if="activeSubTab === 'providers'" />
       <SkillsView v-else-if="activeSubTab === 'skills'" />
       <ToolsView v-else-if="activeSubTab === 'tools'" />
       <MCPServersView v-else-if="activeSubTab === 'mcp'" />

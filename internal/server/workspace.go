@@ -1,6 +1,9 @@
 package server
 
 import (
+	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,7 +12,10 @@ import (
 	"time"
 
 	"github.com/OptLTD/swiflow/internal/secure"
+	"github.com/OptLTD/swiflow/internal/workspace"
 )
+
+const maxWorkspaceUpload = workspace.MaxFileSize
 
 type workspaceEntry struct {
 	Name    string `json:"name"`
@@ -126,4 +132,122 @@ func (s *Server) readWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 		"content":   string(data),
 		"truncated": truncated,
 	})
+}
+
+func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
+	var path string
+	if r.Method == http.MethodPost {
+		var in struct {
+			Path string `json:"path"`
+		}
+		if !bindJSON(w, r, &in) {
+			return
+		}
+		path = strings.TrimSpace(in.Path)
+	} else {
+		path = strings.TrimSpace(r.URL.Query().Get("path"))
+	}
+	if path == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
+		return
+	}
+	payload, err := workspace.ReadBinaryFile(s.cfg.WorkspaceDir, path)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+type uploadedFile struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+}
+
+func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(maxWorkspaceUpload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid multipart form"})
+		return
+	}
+
+	dir := strings.TrimSpace(r.FormValue("path"))
+	if dir == "" {
+		dir = "."
+	}
+	destDir, err := secure.SandboxPath(s.cfg.WorkspaceDir, dir)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mkdir failed"})
+		return
+	}
+
+	headers := r.MultipartForm.File["files"]
+	if len(headers) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no files"})
+		return
+	}
+
+	uploaded := make([]uploadedFile, 0, len(headers))
+	for _, fh := range headers {
+		item, err := saveUploadedFile(s.cfg.WorkspaceDir, dir, fh)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		uploaded = append(uploaded, item)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":     dir,
+		"uploaded": uploaded,
+	})
+}
+
+func saveUploadedFile(workspaceDir, dir string, fh *multipart.FileHeader) (uploadedFile, error) {
+	name, err := workspace.SafeUploadName(fh.Filename)
+	if err != nil {
+		return uploadedFile{}, err
+	}
+	if fh.Size > maxWorkspaceUpload {
+		return uploadedFile{}, fmt.Errorf("file too large: %s", name)
+	}
+
+	rel := name
+	if dir != "." {
+		rel = filepath.ToSlash(filepath.Join(dir, name))
+	}
+	full, err := secure.SandboxPath(workspaceDir, rel)
+	if err != nil {
+		return uploadedFile{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return uploadedFile{}, fmt.Errorf("mkdir failed: %w", err)
+	}
+
+	src, err := fh.Open()
+	if err != nil {
+		return uploadedFile{}, fmt.Errorf("open upload: %w", err)
+	}
+	defer src.Close()
+
+	dst, err := os.OpenFile(full, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return uploadedFile{}, fmt.Errorf("create file: %w", err)
+	}
+	defer dst.Close()
+
+	n, err := io.Copy(dst, io.LimitReader(src, maxWorkspaceUpload+1))
+	if err != nil {
+		return uploadedFile{}, fmt.Errorf("write file: %w", err)
+	}
+	if n > maxWorkspaceUpload {
+		_ = os.Remove(full)
+		return uploadedFile{}, fmt.Errorf("file too large: %s", name)
+	}
+
+	return uploadedFile{Name: name, Path: rel, Size: n}, nil
 }

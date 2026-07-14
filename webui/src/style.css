@@ -39,6 +39,10 @@ html.desktop .header-tab-bar button {
   --wails-draggable: no-drag;
 }
 
+.prose-swiflow {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
 .prose-swiflow p { margin: 0.4em 0; }
 .prose-swiflow pre {
   background: #0f172a;
@@ -46,7 +50,7 @@ html.desktop .header-tab-bar button {
   padding: 0.75rem;
   border-radius: 0.4rem;
   overflow-x: auto;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 .prose-swiflow code { font-family: ui-monospace, SFMono-Regular, monospace; }
 .prose-swiflow ul, .prose-swiflow ol { margin: 0.4em 0; padding-left: 1.4em; }
@@ -71,7 +75,7 @@ html.desktop .header-tab-bar button {
 .prose-swiflow table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   line-height: 1.5;
 }
 .prose-swiflow thead {
