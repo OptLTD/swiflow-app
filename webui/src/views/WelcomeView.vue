@@ -24,7 +24,7 @@ onMounted(async () => {
     <div class="max-w-[600px] mx-auto px-8 py-16">
       <!-- Brand -->
       <div class="text-center mb-12">
-        <div class="inline-flex w-14 h-14 rounded-xl bg-neutral-800 text-white text-2xl font-bold items-center justify-center mb-4">S</div>
+        <img src="/images/icon-light.svg" alt="Swiflow" class="w-14 h-14 mx-auto mb-4" />
         <h1 class="text-2xl font-bold text-neutral-900">Swiflow</h1>
         <p class="text-neutral-500 mt-1">Self-hosted AI Agent Runtime</p>
       </div>

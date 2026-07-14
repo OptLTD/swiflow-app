@@ -1,5 +1,5 @@
 // Package embed holds assets compiled into the Swiflow binary: database schema,
-// incremental upgrades, built-in skills, and the desktop frontend.
+// incremental upgrades, built-in skills, desktop frontend, and app icons.
 package embed
 
 import (
@@ -27,6 +27,11 @@ var InitSkillsFS embed.FS
 //
 //go:embed all:frontend
 var FrontendDist embed.FS
+
+// AppIconPNG is the desktop application icon (Dock / taskbar).
+//
+//go:embed icons/appicon.png
+var AppIconPNG []byte
 
 // UpgradesDir returns the embedded upgrades/ directory as an fs.FS.
 func UpgradesDir() (fs.FS, error) {

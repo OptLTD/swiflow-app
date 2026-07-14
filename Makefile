@@ -1,4 +1,4 @@
-.PHONY: dev dev-backend dev-frontend build image test migrate tidy desktop wails3 wails3-frontend wails3-app
+.PHONY: dev dev-backend dev-frontend build image test migrate tidy desktop desktop-app wails3 wails3-frontend wails3-app
 
 # Wails CGO objects must match the linker min macOS version to avoid ld warnings.
 DESKTOP_LDFLAGS := CGO_CFLAGS="-mmacosx-version-min=11.0" CGO_LDFLAGS="-mmacosx-version-min=11.0"
@@ -38,6 +38,14 @@ tidy:
 desktop:
 	cd webui && pnpm install && pnpm build
 	$(DESKTOP_LDFLAGS) go build -o swiflow-desktop ./cmd/desktop
+	@if [ "$$(uname)" = "Darwin" ]; then $(MAKE) desktop-app; fi
+
+desktop-app:
+	mkdir -p bin/Swiflow.app/Contents/{MacOS,Resources}
+	cp build/darwin/Info.plist bin/Swiflow.app/Contents/
+	cp build/darwin/icons.icns bin/Swiflow.app/Contents/Resources/
+	cp swiflow-desktop bin/Swiflow.app/Contents/MacOS/Swiflow
+	codesign --force --deep --sign - bin/Swiflow.app
 
 # Wails3 desktop development mode: Vite HMR + live desktop window
 # Uses FRONTEND_DEVSERVER_URL so AssetFileServerFS proxies to Vite (non-production build).

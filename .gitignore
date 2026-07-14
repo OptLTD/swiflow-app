@@ -2,6 +2,7 @@
 /desktop
 /swiflow
 /swiflow-desktop
+/bin/
 *.exe
 *.exe~
 *.dll

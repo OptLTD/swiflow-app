@@ -4,12 +4,16 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -33,13 +37,18 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// 1. Load Swiflow config
-	cfgPath := findConfig()
-	cfg, err := config.Load(cfgPath)
+	// 1. Load Swiflow config (.app launches with cwd=/ so use Application Support)
+	cfgPath, err := ensureDesktopConfig()
 	if err != nil {
-		slog.Error("load config", "error", err)
+		slog.Error("desktop config", "error", err)
 		os.Exit(1)
 	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		slog.Error("load config", "path", cfgPath, "error", err)
+		os.Exit(1)
+	}
+	cfg = resolveDesktopPaths(cfg, filepath.Dir(cfgPath))
 
 	// 2. Start Swiflow backend in background (skip auth in desktop mode)
 	cfg.SkipAuth = true
@@ -61,6 +70,8 @@ func main() {
 		},
 	})
 
+	app.SetIcon(emb.AppIconPNG)
+
 	// 4. Create main window (macOS fusion title bar: no system header, traffic lights kept)
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		URL: "/", Title: "Swiflow", Mac: application.MacWindow{
@@ -77,18 +88,113 @@ func main() {
 	}
 }
 
-// findConfig locates config.json: check SWIFLOW_CONFIG env, then current dir, then parent dir.
-func findConfig() string {
+// appDataDir returns the persistent desktop data directory.
+// macOS: ~/Library/Application Support/Swiflow
+func appDataDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "Swiflow"), nil
+	case "windows":
+		if base := os.Getenv("APPDATA"); base != "" {
+			return filepath.Join(base, "Swiflow"), nil
+		}
+		return filepath.Join(home, "AppData", "Roaming", "Swiflow"), nil
+	default:
+		if base := os.Getenv("XDG_CONFIG_HOME"); base != "" {
+			return filepath.Join(base, "swiflow"), nil
+		}
+		return filepath.Join(home, ".config", "swiflow"), nil
+	}
+}
+
+// ensureDesktopConfig finds an existing config or writes a default under Application Support.
+// Launch order: SWIFLOW_CONFIG → ./config.json → ../config.json → AppSupport/config.json
+func ensureDesktopConfig() (string, error) {
 	if p := os.Getenv("SWIFLOW_CONFIG"); p != "" {
-		return p
+		return p, nil
 	}
-	if _, err := os.Stat("config.json"); err == nil {
-		return "config.json"
+	for _, p := range []string{"config.json", "../config.json"} {
+		if abs, err := filepath.Abs(p); err == nil {
+			if _, err := os.Stat(abs); err == nil {
+				return abs, nil
+			}
+		}
 	}
-	if _, err := os.Stat("../config.json"); err == nil {
-		return "../config.json"
+
+	dir, err := appDataDir()
+	if err != nil {
+		return "", err
 	}
-	return "config.json"
+	if err := os.MkdirAll(filepath.Join(dir, "data", "workspace"), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "data", "user-skills"), 0o755); err != nil {
+		return "", err
+	}
+
+	cfgPath := filepath.Join(dir, "config.json")
+	if _, err := os.Stat(cfgPath); err == nil {
+		return cfgPath, nil
+	}
+
+	token, err := randomHex(16)
+	if err != nil {
+		return "", err
+	}
+	encKey, err := randomHex(16)
+	if err != nil {
+		return "", err
+	}
+	cfg := map[string]any{
+		"host": "127.0.0.1", "port": 18765,
+		"db_path": filepath.Join(dir, "data", "swiflow.db"),
+
+		"encryption_key": encKey, "auth_token": token,
+		"workspace_dir":    filepath.Join(dir, "data", "workspace"),
+		"user_skills_dir":  filepath.Join(dir, "data", "user-skills"),
+		"allowed_origins":  []string{"*"},
+		"max_history_msgs": 100, "tools": map[string]any{
+			"exec_enabled":     true,
+			"browser_enabled":  true,
+			"browser_headless": true,
+		},
+	}
+	raw, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(cfgPath, raw, 0o600); err != nil {
+		return "", err
+	}
+	slog.Info("created desktop config", "path", cfgPath)
+	return cfgPath, nil
+}
+
+func randomHex(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// resolveDesktopPaths turns relative data paths into absolute paths under the config directory.
+func resolveDesktopPaths(cfg config.Config, baseDir string) config.Config {
+	abs := func(p string) string {
+		if p == "" || filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(baseDir, p)
+	}
+	cfg.DBPath = abs(cfg.DBPath)
+	cfg.WorkspaceDir = abs(cfg.WorkspaceDir)
+	cfg.UserSkillsDir = abs(cfg.UserSkillsDir)
+	cfg.InitSkillsDir = abs(cfg.InitSkillsDir)
+	return cfg
 }
 
 // startSwiflowBackend starts the Swiflow HTTP server in a goroutine and waits for it to be ready.
