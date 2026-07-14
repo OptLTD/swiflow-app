@@ -1,4 +1,4 @@
-// Package main is the Mira CLI entrypoint. Spec §14.
+// Package main is the Swiflow CLI entrypoint. Spec §14.
 package main
 
 import (

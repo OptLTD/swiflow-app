@@ -15,7 +15,7 @@ import (
 // TestManagerSyncStdioDBX connects to the local dbx MCP server (stdio).
 // Skips when dbx-mcp-server is not installed.
 //
-// Equivalent Mira config:
+// Equivalent Swiflow config:
 //
 //	{"name":"dbx","transport":"stdio","command":"dbx-mcp-server"}
 func TestManagerSyncStdioDBX(t *testing.T) {

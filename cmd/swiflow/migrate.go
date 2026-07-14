@@ -52,7 +52,7 @@ func migrateCmd() *cobra.Command {
 func loadConfig() (config.Config, error) {
 	path := cfgFile
 	if path == "" {
-		path = os.Getenv("MIRA_CONFIG")
+		path = os.Getenv("SWIFLOW_CONFIG")
 	}
 	if path == "" {
 		path = "config.json"

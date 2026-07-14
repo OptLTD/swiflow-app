@@ -1,4 +1,4 @@
-// API client for the Mira backend. Auth token is stored in localStorage.
+// API client for the Swiflow backend. Auth token is stored in localStorage.
 import type {
   Agent,
   ChatEvent,
@@ -13,7 +13,7 @@ import type {
   WorkspaceEntry,
 } from './types'
 
-const TOKEN_KEY = 'mira_token'
+const TOKEN_KEY = 'swiflow_token'
 
 export function getToken(): string {
   return localStorage.getItem(TOKEN_KEY) || ''

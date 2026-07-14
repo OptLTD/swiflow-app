@@ -1,13 +1,13 @@
 {
   "host": "127.0.0.1",
   "port": 8000,
-  "db_path": "./data/mira.db",
+  "db_path": "./data/swiflow.db",
   "auth_token": "change-me",
   "encryption_key": "change-me-at-least-16-chars",
   "workspace_dir": "./data/workspace",
   "user_skills_dir": "./data/user-skills",
   "allowed_origins": ["http://localhost:5173"],
-  "max_history_messages": 100,
+  "max_history_msgs": 100,
   "tools": {
     "exec_enabled": false,
     "browser_enabled": false,

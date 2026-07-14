@@ -16,12 +16,12 @@ import (
 	"github.com/OptLTD/swiflow/embed"
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/browser"
-	"github.com/OptLTD/swiflow/internal/schedule"
-	"github.com/OptLTD/swiflow/internal/sesshub"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/migrate"
+	"github.com/OptLTD/swiflow/internal/schedule"
 	"github.com/OptLTD/swiflow/internal/seed"
 	"github.com/OptLTD/swiflow/internal/server"
+	"github.com/OptLTD/swiflow/internal/sesshub"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store/sqlite"
 	"github.com/OptLTD/swiflow/internal/tool"
@@ -32,7 +32,7 @@ var autoMigrate bool
 func serveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Start the Mira HTTP server",
+		Short: "Start the Swiflow HTTP server",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runServe()
 		},
@@ -121,7 +121,7 @@ func runServe() error {
 		Tools:              toolsReg,
 		Skills:             skillsCat,
 		Workspace:          cfg.WorkspaceDir,
-		MaxHistoryMessages: cfg.MaxHistoryMessages,
+		MaxHistoryMessages: cfg.MaxHistoryMsgs,
 	})
 
 	events := sesshub.New()
@@ -144,7 +144,7 @@ func runServe() error {
 	defer stop()
 
 	go func() {
-		slog.Info("mira listening", "addr", cfg.Addr())
+		slog.Info("swiflow listening", "addr", cfg.Addr())
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", "error", err)
 			os.Exit(1)
@@ -153,7 +153,9 @@ func runServe() error {
 
 	<-ctx.Done()
 	slog.Info("shutting down")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(), 15*time.Second,
+	)
 	defer cancel()
 	return httpServer.Shutdown(shutdownCtx)
 }

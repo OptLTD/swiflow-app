@@ -73,7 +73,7 @@ async function toggle(name: string, enabled: boolean) {
       class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3 mb-4"
     >
       Browser tool (<code>browser</code>) is listed but locked.
-      Set <code>tools.browser_enabled</code> to <code>true</code> in config (or <code>MIRA_BROWSER=true</code>) and restart the server.
+      Set <code>tools.browser_enabled</code> to <code>true</code> in config (or <code>SWIFLOW_BROWSER=true</code>) and restart the server.
       First run downloads Chromium automatically.
     </div>
     <div
@@ -81,7 +81,7 @@ async function toggle(name: string, enabled: boolean) {
       class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3 mb-4"
     >
       Runtime tool (<code>exec</code>) is listed but locked.
-      Set <code>tools.exec_enabled</code> to <code>true</code> in config (or <code>MIRA_EXEC=true</code>) and restart the server to use it.
+      Set <code>tools.exec_enabled</code> to <code>true</code> in config (or <code>SWIFLOW_EXEC=true</code>) and restart the server to use it.
     </div>
     <div v-if="error" class="text-red-600 mb-2 text-sm">{{ error }}</div>
     <div class="space-y-6">

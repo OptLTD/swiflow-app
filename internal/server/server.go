@@ -183,23 +183,13 @@ func (s *Server) corsMiddleware(allowed []string) func(http.Handler) http.Handle
 
 // staticMiddleware serves the Vue UI for non-/api routes.
 func (s *Server) staticMiddleware(next http.Handler) http.Handler {
-	var fileServer http.Handler
-	if s.cfg.WebDistDir != "" {
-		fileServer = http.FileServer(http.Dir(s.cfg.WebDistDir))
-	} else {
-		dist, _ := embed.DesktopFrontendDist()
-		fileServer = http.FileServer(http.FS(dist))
-	}
+	dist, _ := embed.GetFrontendDist()
+	fileServer := http.FileServer(http.FS(dist))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if s.cfg.WebDistDir != "" {
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-		dist, _ := embed.DesktopFrontendDist()
 		p := strings.TrimPrefix(r.URL.Path, "/")
 		if p == "" {
 			p = "index.html"
@@ -587,13 +577,13 @@ func (s *Server) setToolEnabled(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Enabled && tool.IsRuntimeTool(name) && !s.cfg.Tools.ExecEnabled {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "runtime tools require tools.exec_enabled or MIRA_EXEC=true in config",
+			"error": "runtime tools require tools.exec_enabled or SWIFLOW_EXEC=true in config",
 		})
 		return
 	}
 	if in.Enabled && tool.IsBrowserTool(name) && !s.cfg.Tools.BrowserEnabled {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "browser tool requires tools.browser_enabled or MIRA_BROWSER=true in config",
+			"error": "browser tool requires tools.browser_enabled or SWIFLOW_BROWSER=true in config",
 		})
 		return
 	}

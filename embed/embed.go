@@ -1,4 +1,4 @@
-// Package embed holds assets compiled into the Mira binary: database schema,
+// Package embed holds assets compiled into the Swiflow binary: database schema,
 // incremental upgrades, built-in skills, and the desktop frontend.
 package embed
 
@@ -22,18 +22,18 @@ var upgrades embed.FS
 //go:embed all:init-skills
 var InitSkillsFS embed.FS
 
-// DesktopFrontend holds the built Vue UI for the wails3 desktop app.
+// FrontendDist holds the built Vue UI for the wails3 desktop app.
 // Vite writes webui build output directly into embed/frontend/.
 //
 //go:embed all:frontend
-var DesktopFrontend embed.FS
+var FrontendDist embed.FS
 
 // UpgradesDir returns the embedded upgrades/ directory as an fs.FS.
 func UpgradesDir() (fs.FS, error) {
 	return fs.Sub(upgrades, "upgrades")
 }
 
-// DesktopFrontendDist returns the embedded frontend/ directory as an fs.FS.
-func DesktopFrontendDist() (fs.FS, error) {
-	return fs.Sub(DesktopFrontend, "frontend")
+// GetFrontendDist returns the embedded frontend/ directory as an fs.FS.
+func GetFrontendDist() (fs.FS, error) {
+	return fs.Sub(FrontendDist, "frontend")
 }

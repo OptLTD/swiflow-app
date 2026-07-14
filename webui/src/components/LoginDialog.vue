@@ -33,7 +33,7 @@ async function connect() {
 <template>
   <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
     <div class="bg-white rounded-lg shadow-xl p-6 w-80">
-      <div class="font-bold text-lg mb-1">Mira</div>
+      <div class="font-bold text-lg mb-1">Swiflow</div>
       <div class="text-sm text-neutral-500 mb-4">Enter your auth token to continue.</div>
       <input
         v-model="token"

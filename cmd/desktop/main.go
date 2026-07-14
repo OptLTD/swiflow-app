@@ -1,5 +1,5 @@
-// Package main is the Mira desktop application entrypoint using wails3.
-// It starts the Mira backend in-process and opens a native window with the Vue UI.
+// Package main is the Swiflow desktop application entrypoint using wails3.
+// It starts the Swiflow backend in-process and opens a native window with the Vue UI.
 package main
 
 import (
@@ -15,7 +15,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	miraemb "github.com/OptLTD/swiflow/embed"
+	emb "github.com/OptLTD/swiflow/embed"
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/browser"
 	"github.com/OptLTD/swiflow/internal/config"
@@ -33,7 +33,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// 1. Load Mira config
+	// 1. Load Swiflow config
 	cfgPath := findConfig()
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -41,15 +41,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 2. Start Mira backend in background (skip auth in desktop mode)
+	// 2. Start Swiflow backend in background (skip auth in desktop mode)
 	cfg.SkipAuth = true
-	shutdown := startMiraBackend(ctx, cfg)
+	shutdown := startSwiflowBackend(ctx, cfg)
 	defer shutdown()
 
 	// 3. Create wails3 application
 	backendURL := fmt.Sprintf("http://%s", cfg.Addr())
 	app := application.New(application.Options{
-		Name:        "Mira",
+		Name:        "Swiflow",
 		Description: "Self-hosted AI Agent Runtime",
 		Services:    []application.Service{},
 		Assets: application.AssetOptions{
@@ -63,7 +63,7 @@ func main() {
 
 	// 4. Create main window (macOS fusion title bar: no system header, traffic lights kept)
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		URL: "/", Title: "Mira", Mac: application.MacWindow{
+		URL: "/", Title: "Swiflow", Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarHiddenInset,
 		},
 		Width: 1200, Height: 800, MinWidth: 800, MinHeight: 600,
@@ -77,9 +77,9 @@ func main() {
 	}
 }
 
-// findConfig locates config.json: check MIRA_CONFIG env, then current dir, then parent dir.
+// findConfig locates config.json: check SWIFLOW_CONFIG env, then current dir, then parent dir.
 func findConfig() string {
-	if p := os.Getenv("MIRA_CONFIG"); p != "" {
+	if p := os.Getenv("SWIFLOW_CONFIG"); p != "" {
 		return p
 	}
 	if _, err := os.Stat("config.json"); err == nil {
@@ -91,8 +91,8 @@ func findConfig() string {
 	return "config.json"
 }
 
-// startMiraBackend starts the Mira HTTP server in a goroutine and waits for it to be ready.
-func startMiraBackend(ctx context.Context, cfg config.Config) func() {
+// startSwiflowBackend starts the Swiflow HTTP server in a goroutine and waits for it to be ready.
+func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	for _, dir := range []string{filepath.Dir(cfg.DBPath), cfg.WorkspaceDir, cfg.UserSkillsDir} {
 		if dir != "" {
 			_ = os.MkdirAll(dir, 0o755)
@@ -106,12 +106,12 @@ func startMiraBackend(ctx context.Context, cfg config.Config) func() {
 	}
 
 	// Auto-migrate
-	upgrades, err := miraemb.UpgradesDir()
+	upgrades, err := emb.UpgradesDir()
 	if err != nil {
 		slog.Error("upgrades fs", "error", err)
 		os.Exit(1)
 	}
-	if err := migrate.Apply(ctx, st.DB(), miraemb.SchemaSQL, upgrades); err != nil {
+	if err := migrate.Apply(ctx, st.DB(), emb.SchemaSQL, upgrades); err != nil {
 		slog.Error("migrate", "error", err)
 		os.Exit(1)
 	}
@@ -161,7 +161,7 @@ func startMiraBackend(ctx context.Context, cfg config.Config) func() {
 		Tools:              toolsReg,
 		Skills:             skillsCat,
 		Workspace:          cfg.WorkspaceDir,
-		MaxHistoryMessages: cfg.MaxHistoryMessages,
+		MaxHistoryMessages: cfg.MaxHistoryMsgs,
 	})
 
 	events := sesshub.New()
@@ -180,7 +180,7 @@ func startMiraBackend(ctx context.Context, cfg config.Config) func() {
 	}
 
 	go func() {
-		slog.Info("mira backend listening", "addr", cfg.Addr())
+		slog.Info("swiflow backend listening", "addr", cfg.Addr())
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", "error", err)
 		}
@@ -191,7 +191,7 @@ func startMiraBackend(ctx context.Context, cfg config.Config) func() {
 		resp, err := http.Get(fmt.Sprintf("http://%s/api/health", cfg.Addr()))
 		if err == nil && resp.StatusCode == 200 {
 			resp.Body.Close()
-			slog.Info("mira backend ready")
+			slog.Info("swiflow backend ready")
 			break
 		}
 		if resp != nil {
@@ -213,7 +213,7 @@ func startMiraBackend(ctx context.Context, cfg config.Config) func() {
 // In development, set FRONTEND_DEVSERVER_URL (e.g. http://localhost:5173) so
 // AssetFileServerFS reverse-proxies to Vite HMR instead of embedded assets.
 func mustDesktopFrontendHandler() http.Handler {
-	dist, err := miraemb.DesktopFrontendDist()
+	dist, err := emb.GetFrontendDist()
 	if err != nil {
 		slog.Error("load desktop frontend", "error", err)
 		os.Exit(1)
@@ -222,7 +222,7 @@ func mustDesktopFrontendHandler() http.Handler {
 }
 
 // apiProxyMiddleware returns a wails3 Middleware that proxies /api/* requests
-// to the Mira backend, letting all other requests fall through to the static file handler.
+// to the Swiflow backend, letting all other requests fall through to the static file handler.
 func apiProxyMiddleware(backendURL string) application.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -230,7 +230,7 @@ func apiProxyMiddleware(backendURL string) application.Middleware {
 				next.ServeHTTP(w, r)
 				return
 			}
-			// Proxy to Mira backend
+			// Proxy to Swiflow backend
 			proxyURL := backendURL + r.URL.Path
 			if r.URL.RawQuery != "" {
 				proxyURL += "?" + r.URL.RawQuery

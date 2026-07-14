@@ -294,7 +294,7 @@ function gapClass(m: Msg, i: number): string {
             </div>
             <div v-else-if="m.role === 'assistant'">
               <ThinkingBlock v-if="m.thinking" :content="m.thinking" />
-              <div v-if="m.content" class="prose-mira" v-html="render(m.content)"></div>
+              <div v-if="m.content" class="prose-swiflow" v-html="render(m.content)"></div>
               <span v-else-if="m.streaming" class="typing-dots">
                 <span></span><span></span><span></span>
               </span>

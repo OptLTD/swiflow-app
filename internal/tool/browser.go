@@ -85,7 +85,7 @@ func (t *browserTool) Parameters() map[string]any {
 
 func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if !t.allowed {
-		return "", fmt.Errorf("browser is disabled (set tools.browser_enabled or MIRA_BROWSER=true)")
+		return "", fmt.Errorf("browser is disabled (set tools.browser_enabled or SWIFLOW_BROWSER=true)")
 	}
 	if t.pool == nil {
 		return "", fmt.Errorf("browser pool not initialized")

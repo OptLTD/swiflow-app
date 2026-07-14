@@ -1,7 +1,7 @@
-# Mira — Development Specification
+# Swiflow — Development Specification
 
 > **Status:** Canonical development-basis document. This is the **sole** reference
-> for building Mira. An implementer who has never seen any prior related
+> for building Swiflow. An implementer who has never seen any prior related
 > codebase should be able to construct the system — every Phase 1 endpoint,
 > table column, tool, config key, and the exact agent-loop behavior — from this
 > document alone, plus the companion `schema.sql` and public standards (HTTP,
@@ -13,7 +13,7 @@
 
 ## 1. Overview & goals
 
-Mira is a **self-hosted AI agent runtime**. A single server process hosts
+Swiflow is a **self-hosted AI agent runtime**. A single server process hosts
 configurable LLM-backed agents, exposes them to clients over an HTTP API with
 Server-Sent Events (SSE) streaming, and lets agents use tools — filesystem
 operations, web access, shell execution, and skills — scoped to a workspace.
@@ -39,14 +39,14 @@ backend.
 - Multi-tenancy, RBAC, users/membership (Phase 3).
 - MCP integration, subagents, scheduled tasks (Phase 2).
 - Browser automation, voice/audio, knowledge graphs, RAG, memory vaults.
-- A first-party LLM. Mira is provider-agnostic.
+- A first-party LLM. Swiflow is provider-agnostic.
 - Training or fine-tuning.
 
 ---
 
 ## 2. Clean-room rules & references
 
-Mira is a **clean-room** implementation. The rules below are binding for anyone
+Swiflow is a **clean-room** implementation. The rules below are binding for anyone
 implementing from this document.
 
 **References (permissively licensed, may be studied):**
@@ -78,8 +78,8 @@ any reference consulted. A `NOTICE.md` retains the license/notice of any code
 actually copied from a permissive reference (expected: none — fresh Go).
 
 **Licensing:** the resulting codebase is the user's to license (commercial
-product). The forbidden codebases' obligations do **not** attach to Mira because
-Mira derives from none of them. (Note: this holds only if the clean-room rules
+product). The forbidden codebases' obligations do **not** attach to Swiflow because
+Swiflow derives from none of them. (Note: this holds only if the clean-room rules
 are actually followed; a reviewer who has never seen the forbidden codebases
 should audit the result.)
 
@@ -105,7 +105,7 @@ should audit the result.)
   `EventSource`, because chat is a POST).
 
 **Conventions:**
-- Module path: `mira` (single word). Internal packages under `internal/`.
+- Module path: `swiflow` (single word). Internal packages under `internal/`.
 - Time stored as ISO-8601 text (SQLite) / `TIMESTAMPTZ` (Postgres).
 - All API JSON is `snake_case` for keys.
 - Errors: handlers return `{"error": "message"}` with an appropriate HTTP status.
@@ -119,7 +119,7 @@ should audit the result.)
 Layered. Dependencies point downward.
 
 ```
-cmd/mira              CLI entrypoint (serve, migrate)
+cmd/swiflow              CLI entrypoint (serve, migrate)
 internal/server       HTTP REST + SSE, auth, CORS, static embed  ──┐
 internal/agent        run loop, session guard, tool execution     │
 internal/llm          provider interface + OpenAI-compatible      │
@@ -147,7 +147,7 @@ webui/                Vue app (built to webui/dist, embedded into binary)
 - `skill` — discovery + summary; depends on `config`-like paths only.
 - `agent` — the `Runner`; depends on `llm`, `tool`, `store`, `skill`, `secure`.
 - `server` — HTTP layer; depends on `agent`, `store`, `config`, `secure`.
-- `cmd/mira` — wires everything; depends on all.
+- `cmd/swiflow` — wires everything; depends on all.
 
 **Key invariant:** `store` knows nothing about agent semantics; `agent` knows
 nothing about HTTP; `server` knows nothing about LLM wire formats. This keeps
@@ -188,8 +188,8 @@ without rewriting a whole history blob.
 All statements use `CREATE IF NOT EXISTS`, so the base schema is idempotent.
 Incremental changes go in `embed/upgrades/` as `0001_*.sql`, `0002_*.sql`, …;
 `migrate.Apply` applies the base schema, then any unapplied upgrade files in
-order (recorded in `schema_migrations`). `mira migrate` applies both and exits;
-`mira serve --migrate` applies then serves.
+order (recorded in `schema_migrations`). `swiflow migrate` applies both and exits;
+`swiflow serve --migrate` applies then serves.
 
 **Postgres compatibility (Phase 3):** keep SQL dialect-portable: use
 `TEXT`/`INTEGER`/`BLOB`; avoid SQLite-only functions in schema DDL except
@@ -202,7 +202,7 @@ order (recorded in `schema_migrations`). `mira migrate` applies both and exits;
 ## 6. Module specifications
 
 ### 6.1 `config`
-Loads a JSON file (path from `-c` flag or `MIRA_CONFIG` env, default
+Loads a JSON file (path from `-c` flag or `SWIFLOW_CONFIG` env, default
 `config.json`), then applies env overlays (env wins). Falls back to defaults for
 missing fields. See §11 for the full key list.
 
@@ -441,7 +441,7 @@ callback `onEvent`.
 
 ### 7.1 System prompt
 ```
-You are Mira agent <agent.key>.
+You are Swiflow agent <agent.key>.
 <agent.system_extra, if nonempty>
 
 ## Workspace
@@ -581,7 +581,7 @@ panic becomes a tool-error result (`"error: panic: <msg>"`), not a run crash.
 - **Built-in:** embedded in the binary (`embed/init-skills/`); read-only at runtime.
 - **User:** `UserSkillsDir` (default `./data/user-skills`), user-writable; overrides
   built-in skills by slug.
-- **Dev override:** optional `InitSkillsDir` / `MIRA_INIT_SKILLS` replaces embedded
+- **Dev override:** optional `InitSkillsDir` / `SWIFLOW_INIT_SKILLS` replaces embedded
   builtins from a filesystem directory (rebuild not required).
 - **Format:** each skill is a directory with a `SKILL.md` containing YAML
   front matter (`slug`, `name`, `description`) and a markdown body.
@@ -652,17 +652,17 @@ JSON file with env overlay (env wins). Defaults shown.
 
 | Key (JSON) | Env | Default | Notes |
 |---|---|---|---|
-| `host` | `MIRA_HOST` | `127.0.0.1` | listen host |
-| `port` | `MIRA_PORT` | `18800` | listen port |
-| `db_path` | `MIRA_DB` | `./data/mira.db` | SQLite file path |
-| `auth_token` | `MIRA_AUTH_TOKEN` | (required, no default) | bearer token |
-| `encryption_key` | `MIRA_ENCRYPTION_KEY` | (required) | provider-key encryption; ≥16 chars |
-| `workspace_dir` | `MIRA_WORKSPACE` | `./data/workspace` | file-tool sandbox root |
-| `init_skills_dir` | `MIRA_INIT_SKILLS` | (empty) | dev override for built-in skills |
-| `user_skills_dir` | `MIRA_USER_SKILLS` | `./data/user-skills` | user skills |
+| `host` | `SWIFLOW_HOST` | `127.0.0.1` | listen host |
+| `port` | `SWIFLOW_PORT` | `18800` | listen port |
+| `db_path` | `SWIFLOW_DB` | `./data/swiflow.db` | SQLite file path |
+| `auth_token` | `SWIFLOW_AUTH_TOKEN` | (required, no default) | bearer token |
+| `encryption_key` | `SWIFLOW_ENCRYPTION_KEY` | (required) | provider-key encryption; ≥16 chars |
+| `workspace_dir` | `SWIFLOW_WORKSPACE` | `./data/workspace` | file-tool sandbox root |
+| `init_skills_dir` | `SWIFLOW_INIT_SKILLS` | (empty) | dev override for built-in skills |
+| `user_skills_dir` | `SWIFLOW_USER_SKILLS` | `./data/user-skills` | user skills |
 | `allowed_origins` | — | `[]` | CORS; empty = allow all |
 | `web_dist_dir` | — | (embedded) | override for dev |
-| `tools.exec_enabled` | `MIRA_EXEC` | `false` | register `cmd_run`, `exec_run`, `python_run`, `node_run` if true |
+| `tools.exec_enabled` | `SWIFLOW_EXEC` | `false` | register `cmd_run`, `exec_run`, `python_run`, `node_run` if true |
 | `tools.web_search_provider` | — | `""` | disabled if empty |
 
 `config.example.json` ships documenting these. `Load` errors if `auth_token` or
@@ -740,9 +740,9 @@ build is embedded and served by Go.
 
 **Makefile targets:**
 - `dev`: local API `:8000` + Vite `:5173` (parallel)
-- `build`: `webui/dist` + `go build -o mira`
-- `image`: `docker build -t mira:latest .`
-- `migrate`: `go run ./cmd/mira migrate`
+- `build`: `webui/dist` + `go build -o swiflow`
+- `image`: `docker build -t swiflow:latest .`
+- `migrate`: `go run ./cmd/swiflow migrate`
 - `test`: web build + `go vet` + `go test` + `go build`
 
 **Embedding:** `internal/server` (or `web`) has `//go:embed dist/*` over the
@@ -750,7 +750,7 @@ built `webui/dist`; the static handler serves it. For dev, set `web_dist_dir` to
 the Vite dev path or run the UI separately.
 
 **CLI:**
-- `mira serve [--migrate] [-c config.json] [-v]` — start server; `--migrate`
+- `swiflow serve [--migrate] [-c config.json] [-v]` — start server; `--migrate`
   applies schema and upgrades first.
 - `migrate` — apply schema and upgrades, then exit.
 - `--migrate` runs `migrate.Apply` before serving.
@@ -792,7 +792,7 @@ truth; code is then implemented to the amended document.
 **Phase 1 end-to-end:**
 1. `make migrate` against a temp SQLite file → `schema_migrations` and all
    tables created (compare to `embed/schema.sql`).
-2. `make dev` or `./mira serve` → server listens; `curl /api/health` → `{"status":"ok"}`.
+2. `make dev` or `./swiflow serve` → server listens; `curl /api/health` → `{"status":"ok"}`.
 3. Create a provider (OpenAI-compatible endpoint + key) via `POST /api/providers`;
    confirm `GET` omits `api_key`. Confirm `api_key_enc` in DB is non-empty
    ciphertext.
@@ -831,7 +831,7 @@ round-trip encrypt/decrypt of provider key).
   permissive reference (expected empty — fresh Go).
 - **`LICENSE`**: the project's own license, chosen by the owner (commercial
   product). A placeholder is added now; the owner selects the final terms.
-- **Forbidden-codebase obligation:** none attaches to Mira, **provided** the
+- **Forbidden-codebase obligation:** none attaches to Swiflow, **provided** the
   clean-room rules in §2 are followed. The existing `swiflow-new` derivative
   code is **not** carried into this repo. A reviewer who has never seen the
   forbidden codebases should perform the final audit.
@@ -840,7 +840,7 @@ round-trip encrypt/decrypt of provider key).
 
 ## Appendix A — Open questions for the owner
 
-1. **`LICENSE` choice** for Mira (proprietary / MIT / Apache-2.0 / other).
+1. **`LICENSE` choice** for Swiflow (proprietary / MIT / Apache-2.0 / other).
 2. **SSE busy behavior** (§10.4): single `error` event + close, or HTTP `409`
    before streaming. Recommend the latter for cleaner client handling.
 3. **`web_search` backend** for Phase 1 (stub vs. wire a provider). Recommend

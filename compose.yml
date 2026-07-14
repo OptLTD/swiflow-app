@@ -1,5 +1,5 @@
 services:
-  mira:
+  swiflow:
     build: .
     ports:
       - "8000:8000"

@@ -1,4 +1,4 @@
-# Mira Implementation Status
+# Swiflow Implementation Status
 
 Tracked against `docs/SPEC.md`. Phase 2 MCP and cron implemented.
 

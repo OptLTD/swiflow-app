@@ -1,4 +1,4 @@
--- Mira — Phase 1 schema (SQLite).
+-- Swiflow — Phase 1 schema (SQLite).
 -- Canonical reference for docs/SPEC.md §5. Keep in sync with embed/schema.sql.
 -- PostgreSQL in Phase 3 (TEXT ids hold UUIDv7; INTEGER booleans become BOOLEAN;
 -- datetime('now') becomes NOW()).

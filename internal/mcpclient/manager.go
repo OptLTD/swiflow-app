@@ -95,7 +95,7 @@ func (m *Manager) connectServer(ctx context.Context, srv store.MCPServer) (*conn
 	if err != nil {
 		return nil, err
 	}
-	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "mira", Version: "0.2.0"}, nil)
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "swiflow", Version: "0.2.0"}, nil)
 	connectCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	session, err := client.Connect(connectCtx, transport, nil)

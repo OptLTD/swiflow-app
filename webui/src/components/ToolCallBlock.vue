@@ -94,7 +94,7 @@ const running = computed(() => !props.content && !props.isError)
         <span class="text-neutral-400 font-mono shrink-0">{{ name }}</span>
       </span>
       <span class="shrink-0 flex items-center gap-1" :class="isError ? 'text-red-600' : 'text-green-600'">
-        <template v-if="running"><span class="mira-spin"></span><span class="text-neutral-500">running</span></template>
+        <template v-if="running"><span class="swiflow-spin"></span><span class="text-neutral-500">running</span></template>
         <template v-else>{{ isError ? 'error' : 'ok' }}</template>
       </span>
     </button>

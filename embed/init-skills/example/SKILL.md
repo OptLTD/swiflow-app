@@ -1,7 +1,7 @@
 ---
 slug: example
 name: example
-description: A minimal example skill for Mira
+description: A minimal example skill for Swiflow
 ---
 
 # Example Skill

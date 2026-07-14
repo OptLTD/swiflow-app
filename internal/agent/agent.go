@@ -327,7 +327,7 @@ func (r *Runner) streamRound(ctx context.Context, p llm.Provider, req llm.ChatRe
 // buildSystem builds the system prompt. Spec §7.1.
 func (r *Runner) buildSystem(ag *store.Agent) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are Mira agent %s.", ag.Key)
+	fmt.Fprintf(&b, "You are Swiflow agent %s.", ag.Key)
 	if ag.SystemExtra != "" {
 		b.WriteString("\n\n")
 		b.WriteString(ag.SystemExtra)

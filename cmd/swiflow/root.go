@@ -11,10 +11,10 @@ var (
 
 func rootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "mira",
-		Short: "Mira agent runtime",
+		Use:   "swiflow",
+		Short: "Swiflow agent runtime",
 	}
-	root.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path (default: ./config.json or MIRA_CONFIG)")
+	root.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path (default: ./config.json or SWIFLOW_CONFIG)")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose (debug) logging")
 
 	root.AddCommand(serveCmd())

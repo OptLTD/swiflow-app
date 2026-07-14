@@ -1,4 +1,4 @@
--- Mira — Phase 1 schema (SQLite).
+-- Swiflow — Phase 1 schema (SQLite).
 -- Embedded at build time; applied idempotently via CREATE IF NOT EXISTS.
 
 PRAGMA foreign_keys = ON;

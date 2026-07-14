@@ -39,8 +39,8 @@ html.desktop .header-tab-bar button {
   --wails-draggable: no-drag;
 }
 
-.prose-mira p { margin: 0.4em 0; }
-.prose-mira pre {
+.prose-swiflow p { margin: 0.4em 0; }
+.prose-swiflow pre {
   background: #0f172a;
   color: #e2e8f0;
   padding: 0.75rem;
@@ -48,12 +48,12 @@ html.desktop .header-tab-bar button {
   overflow-x: auto;
   font-size: 0.85rem;
 }
-.prose-mira code { font-family: ui-monospace, SFMono-Regular, monospace; }
-.prose-mira ul, .prose-mira ol { margin: 0.4em 0; padding-left: 1.4em; }
-.prose-mira h1, .prose-mira h2, .prose-mira h3 { font-weight: 600; margin: 0.6em 0 0.3em; }
+.prose-swiflow code { font-family: ui-monospace, SFMono-Regular, monospace; }
+.prose-swiflow ul, .prose-swiflow ol { margin: 0.4em 0; padding-left: 1.4em; }
+.prose-swiflow h1, .prose-swiflow h2, .prose-swiflow h3 { font-weight: 600; margin: 0.6em 0 0.3em; }
 
 /* Horizontal rules */
-.prose-mira hr {
+.prose-swiflow hr {
   border: none;
   height: 1px;
   margin: 1.5em 0;
@@ -61,23 +61,23 @@ html.desktop .header-tab-bar button {
 }
 
 /* Tables */
-.prose-mira .prose-table-wrap {
+.prose-swiflow .prose-table-wrap {
   margin: 0.75em 0;
   overflow-x: auto;
   border: 1px solid #e5e5e5;
   border-radius: 0.5rem;
   -webkit-overflow-scrolling: touch;
 }
-.prose-mira table {
+.prose-swiflow table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
   line-height: 1.5;
 }
-.prose-mira thead {
+.prose-swiflow thead {
   background: #f5f5f5;
 }
-.prose-mira th {
+.prose-swiflow th {
   font-weight: 600;
   text-align: left;
   padding: 0.55rem 0.85rem;
@@ -85,38 +85,38 @@ html.desktop .header-tab-bar button {
   color: #404040;
   white-space: nowrap;
 }
-.prose-mira td {
+.prose-swiflow td {
   padding: 0.55rem 0.85rem;
   border-bottom: 1px solid #f0f0f0;
   vertical-align: top;
 }
-.prose-mira tbody tr:last-child td {
+.prose-swiflow tbody tr:last-child td {
   border-bottom: none;
 }
-.prose-mira tbody tr:nth-child(even) {
+.prose-swiflow tbody tr:nth-child(even) {
   background: #fafafa;
 }
-.prose-mira tbody tr:hover {
+.prose-swiflow tbody tr:hover {
   background: #f0f0f0;
 }
 
 /* Typing indicator (bouncing dots) for the streaming assistant bubble. */
-@keyframes mira-bounce {
+@keyframes swiflow-bounce {
   0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
   40% { transform: translateY(-4px); opacity: 1; }
 }
 .typing-dots { display: inline-flex; align-items: center; gap: 3px; padding: 4px 0; }
 .typing-dots span {
   width: 6px; height: 6px; border-radius: 50%; background: #737373;
-  animation: mira-bounce 1.2s infinite ease-in-out;
+  animation: swiflow-bounce 1.2s infinite ease-in-out;
 }
 .typing-dots span:nth-child(2) { animation-delay: 0.15s; }
 .typing-dots span:nth-child(3) { animation-delay: 0.3s; }
 
 /* Spinner for a tool that is still running. */
-@keyframes mira-spin { to { transform: rotate(360deg); } }
-.mira-spin {
+@keyframes swiflow-spin { to { transform: rotate(360deg); } }
+.swiflow-spin {
   display: inline-block; width: 10px; height: 10px;
   border: 2px solid #d4d4d4; border-top-color: #737373; border-radius: 50%;
-  animation: mira-spin 0.7s linear infinite;
+  animation: swiflow-spin 0.7s linear infinite;
 }

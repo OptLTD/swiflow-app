@@ -9,7 +9,7 @@ dev:
 	@$(MAKE) -j2 dev-backend dev-frontend
 
 dev-backend:
-	go run ./cmd/mira serve --migrate -v
+	go run ./cmd/swiflow serve --migrate -v
 
 dev-frontend:
 	cd webui && pnpm install && pnpm dev
@@ -17,13 +17,13 @@ dev-frontend:
 # Production build: frontend embedded into Go binary
 build:
 	cd webui && pnpm install && pnpm build
-	go build -o swiflow ./cmd/mira
+	go build -o swiflow ./cmd/swiflow
 
 image:
-	docker build -t mira:latest .
+	docker build -t swiflow:latest .
 
 migrate:
-	go run ./cmd/mira migrate
+	go run ./cmd/swiflow migrate
 
 test:
 	cd webui && pnpm install && pnpm build

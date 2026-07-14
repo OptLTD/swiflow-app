@@ -1,4 +1,4 @@
-// Package store defines the persistence interface and domain types for Mira.
+// Package store defines the persistence interface and domain types for Swiflow.
 // Spec §6.2, §5.
 package store
 

@@ -1,6 +1,6 @@
 # NOTICE
 
-Mira is licensed under the MIT License (see `LICENSE`).
+Swiflow is licensed under the MIT License (see `LICENSE`).
 
 No code was copied from the reference projects (hermes-agent, ZeroClaw). Should
 any code be incorporated from a permissive reference in the future, its

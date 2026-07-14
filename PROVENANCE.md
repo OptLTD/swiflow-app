@@ -1,6 +1,6 @@
 # Provenance
 
-Mira is a clean-room implementation. It is built solely from `docs/SPEC.md`,
+Swiflow is a clean-room implementation. It is built solely from `docs/SPEC.md`,
 with the following permissively-licensed projects used as architectural
 references (studied, not copied unless a notice is recorded in `NOTICE.md`):
 
@@ -13,7 +13,7 @@ references (studied, not copied unless a notice is recorded in `NOTICE.md`):
 implementation work consulted, any of the following codebases:
 `goclaw`/`nextlevelbuilder/goclaw`, `duo-claw`, `openclaw`, or `swiflow`/
 `swiflow-new`. These are off-limits for the clean-room reimplementation. Where a
-design decision in Mira resembles one of them, it is an independent choice made
+design decision in Swiflow resembles one of them, it is an independent choice made
 from `docs/SPEC.md` and noted there.
 
 ## Per-module statement
@@ -33,13 +33,13 @@ transforming or renaming files from any forbidden codebase.
 | `internal/tool` | SPEC §6.5, §8 |
 | `internal/agent` | SPEC §6.7, §7 |
 | `internal/server` | SPEC §6.8, §10 |
-| `cmd/mira` | SPEC §14 |
+| `cmd/swiflow` | SPEC §14 |
 | `webui/` | SPEC §13 |
 
 ## Audit
 
 For maximum legal safety, a reviewer who has never seen the forbidden codebases
-should audit the result against `docs/SPEC.md`. The Mira design intentionally
+should audit the result against `docs/SPEC.md`. The Swiflow design intentionally
 diverges from the forbidden codebases in module naming, the normalized
 `messages` table, and the choice of SSE over WebSocket, to make that audit
 straightforward.

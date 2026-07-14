@@ -48,7 +48,7 @@ func (t *execTool) Parameters() map[string]any {
 }
 func (t *execTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if !t.allowed {
-		return "", fmt.Errorf("exec is disabled (set tools.exec_enabled or MIRA_EXEC=true)")
+		return "", fmt.Errorf("exec is disabled (set tools.exec_enabled or SWIFLOW_EXEC=true)")
 	}
 	command, _ := args["command"].(string)
 	if command == "" {

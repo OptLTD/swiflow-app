@@ -1,4 +1,4 @@
-// Package util holds small shared helpers used across Mira.
+// Package util holds small shared helpers used across Swiflow.
 package util
 
 import "github.com/google/uuid"

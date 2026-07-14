@@ -1,4 +1,4 @@
-# Mira
+# Swiflow
 
 A self-hosted AI agent runtime. Single Go binary + Vue UI, SQLite-backed,
 OpenAI-compatible providers, tool use (filesystem / web / shell / skills),
@@ -17,8 +17,8 @@ make dev      # API :8000 + UI http://localhost:5173
 Build & run:
 
 ```bash
-make build    # webui + Go binary → ./mira
-./mira serve -v
+make build    # webui + Go binary → ./swiflow
+./swiflow serve -v
 ```
 
 Docker:
@@ -31,7 +31,7 @@ docker compose up
 
 Built-in skills are embedded in the binary (`embed/init-skills/`). User overrides go in
 `./data/user-skills/` (see `config.example.json`). For local skill development without
-rebuilding, set `init_skills_dir` or `MIRA_INIT_SKILLS` to a filesystem directory.
+rebuilding, set `init_skills_dir` or `SWIFLOW_INIT_SKILLS` to a filesystem directory.
 
 ## Phase 2 features
 

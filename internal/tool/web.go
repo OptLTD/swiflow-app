@@ -42,7 +42,7 @@ func (t *webFetchTool) Execute(ctx context.Context, args map[string]any) (string
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "Mira/1.0")
+	req.Header.Set("User-Agent", "Swiflow/1.0")
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {

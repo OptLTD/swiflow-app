@@ -1,4 +1,4 @@
-// Package config loads Mira configuration from a JSON file with environment
+// Package config loads Swiflow configuration from a JSON file with environment
 // overrides. Spec §6.1, §11.
 package config
 
@@ -20,10 +20,9 @@ type Config struct {
 	InitSkillsDir  string      `json:"init_skills_dir"`
 	UserSkillsDir  string      `json:"user_skills_dir"`
 	AllowedOrigins []string    `json:"allowed_origins"`
-	WebDistDir     string      `json:"web_dist_dir"`
-	MaxHistoryMessages int         `json:"max_history_messages"`
-	Tools              ToolsConfig `json:"tools"`
-	SkipAuth           bool        `json:"skip_auth"`
+	MaxHistoryMsgs int         `json:"max_history_msgs"`
+	Tools          ToolsConfig `json:"tools"`
+	SkipAuth       bool        `json:"skip_auth"`
 }
 
 // ToolsConfig controls optional tools.
@@ -38,12 +37,12 @@ type ToolsConfig struct {
 func Default() Config {
 	return Config{
 		Host: "127.0.0.1", Port: 8000,
-		DBPath:        "./data/mira.db",
-		InitSkillsDir: "", // empty = embedded builtins; set for local dev override
-		UserSkillsDir: "./data/user-skills",
-		WorkspaceDir:       "./data/workspace",
-		MaxHistoryMessages: 100,
-		Tools:              ToolsConfig{BrowserHeadless: true},
+		DBPath:         "./data/swiflow.db",
+		InitSkillsDir:  "", // empty = embedded builtins; set for local dev override
+		UserSkillsDir:  "./data/user-skills",
+		WorkspaceDir:   "./data/workspace",
+		MaxHistoryMsgs: 100,
+		Tools:          ToolsConfig{BrowserHeadless: true},
 	}
 }
 
@@ -62,7 +61,7 @@ func Load(path string) (Config, error) {
 	}
 	applyEnv(&cfg)
 	if cfg.AuthToken == "" {
-		return cfg, fmt.Errorf("auth_token is required (config or MIRA_AUTH_TOKEN)")
+		return cfg, fmt.Errorf("auth_token is required (config or SWIFLOW_AUTH_TOKEN)")
 	}
 	if cfg.EncryptionKey == "" || len(cfg.EncryptionKey) < 16 {
 		return cfg, fmt.Errorf("encryption_key is required and must be at least 16 chars")
@@ -71,36 +70,36 @@ func Load(path string) (Config, error) {
 }
 
 func applyEnv(cfg *Config) {
-	if v := os.Getenv("MIRA_HOST"); v != "" {
+	if v := os.Getenv("SWIFLOW_HOST"); v != "" {
 		cfg.Host = v
 	}
-	if v := os.Getenv("MIRA_PORT"); v != "" {
+	if v := os.Getenv("SWIFLOW_PORT"); v != "" {
 		if p, err := strconv.Atoi(v); err == nil {
 			cfg.Port = p
 		}
 	}
-	if v := os.Getenv("MIRA_DB"); v != "" {
+	if v := os.Getenv("SWIFLOW_DB"); v != "" {
 		cfg.DBPath = v
 	}
-	if v := os.Getenv("MIRA_AUTH_TOKEN"); v != "" {
+	if v := os.Getenv("SWIFLOW_AUTH_TOKEN"); v != "" {
 		cfg.AuthToken = v
 	}
-	if v := os.Getenv("MIRA_ENCRYPTION_KEY"); v != "" {
+	if v := os.Getenv("SWIFLOW_ENCRYPTION_KEY"); v != "" {
 		cfg.EncryptionKey = v
 	}
-	if v := os.Getenv("MIRA_WORKSPACE"); v != "" {
+	if v := os.Getenv("SWIFLOW_WORKSPACE"); v != "" {
 		cfg.WorkspaceDir = v
 	}
-	if v := os.Getenv("MIRA_INIT_SKILLS"); v != "" {
+	if v := os.Getenv("SWIFLOW_INIT_SKILLS"); v != "" {
 		cfg.InitSkillsDir = v
 	}
-	if v := os.Getenv("MIRA_USER_SKILLS"); v != "" {
+	if v := os.Getenv("SWIFLOW_USER_SKILLS"); v != "" {
 		cfg.UserSkillsDir = v
 	}
-	if v := os.Getenv("MIRA_EXEC"); v != "" {
+	if v := os.Getenv("SWIFLOW_EXEC"); v != "" {
 		cfg.Tools.ExecEnabled = v == "1" || v == "true"
 	}
-	if v := os.Getenv("MIRA_BROWSER"); v != "" {
+	if v := os.Getenv("SWIFLOW_BROWSER"); v != "" {
 		cfg.Tools.BrowserEnabled = v == "1" || v == "true"
 	}
 }
