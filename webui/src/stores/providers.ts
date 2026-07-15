@@ -10,7 +10,7 @@ export const useProvidersStore = defineStore('providers', {
   actions: {
     async load() {
       const r = await api.listProviders()
-      this.providers = r.providers
+      this.providers = r.providers ?? []
       this.loaded = true
     },
   },

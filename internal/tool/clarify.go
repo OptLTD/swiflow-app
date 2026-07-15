@@ -68,7 +68,7 @@ func (t *clarifyTool) Execute(ctx context.Context, args map[string]any) (string,
 	}
 
 	rc, ok := RunContextFrom(ctx)
-	if !ok || rc.SessionKey == "" {
+	if !ok || rc.SessionID == "" {
 		return "", fmt.Errorf("ui client unavailable")
 	}
 
@@ -77,7 +77,7 @@ func (t *clarifyTool) Execute(ctx context.Context, args map[string]any) (string,
 		"options":         options,
 		"allow_free_text": allowFree,
 	}
-	result, err := t.bridge.RequestTimeout(ctx, rc.SessionKey, "clarify", payload, window.ClarifyTimeout)
+	result, err := t.bridge.RequestTimeout(ctx, rc.SessionID, "clarify", payload, window.ClarifyTimeout)
 	if err != nil {
 		return "", err
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/OptLTD/swiflow/internal/util"
 )
@@ -16,7 +15,7 @@ type ChildRunner interface {
 
 // ChildRunOpts configures a subagent run.
 type ChildRunOpts struct {
-	SessionKey  string
+	SessionID   string
 	AgentKey    string
 	UserMessage string
 	MaxRounds   int
@@ -90,7 +89,7 @@ func (t *delegateTaskTool) Execute(ctx context.Context, args map[string]any) (st
 	}
 
 	rc, _ := RunContextFrom(ctx)
-	parent := rc.SessionKey
+	parent := rc.SessionID
 	if parent == "" {
 		parent = "unknown"
 	}
@@ -99,7 +98,7 @@ func (t *delegateTaskTool) Execute(ctx context.Context, args map[string]any) (st
 		id = id[:8]
 	}
 	childKey := fmt.Sprintf("sub-%s-%s", parent, id)
-	agentKey := rc.AgentKey
+	agentKey := rc.Agent
 	if agentKey == "" {
 		agentKey = "default"
 	}
@@ -111,7 +110,7 @@ func (t *delegateTaskTool) Execute(ctx context.Context, args map[string]any) (st
 
 	var lastAssistant string
 	err := t.runner.RunChild(ctx, ChildRunOpts{
-		SessionKey:  childKey,
+		SessionID:   childKey,
 		AgentKey:    agentKey,
 		UserMessage: userMsg,
 		MaxRounds:   maxRounds,
@@ -141,18 +140,19 @@ type todoItem struct {
 	Done bool   `json:"done"`
 }
 
-var (
-	todoMu     sync.Mutex
-	todoBySess = map[string][]todoItem{}
-)
 
-type todoWriteTool struct{}
-type todoReadTool struct{}
+type todoStore interface {
+	SaveTodos(ctx context.Context, sessionID string, itemsJSON string) error
+	LoadTodos(ctx context.Context, sessionID string) (string, error)
+}
 
-// RegisterTodo registers todo_write / todo_read.
-func RegisterTodo(r *Registry) {
-	r.Register(&todoWriteTool{})
-	r.Register(&todoReadTool{})
+type todoWriteTool struct{ st todoStore }
+type todoReadTool struct{ st todoStore }
+
+// RegisterTodo registers todo_write / todo_read with persistent storage.
+func RegisterTodo(r *Registry, st todoStore) {
+	r.Register(&todoWriteTool{st: st})
+	r.Register(&todoReadTool{st: st})
 }
 
 func (t *todoWriteTool) Name() string { return "todo_write" }
@@ -183,7 +183,7 @@ func (t *todoWriteTool) Parameters() map[string]any {
 func (t *todoWriteTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	raw, _ := args["items"].([]any)
 	rc, _ := RunContextFrom(ctx)
-	sess := rc.SessionKey
+	sess := rc.SessionID
 	if sess == "" {
 		sess = "_"
 	}
@@ -204,10 +204,10 @@ func (t *todoWriteTool) Execute(ctx context.Context, args map[string]any) (strin
 		done, _ := m["done"].(bool)
 		items = append(items, todoItem{ID: id, Text: text, Done: done})
 	}
-	todoMu.Lock()
-	todoBySess[sess] = items
-	todoMu.Unlock()
 	b, _ := json.Marshal(items)
+	if err := t.st.SaveTodos(ctx, sess, string(b)); err != nil {
+		return "", err
+	}
 	return string(b), nil
 }
 
@@ -221,16 +221,9 @@ func (t *todoReadTool) Parameters() map[string]any {
 
 func (t *todoReadTool) Execute(ctx context.Context, _ map[string]any) (string, error) {
 	rc, _ := RunContextFrom(ctx)
-	sess := rc.SessionKey
+	sess := rc.SessionID
 	if sess == "" {
 		sess = "_"
 	}
-	todoMu.Lock()
-	items := append([]todoItem(nil), todoBySess[sess]...)
-	todoMu.Unlock()
-	if items == nil {
-		items = []todoItem{}
-	}
-	b, _ := json.Marshal(items)
-	return string(b), nil
+	return t.st.LoadTodos(ctx, sess)
 }

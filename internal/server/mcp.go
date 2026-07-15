@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/OptLTD/swiflow/internal/util"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/util"
 )
 
 func (s *Server) listMCPServers(w http.ResponseWriter, r *http.Request) {
@@ -18,35 +18,36 @@ func (s *Server) listMCPServers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createMCPServer(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name        string            `json:"name"`
-		DisplayName string            `json:"display_name"`
-		Transport   string            `json:"transport"`
-		Command     string            `json:"command"`
-		Args        []string          `json:"args"`
-		URL         string            `json:"url"`
-		Env         map[string]string `json:"env"`
-		Enabled     *bool             `json:"enabled"`
+		Name string   `json:"name"`
+		Type string   `json:"type"`
+		Cmd  string   `json:"cmd"`
+		Args []string `json:"args"`
+		URL  string   `json:"url"`
+
+		Env map[string]string `json:"env"`
+
+		Enabled *bool `json:"enabled"`
 	}
 	if !bindJSON(w, r, &in) {
 		return
 	}
-	if in.Name == "" || in.Transport == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and transport required"})
+	if in.Name == "" || in.Type == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and type required"})
 		return
 	}
-	switch in.Transport {
+	switch in.Type {
 	case "stdio":
-		if in.Command == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "command required for stdio"})
+		if in.Cmd == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cmd required for stdio"})
 			return
 		}
 	case "sse", "streamable":
 		if in.URL == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url required for " + in.Transport})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url required for " + in.Type})
 			return
 		}
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "transport must be stdio, sse, or streamable"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type must be stdio, sse, or streamable"})
 		return
 	}
 	enabled := true
@@ -54,8 +55,8 @@ func (s *Server) createMCPServer(w http.ResponseWriter, r *http.Request) {
 		enabled = *in.Enabled
 	}
 	srv := &store.MCPServer{
-		ID: util.NewID(), Name: in.Name, DisplayName: in.DisplayName,
-		Transport: in.Transport, Command: in.Command, Args: in.Args,
+		ID: util.NewID(), Name: in.Name,
+		Type: in.Type, Cmd: in.Cmd, Args: in.Args,
 		URL: in.URL, Env: in.Env, Enabled: enabled,
 	}
 	if err := s.st.CreateMCPServer(r.Context(), srv); err != nil {
@@ -86,7 +87,7 @@ func (s *Server) updateMCPServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	allowed := map[string]bool{
-		"display_name": true, "transport": true, "command": true,
+		"type": true, "cmd": true,
 		"args": true, "url": true, "env": true, "enabled": true,
 	}
 	fields := map[string]any{}

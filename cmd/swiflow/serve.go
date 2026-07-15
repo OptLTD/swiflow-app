@@ -13,17 +13,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/OptLTD/swiflow/embed"
 	"github.com/OptLTD/swiflow/internal/agent"
+	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/browser"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
-	"github.com/OptLTD/swiflow/internal/migrate"
 	"github.com/OptLTD/swiflow/internal/schedule"
 	"github.com/OptLTD/swiflow/internal/seed"
 	"github.com/OptLTD/swiflow/internal/server"
 	"github.com/OptLTD/swiflow/internal/sesshub"
 	"github.com/OptLTD/swiflow/internal/skill"
-	"github.com/OptLTD/swiflow/internal/store/sqlite"
+	"github.com/OptLTD/swiflow/internal/store/sqlstore"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/internal/window"
 )
@@ -54,26 +53,23 @@ func runServe() error {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
-	for _, dir := range []string{filepath.Dir(cfg.DBPath), cfg.WorkspaceDir, cfg.UserSkillsDir} {
+	dirs := []string{cfg.WorkspaceDir, cfg.UserSkillsDir}
+	if cfg.DBDriver == "" || cfg.DBDriver == sqlstore.DialectSQLite || cfg.DBDriver == "sqlite3" {
+		dirs = append(dirs, filepath.Dir(cfg.DBPath))
+	}
+	for _, dir := range dirs {
 		if dir != "" {
 			_ = os.MkdirAll(dir, 0o755)
 		}
 	}
 
-	st, err := sqlite.Open(cfg.DBPath, cfg.EncryptionKey)
+	st, err := appdb.MigrateAndOpen(context.Background(), cfg, autoMigrate)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
 
 	if autoMigrate {
-		upgrades, err := embed.UpgradesDir()
-		if err != nil {
-			return fmt.Errorf("upgrades fs: %w", err)
-		}
-		if err := migrate.Apply(context.Background(), st.DB(), embed.SchemaSQL, upgrades); err != nil {
-			return fmt.Errorf("migrate: %w", err)
-		}
 		if err := seed.EnsureDefaults(context.Background(), st); err != nil {
 			return fmt.Errorf("seed: %w", err)
 		}
@@ -139,7 +135,8 @@ func runServe() error {
 
 	cronSched := schedule.New(st, runner, events)
 	tool.RegisterSchedule(toolsReg, st, cronSched)
-	tool.RegisterTodo(toolsReg)
+	tool.RegisterExperience(toolsReg, st)
+	tool.RegisterTodo(toolsReg, st)
 	tool.RegisterDelegate(toolsReg, runner)
 	tool.RegisterClarify(toolsReg, winBridge)
 	if err := cronSched.Start(context.Background()); err != nil {

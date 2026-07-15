@@ -25,7 +25,7 @@ export const useLayoutStore = defineStore('layout', {
     tabs: [HOME_TAB],
     explorePath: '.',
     activeTabId: 'home',
-    chatPanelOpen: true,
+    chatPanelOpen: false,
     chatPanelWidth: 380,
   }),
   getters: {

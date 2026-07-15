@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { watch, onMounted } from 'vue'
 import { useAuthStore } from './stores/auth'
 import { useLayoutStore } from './stores/layout'
+import { useSetupStore } from './stores/setup'
 import ToastHost from './components/ToastHost.vue'
 import ChatPanel from './components/ChatPanel.vue'
 import HeadTabBar from './components/HeadTabBar.vue'
 import LoginDialog from './components/LoginDialog.vue'
+import SetupWizard from './components/SetupWizard.vue'
 import ResizeHandle from './components/ResizeHandle.vue'
 import FileDropZone from './components/FileDropZone.vue'
 import WelcomeView from './views/WelcomeView.vue'
@@ -14,6 +17,27 @@ import SettingsView from './views/SettingsView.vue'
 
 const auth = useAuthStore()
 const layout = useLayoutStore()
+const setup = useSetupStore()
+
+async function maybeCheckSetup() {
+  if (!auth.isAuthed || auth.needsLogin) return
+  if (setup.checked) return
+  try {
+    await setup.check()
+  } catch {
+    setup.checked = true
+  }
+}
+
+onMounted(maybeCheckSetup)
+watch(() => auth.isAuthed, maybeCheckSetup)
+watch(() => auth.needsLogin, (need) => {
+  if (!need) maybeCheckSetup()
+})
+
+async function onSetupDone() {
+  await setup.complete()
+}
 </script>
 
 <template>
@@ -68,6 +92,12 @@ const layout = useLayoutStore()
 
     <!-- Login dialog (server mode only) -->
     <LoginDialog v-if="auth.needsLogin" />
+
+    <!-- Setup must finish before using the app; covers tabs + chat sidebar -->
+    <SetupWizard
+      v-if="!auth.needsLogin && setup.showWizard"
+      @done="onSetupDone"
+    />
 
     <ToastHost />
   </FileDropZone>

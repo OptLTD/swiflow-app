@@ -1,65 +1,126 @@
--- Swiflow — Phase 1 schema (SQLite).
--- Embedded at build time; applied idempotently via CREATE IF NOT EXISTS.
+-- Swiflow — SQLite schema (idempotent CREATE IF NOT EXISTS).
+-- Applied at startup via migrate.Apply before any upgrade scripts.
 
 PRAGMA foreign_keys = ON;
 
--- Tracks applied upgrade scripts in embed/upgrades/ (not schema.sql itself).
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    version    TEXT PRIMARY KEY,
-    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS sys_migration (
+    version    VARCHAR(64) PRIMARY KEY,
+    applied_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE TABLE IF NOT EXISTS providers (
-    id           TEXT PRIMARY KEY,
-    name         TEXT NOT NULL UNIQUE,
-    display_name TEXT,
+CREATE TABLE IF NOT EXISTS sys_tenant (
+    id         VARCHAR(36) PRIMARY KEY,
+    name       VARCHAR(64) NOT NULL UNIQUE,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS sys_user (
+    id         VARCHAR(36) PRIMARY KEY,
+    tid        VARCHAR(64) NOT NULL DEFAULT 'default',
+    username   VARCHAR(64) NOT NULL UNIQUE,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS sys_settings (
+    key        VARCHAR(128) PRIMARY KEY,
+    value      TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS llm_provider (
+    id           VARCHAR(36) PRIMARY KEY,
+    tid          VARCHAR(64) NOT NULL DEFAULT 'default',
+    name         VARCHAR(64) NOT NULL UNIQUE,
+    display      VARCHAR(128),
     api_base     TEXT NOT NULL,
-    api_key_enc  BLOB NOT NULL,
+    api_key      BLOB NOT NULL,
+    model        VARCHAR(128) NOT NULL DEFAULT '',
     enabled      INTEGER NOT NULL DEFAULT 1,
-    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE TABLE IF NOT EXISTS agents (
-    id           TEXT PRIMARY KEY,
-    key          TEXT NOT NULL UNIQUE,
-    display_name TEXT,
-    provider     TEXT NOT NULL,
-    model        TEXT NOT NULL,
-    system_extra TEXT NOT NULL DEFAULT '',
-    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS agent_config (
+    id           VARCHAR(36) PRIMARY KEY,
+    tid          VARCHAR(64) NOT NULL DEFAULT 'default',
+    key          VARCHAR(64) NOT NULL UNIQUE,
+    display      VARCHAR(128),
+    txt_model    VARCHAR(64) NOT NULL DEFAULT '',
+    img_model    VARCHAR(64) NOT NULL DEFAULT '',
+    sys_prompt   TEXT NOT NULL DEFAULT '',
+    created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE TABLE IF NOT EXISTS sessions (
-    id         TEXT PRIMARY KEY,
-    key        TEXT NOT NULL UNIQUE,
-    agent_key  TEXT NOT NULL,
-    title      TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS agent_session (
+    id         VARCHAR(36) PRIMARY KEY,
+    tid        VARCHAR(64) NOT NULL DEFAULT 'default',
+    agent      VARCHAR(64) NOT NULL,
+    title      VARCHAR(128),
+    created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE TABLE IF NOT EXISTS messages (
-    id              TEXT PRIMARY KEY,
-    session_id      TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS agent_message (
+    id              VARCHAR(36) PRIMARY KEY,
+    tid             VARCHAR(64) NOT NULL DEFAULT 'default',
+    sid             VARCHAR(36) NOT NULL REFERENCES agent_session(id) ON DELETE CASCADE,
     seq             INTEGER NOT NULL,
-    role            TEXT NOT NULL CHECK (role IN ('system','user','assistant','tool')),
+    role            VARCHAR(32) NOT NULL CHECK (role IN ('system','user','assistant','tool')),
     content         TEXT NOT NULL DEFAULT '',
     thinking        TEXT NOT NULL DEFAULT '',
-    tool_calls_json TEXT NOT NULL DEFAULT '',
-    tool_call_id    TEXT NOT NULL DEFAULT '',
-    tool_name       TEXT NOT NULL DEFAULT '',
-    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(session_id, seq)
+    tool_calls      TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tool_calls)),
+    tool_call_id    VARCHAR(64) NOT NULL DEFAULT '',
+    tool_name       VARCHAR(128) NOT NULL DEFAULT '',
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(sid, seq)
 );
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_agent_message_session ON agent_message(sid, seq);
 
-CREATE TABLE IF NOT EXISTS tool_policy (
-    tool_name TEXT PRIMARY KEY,
-    enabled   INTEGER NOT NULL DEFAULT 1
+CREATE TABLE IF NOT EXISTS agent_experience (
+    id          VARCHAR(36) PRIMARY KEY,
+    tid         VARCHAR(64) NOT NULL DEFAULT 'default',
+    sid         VARCHAR(36) NOT NULL,
+    agent       VARCHAR(64) NOT NULL,
+    summary     TEXT NOT NULL DEFAULT '',
+    outcome     VARCHAR(32) NOT NULL DEFAULT 'unknown',
+    tags        TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags)),
+    created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- idx_agent_experience_agent created in migrate.applyCanonicalSchema after renames.
+
+CREATE TABLE IF NOT EXISTS agent_todo (
+    sid        VARCHAR(36) PRIMARY KEY,
+    tid        VARCHAR(64) NOT NULL DEFAULT 'default',
+    items      TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(items)),
+    updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE TABLE IF NOT EXISTS skill_disabled (
-    slug TEXT PRIMARY KEY
+CREATE TABLE IF NOT EXISTS agent_sched (
+    id          VARCHAR(36) PRIMARY KEY,
+    tid         VARCHAR(64) NOT NULL DEFAULT 'default',
+    name        VARCHAR(64) NOT NULL UNIQUE,
+    agent       VARCHAR(64) NOT NULL,
+    message     TEXT NOT NULL,
+    schedule    TEXT NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    last_run_at DATETIME,
+    created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS mcp_server (
+    id           VARCHAR(36) PRIMARY KEY,
+    tid          VARCHAR(64) NOT NULL DEFAULT 'default',
+    name         VARCHAR(64) NOT NULL UNIQUE,
+    type         VARCHAR(32) NOT NULL CHECK (type IN ('stdio', 'sse', 'streamable')),
+    cmd          TEXT NOT NULL DEFAULT '',
+    args         TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(args)),
+    url          TEXT NOT NULL DEFAULT '',
+    env          TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(env)),
+    enabled      INTEGER NOT NULL DEFAULT 1,
+    created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

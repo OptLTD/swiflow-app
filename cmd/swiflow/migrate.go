@@ -9,11 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/OptLTD/swiflow/embed"
+	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
-	"github.com/OptLTD/swiflow/internal/migrate"
 	"github.com/OptLTD/swiflow/internal/seed"
-	"github.com/OptLTD/swiflow/internal/store/sqlite"
+	"github.com/OptLTD/swiflow/internal/store/sqlstore"
 )
 
 func migrateCmd() *cobra.Command {
@@ -25,25 +24,24 @@ func migrateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
-				return fmt.Errorf("create db dir: %w", err)
+			if cfg.DBDriver == "" || cfg.DBDriver == sqlstore.DialectSQLite || cfg.DBDriver == "sqlite3" {
+				if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
+					return fmt.Errorf("create db dir: %w", err)
+				}
 			}
-			st, err := sqlite.Open(cfg.DBPath, cfg.EncryptionKey)
+			st, err := appdb.MigrateAndOpen(context.Background(), cfg, true)
 			if err != nil {
 				return err
 			}
 			defer st.Close()
-			upgrades, err := embed.UpgradesDir()
-			if err != nil {
-				return fmt.Errorf("upgrades fs: %w", err)
-			}
-			if err := migrate.Apply(context.Background(), st.DB(), embed.SchemaSQL, upgrades); err != nil {
-				return fmt.Errorf("migrate: %w", err)
-			}
 			if err := seed.EnsureDefaults(context.Background(), st); err != nil {
 				return fmt.Errorf("seed: %w", err)
 			}
-			slog.Info("schema applied", "db", cfg.DBPath)
+			if st.Driver() == sqlstore.DialectPostgres {
+				slog.Info("schema applied", "driver", st.Driver(), "dsn", redactDSN(cfg.DBDSN))
+			} else {
+				slog.Info("schema applied", "driver", st.Driver(), "db", cfg.DBPath)
+			}
 			return nil
 		},
 	}
@@ -58,4 +56,29 @@ func loadConfig() (config.Config, error) {
 		path = "config.json"
 	}
 	return config.Load(path)
+}
+
+func redactDSN(dsn string) string {
+	// Avoid logging passwords; keep scheme/host only when possible.
+	if dsn == "" {
+		return ""
+	}
+	at := -1
+	for i := 0; i < len(dsn); i++ {
+		if dsn[i] == '@' {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		return "(set)"
+	}
+	scheme := dsn
+	for i := 0; i < len(dsn)-2; i++ {
+		if dsn[i] == ':' && dsn[i+1] == '/' && dsn[i+2] == '/' {
+			scheme = dsn[:i+3]
+			break
+		}
+	}
+	return scheme + "***" + dsn[at:]
 }

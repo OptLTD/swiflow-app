@@ -8,24 +8,37 @@ import (
 	"io/fs"
 	"sort"
 	"strings"
+
+	"github.com/jmoiron/sqlx"
 )
 
-// Apply runs schemaSQL (idempotent CREATE IF NOT EXISTS), then applies any
-// unapplied NNNN_*.sql files from upgradesFS in lexicographic order.
+// Apply runs SQLite schemaSQL (idempotent CREATE IF NOT EXISTS), applies
+// canonical column renames for legacy DBs, then any unapplied upgrades.
 func Apply(ctx context.Context, db *sql.DB, schemaSQL string, upgradesFS fs.FS) error {
 	if err := execInTx(ctx, db, schemaSQL); err != nil {
 		return fmt.Errorf("schema: %w", err)
 	}
+	if err := applyCanonicalSchema(ctx, db); err != nil {
+		return fmt.Errorf("canonical schema: %w", err)
+	}
 	if upgradesFS == nil {
 		return nil
 	}
-	if err := applyUpgrades(ctx, db, upgradesFS); err != nil {
+	if err := applyUpgrades(ctx, db, upgradesFS, false); err != nil {
 		return err
 	}
 	return nil
 }
 
-func applyUpgrades(ctx context.Context, db *sql.DB, fsys fs.FS) error {
+// ApplyPostgres applies the Postgres schema only (greenfield; no SQLite upgrades).
+func ApplyPostgres(ctx context.Context, db *sql.DB, schemaSQL string) error {
+	if err := execInTx(ctx, db, schemaSQL); err != nil {
+		return fmt.Errorf("schema: %w", err)
+	}
+	return nil
+}
+
+func applyUpgrades(ctx context.Context, db *sql.DB, fsys fs.FS, postgres bool) error {
 	applied, err := appliedVersions(ctx, db)
 	if err != nil {
 		return err
@@ -54,7 +67,11 @@ func applyUpgrades(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 		if err := execInTx(ctx, db, string(content)); err != nil {
 			return fmt.Errorf("apply %s: %w", name, err)
 		}
-		if _, err := db.ExecContext(ctx, `INSERT INTO schema_migrations(version) VALUES (?)`, name); err != nil {
+		q := `INSERT INTO sys_migration(version) VALUES (?)`
+		if postgres {
+			q = sqlx.Rebind(sqlx.DOLLAR, q)
+		}
+		if _, err := db.ExecContext(ctx, q, name); err != nil {
 			return fmt.Errorf("record %s: %w", name, err)
 		}
 	}
@@ -62,9 +79,9 @@ func applyUpgrades(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 }
 
 func appliedVersions(ctx context.Context, db *sql.DB) (map[string]bool, error) {
-	rows, err := db.QueryContext(ctx, `SELECT version FROM schema_migrations`)
+	rows, err := db.QueryContext(ctx, `SELECT version FROM sys_migration`)
 	if err != nil {
-		return nil, fmt.Errorf("read schema_migrations: %w", err)
+		return nil, fmt.Errorf("read sys_migration: %w", err)
 	}
 	defer rows.Close()
 	out := map[string]bool{}

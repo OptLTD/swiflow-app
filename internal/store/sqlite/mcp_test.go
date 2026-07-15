@@ -13,8 +13,8 @@ func TestMCPServerCRUD(t *testing.T) {
 	ctx := context.Background()
 
 	srv := &store.MCPServer{
-		ID: "m1", Name: "fs", DisplayName: "Filesystem",
-		Transport: "stdio", Command: "echo", Args: []string{"hi"},
+		ID: "m1", Name: "fs",
+		Type: "stdio", Cmd: "echo", Args: []string{"hi"},
 		Env: map[string]string{"K": "V"}, Enabled: true,
 	}
 	if err := st.CreateMCPServer(ctx, srv); err != nil {
@@ -46,7 +46,7 @@ func TestMCPServerCRUD(t *testing.T) {
 		t.Fatalf("updated: %+v", got)
 	}
 
-	dup := &store.MCPServer{ID: "m2", Name: "fs", Transport: "stdio", Command: "x", Enabled: true}
+	dup := &store.MCPServer{ID: "m2", Name: "fs", Type: "stdio", Cmd: "x", Enabled: true}
 	if err := st.CreateMCPServer(ctx, dup); err == nil {
 		t.Fatal("expected unique name conflict")
 	}

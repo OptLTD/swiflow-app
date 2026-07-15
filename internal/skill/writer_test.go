@@ -64,15 +64,17 @@ alpha
 func TestPatchOverridesBuiltin(t *testing.T) {
 	dir := t.TempDir()
 	cat := skill.NewCatalog("", dir)
-	if err := cat.PatchSkill("example", "Example Skill", "Patched Example", false); err != nil {
+	old := "Help the user based on what is open in their Swiflow window, not only the workspace disk."
+	new := "Patched: prefer window context over disk listing."
+	if err := cat.PatchSkill("window-context", old, new, false); err != nil {
 		t.Fatal(err)
 	}
-	userFile := filepath.Join(dir, "example", "SKILL.md")
+	userFile := filepath.Join(dir, "window-context", "SKILL.md")
 	data, err := os.ReadFile(userFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "Patched Example") {
+	if !strings.Contains(string(data), new) {
 		t.Fatalf("user override not written: %s", data)
 	}
 }

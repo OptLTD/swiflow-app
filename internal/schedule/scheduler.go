@@ -3,7 +3,6 @@ package schedule
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -12,11 +11,12 @@ import (
 
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/util"
 )
 
 // EventPublisher broadcasts agent events to session watchers (optional).
 type EventPublisher interface {
-	Publish(sessionKey string, ev agent.Event)
+	Publish(sessionID string, ev agent.Event)
 }
 
 // Scheduler executes cron jobs using the agent runner.
@@ -90,9 +90,9 @@ func (s *Scheduler) runJob(jobID string) {
 	if err != nil || !job.Enabled {
 		return
 	}
-	sessionKey := fmt.Sprintf("cron-%s-%d", job.ID, time.Now().Unix())
-	slog.Info("cron job running", "job", job.Name, "session", sessionKey)
-	err = s.runner.Run(ctx, sessionKey, job.AgentKey, job.Message, func(ev agent.Event) {
+	sessionID := util.NewID()
+	slog.Info("cron job running", "job", job.Name, "session", sessionID)
+	err = s.runner.Run(ctx, sessionID, job.Agent, job.Message, func(ev agent.Event) {
 		if ev.Type == "error" {
 			slog.Error("cron job error", "job", job.Name, "error", ev.Error)
 		}
@@ -103,28 +103,28 @@ func (s *Scheduler) runJob(jobID string) {
 	_ = s.st.SetCronJobLastRun(ctx, job.ID, time.Now().UTC().Format(time.RFC3339))
 }
 
-// ScheduleRun starts a one-shot delayed agent run in sessionKey after the given delay.
+// ScheduleRun starts a one-shot delayed agent run in sessionID after the given delay.
 // The message is injected as a new user turn and the agent is invoked (not a static reply).
-func (s *Scheduler) ScheduleRun(sessionKey, agentKey, message string, after time.Duration) {
-	if sessionKey == "" || agentKey == "" || message == "" || after < 0 || s.runner == nil {
+func (s *Scheduler) ScheduleRun(sessionID, agentKey, message string, after time.Duration) {
+	if sessionID == "" || agentKey == "" || message == "" || after < 0 || s.runner == nil {
 		return
 	}
 	time.AfterFunc(after, func() {
 		ctx := context.Background()
-		slog.Info("scheduled task running", "session", sessionKey, "agent", agentKey, "after", after)
+		slog.Info("scheduled task running", "session", sessionID, "agent", agentKey, "after", after)
 		if s.hub != nil {
-			s.hub.Publish(sessionKey, agent.Event{Type: "user", Content: message})
+			s.hub.Publish(sessionID, agent.Event{Type: "user", Content: message})
 		}
-		err := s.runner.Run(ctx, sessionKey, agentKey, message, func(ev agent.Event) {
+		err := s.runner.Run(ctx, sessionID, agentKey, message, func(ev agent.Event) {
 			if s.hub != nil {
-				s.hub.Publish(sessionKey, ev)
+				s.hub.Publish(sessionID, ev)
 			}
 			if ev.Type == "error" {
-				slog.Error("scheduled task error", "session", sessionKey, "error", ev.Error)
+				slog.Error("scheduled task error", "session", sessionID, "error", ev.Error)
 			}
 		})
 		if err != nil {
-			slog.Error("scheduled task failed", "session", sessionKey, "error", err)
+			slog.Error("scheduled task failed", "session", sessionID, "error", err)
 		}
 	})
 }

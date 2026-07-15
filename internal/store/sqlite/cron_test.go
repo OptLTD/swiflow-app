@@ -14,7 +14,7 @@ func TestCronJobCRUD(t *testing.T) {
 	ctx := context.Background()
 
 	job := &store.CronJob{
-		ID: "j1", Name: "daily", AgentKey: "default",
+		ID: "j1", Name: "daily", Agent: "default",
 		Message: "ping", Schedule: "0 9 * * *", Enabled: true,
 	}
 	if err := st.CreateCronJob(ctx, job); err != nil {
@@ -46,7 +46,7 @@ func TestCronJobCRUD(t *testing.T) {
 		t.Fatalf("last_run_at: %q", got.LastRunAt)
 	}
 
-	dup := &store.CronJob{ID: "j2", Name: "daily", AgentKey: "default", Message: "x", Schedule: "* * * * *"}
+	dup := &store.CronJob{ID: "j2", Name: "daily", Agent: "default", Message: "x", Schedule: "* * * * *"}
 	if err := st.CreateCronJob(ctx, dup); err == nil {
 		t.Fatal("expected unique name conflict")
 	}

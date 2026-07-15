@@ -7,12 +7,18 @@ import (
 	"io/fs"
 )
 
-// SchemaSQL is the Phase 1 SQLite schema (idempotent CREATE IF NOT EXISTS).
+// SchemaSQL is the SQLite schema (idempotent CREATE IF NOT EXISTS).
 //
 //go:embed schema.sql
 var SchemaSQL string
 
+// SchemaPostgresSQL is the PostgreSQL schema (idempotent CREATE IF NOT EXISTS).
+//
+//go:embed schema.pg.sql
+var SchemaPostgresSQL string
+
 // upgrades embeds incremental SQL files under upgrades/ (NNNN_*.sql).
+// SQLite-oriented; Postgres greenfield installs use SchemaPostgresSQL only for now.
 //
 //go:embed all:upgrades
 var upgrades embed.FS

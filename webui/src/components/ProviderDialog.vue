@@ -51,13 +51,12 @@ watch(
 
 function syncForm() {
   const p = defaultProvider()
-  const a = defaultAgent()
   if (!p) {
     providerId.value = ''
     form.value = {
       api_base: 'https://api.openai.com/v1',
       api_key: '',
-      model: a?.model || 'gpt-4o-mini',
+      model: 'gpt-4o-mini',
     }
     activePreset.value = guessPresetId(form.value.api_base)
     return
@@ -66,7 +65,7 @@ function syncForm() {
   form.value = {
     api_base: p.api_base,
     api_key: '',
-    model: a?.model || 'gpt-4o-mini',
+    model: p.model || 'gpt-4o-mini',
   }
   activePreset.value = guessPresetId(p.api_base)
 }
@@ -79,12 +78,18 @@ function applyPreset(id: string) {
   form.value.model = preset.model
 }
 
-async function syncAgentModel(model: string) {
+async function ensureAgentBound() {
   const a = defaultAgent()
-  if (!a) return
-  await api.updateAgent(a.key, {
-    provider: DEFAULT_PROVIDER_NAME,
-    model,
+  if (a) {
+    if (a.txt_model !== DEFAULT_PROVIDER_NAME) {
+      await api.updateAgent(a.key, { txt_model: DEFAULT_PROVIDER_NAME })
+    }
+    return
+  }
+  await api.createAgent({
+    key: DEFAULT_AGENT_KEY,
+    display: 'Default Agent',
+    txt_model: DEFAULT_PROVIDER_NAME,
   })
 }
 
@@ -96,6 +101,7 @@ async function save() {
     if (p) {
       const body: Record<string, unknown> = {
         api_base: form.value.api_base,
+        model: form.value.model,
         enabled: true,
       }
       if (form.value.api_key) body.api_key = form.value.api_key
@@ -109,11 +115,12 @@ async function save() {
         name: DEFAULT_PROVIDER_NAME,
         api_base: form.value.api_base,
         api_key: form.value.api_key,
+        model: form.value.model,
         enabled: true,
       })
     }
     await providersStore.load()
-    await syncAgentModel(form.value.model)
+    await ensureAgentBound()
     await agentsStore.load()
     syncForm()
     emit('saved', form.value.model)

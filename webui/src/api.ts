@@ -6,6 +6,7 @@ import type {
   ChatEvent,
   Message,
   Provider,
+  RuntimeInfo,
   Session,
   SkillInfo,
   SkillDraft,
@@ -37,6 +38,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(30_000),
   })
   const text = await res.text()
   let data: { error?: string } | null = null
@@ -55,6 +57,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 export const api = {
   health: () => req<{ status: string }>('GET', '/health'),
+  getRuntime: () => req<RuntimeInfo>('GET', '/runtime'),
   listAgents: () => req<{ agents: Agent[] }>('GET', '/agents'),
   createAgent: (a: Partial<Agent>) => req<Agent>('POST', '/agents', a),
   updateAgent: (key: string, a: Partial<Agent>) => req<{ status: string }>('PUT', `/agents/${key}`, a),
@@ -165,7 +168,7 @@ export async function chat(
   const res = await fetch(`/api/sessions/${encodeURIComponent(sessionKey)}/chat`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ message, agent_key: agentKey }),
+    body: JSON.stringify({ message, agent: agentKey }),
   })
   if (res.status === 202) {
     const data = (await res.json()) as { queued?: boolean; position?: number }

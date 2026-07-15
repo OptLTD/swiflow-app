@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/OptLTD/swiflow/internal/util"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/util"
 )
 
 func (s *Server) listCronJobs(w http.ResponseWriter, r *http.Request) {
@@ -19,7 +19,7 @@ func (s *Server) listCronJobs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createCronJob(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name     string `json:"name"`
-		AgentKey string `json:"agent_key"`
+		Agent    string `json:"agent"`
 		Message  string `json:"message"`
 		Schedule string `json:"schedule"`
 		Enabled  *bool  `json:"enabled"`
@@ -27,11 +27,11 @@ func (s *Server) createCronJob(w http.ResponseWriter, r *http.Request) {
 	if !bindJSON(w, r, &in) {
 		return
 	}
-	if in.Name == "" || in.AgentKey == "" || in.Message == "" || in.Schedule == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name, agent_key, message, schedule required"})
+	if in.Name == "" || in.Agent == "" || in.Message == "" || in.Schedule == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name, agent, message, schedule required"})
 		return
 	}
-	if _, err := s.st.GetAgentByKey(r.Context(), in.AgentKey); err != nil {
+	if _, err := s.st.GetAgentByKey(r.Context(), in.Agent); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown agent"})
 		return
 	}
@@ -40,7 +40,7 @@ func (s *Server) createCronJob(w http.ResponseWriter, r *http.Request) {
 		enabled = *in.Enabled
 	}
 	job := &store.CronJob{
-		ID: util.NewID(), Name: in.Name, AgentKey: in.AgentKey,
+		ID: util.NewID(), Name: in.Name, Agent: in.Agent,
 		Message: in.Message, Schedule: in.Schedule, Enabled: enabled,
 	}
 	if err := s.st.CreateCronJob(r.Context(), job); err != nil {
@@ -60,14 +60,14 @@ func (s *Server) updateCronJob(w http.ResponseWriter, r *http.Request) {
 	if !bindJSON(w, r, &in) {
 		return
 	}
-	allowed := map[string]bool{"agent_key": true, "message": true, "schedule": true, "enabled": true}
+	allowed := map[string]bool{"agent": true, "message": true, "schedule": true, "enabled": true}
 	fields := map[string]any{}
 	for k, v := range in {
 		if allowed[k] {
 			fields[k] = v
 		}
 	}
-	if ak, ok := fields["agent_key"].(string); ok {
+	if ak, ok := fields["agent"].(string); ok {
 		if _, err := s.st.GetAgentByKey(r.Context(), ak); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown agent"})
 			return

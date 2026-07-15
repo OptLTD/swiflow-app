@@ -51,7 +51,7 @@ type Event struct {
 
 // EventPublisher fans out events (typically sesshub.Hub).
 type EventPublisher interface {
-	Publish(sessionKey string, ev Event)
+	Publish(sessionID string, ev Event)
 }
 
 // RunnerDeps configures a Runner.
@@ -116,10 +116,10 @@ var ErrBusy = fmt.Errorf("session busy")
 var ErrConcurrent = fmt.Errorf("too many concurrent runs")
 
 // IsBusy reports whether a session has a run in flight.
-func (r *Runner) IsBusy(sessionKey string) bool {
+func (r *Runner) IsBusy(sessionID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, ok := r.busy[sessionKey]
+	_, ok := r.busy[sessionID]
 	return ok
 }
 
@@ -132,32 +132,32 @@ func (r *Runner) AtCapacity() bool {
 }
 
 // QueueLen returns pending mid-run messages for a session.
-func (r *Runner) QueueLen(sessionKey string) int {
+func (r *Runner) QueueLen(sessionID string) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return len(r.queue[sessionKey])
+	return len(r.queue[sessionID])
 }
 
 // Enqueue adds a message to the session FIFO while a run is in flight.
 // Returns 1-based queue position.
-func (r *Runner) Enqueue(sessionKey, agentKey, message string) (position int) {
+func (r *Runner) Enqueue(sessionID, agentKey, message string) (position int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.queue[sessionKey] = append(r.queue[sessionKey], queuedMsg{AgentKey: agentKey, Message: message})
-	position = len(r.queue[sessionKey])
-	observe.Queued(sessionKey, position)
+	r.queue[sessionID] = append(r.queue[sessionID], queuedMsg{AgentKey: agentKey, Message: message})
+	position = len(r.queue[sessionID])
+	observe.Queued(sessionID, position)
 	return position
 }
 
 // Abort cancels an in-flight run for a session. Queue is retained.
-func (r *Runner) Abort(sessionKey string) bool {
+func (r *Runner) Abort(sessionID string) bool {
 	r.mu.Lock()
-	cancel, ok := r.cancels[sessionKey]
+	cancel, ok := r.cancels[sessionID]
 	r.mu.Unlock()
 	if !ok {
 		return false
 	}
-	observe.Abort(sessionKey)
+	observe.Abort(sessionID)
 	cancel()
 	return true
 }
@@ -177,12 +177,12 @@ func (r *Runner) InvalidateProvider(name string) {
 }
 
 // Run executes one agent run with default options.
-func (r *Runner) Run(ctx context.Context, sessionKey, agentKey, userMessage string, onEvent func(Event)) error {
-	return r.RunOpts(ctx, sessionKey, agentKey, userMessage, onEvent, RunOpts{})
+func (r *Runner) Run(ctx context.Context, sessionID, agentKey, userMessage string, onEvent func(Event)) error {
+	return r.RunOpts(ctx, sessionID, agentKey, userMessage, onEvent, RunOpts{})
 }
 
 // RunOpts executes one agent run with options (subagent budgets / tool filters).
-func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage string, onEvent func(Event), opts RunOpts) error {
+func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage string, onEvent func(Event), opts RunOpts) error {
 	rounds := opts.MaxRounds
 	if rounds <= 0 {
 		rounds = maxRoundsDefault
@@ -191,55 +191,55 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 	publisher := func(ev Event) {
 		emit(onEvent, ev)
 		if r.deps.Publish != nil {
-			r.deps.Publish.Publish(sessionKey, ev)
+			r.deps.Publish.Publish(sessionID, ev)
 		}
 	}
 
 	// Claim the session + optional global gate.
 	r.mu.Lock()
-	if _, busy := r.busy[sessionKey]; busy {
+	if _, busy := r.busy[sessionID]; busy {
 		r.mu.Unlock()
-		observe.BusyReject(sessionKey)
+		observe.BusyReject(sessionID)
 		publisher(Event{Type: "error", Error: "session busy"})
 		return ErrBusy
 	}
 	if max := r.deps.MaxConcurrentRuns; max > 0 && len(r.busy) >= max {
 		n := len(r.busy)
 		r.mu.Unlock()
-		observe.ConcurrentReject(sessionKey, n, max)
+		observe.ConcurrentReject(sessionID, n, max)
 		publisher(Event{Type: "error", Error: "too many concurrent runs"})
 		return ErrConcurrent
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	r.busy[sessionKey] = struct{}{}
-	r.cancels[sessionKey] = cancel
+	r.busy[sessionID] = struct{}{}
+	r.cancels[sessionID] = cancel
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
-		delete(r.busy, sessionKey)
-		delete(r.cancels, sessionKey)
+		delete(r.busy, sessionID)
+		delete(r.cancels, sessionID)
 		r.mu.Unlock()
 		cancel()
-		r.drainQueue(sessionKey)
+		r.drainQueue(sessionID)
 	}()
 
 	st := r.deps.Store
 
-	sess, err := st.GetSessionByKey(runCtx, sessionKey)
+	sess, err := st.GetSessionByID(runCtx, sessionID)
 	if err != nil {
 		if agentKey == "" {
 			agentKey = "default"
 		}
-		sess = &store.Session{ID: util.NewID(), Key: sessionKey, AgentKey: agentKey}
+		sess = &store.Session{ID: sessionID, Agent: agentKey}
 		if cerr := st.CreateSession(runCtx, sess); cerr != nil {
-			sess, err = st.GetSessionByKey(runCtx, sessionKey)
+			sess, err = st.GetSessionByID(runCtx, sessionID)
 			if err != nil {
 				publisher(Event{Type: "error", Error: "session unavailable"})
 				return err
 			}
 		}
 	} else {
-		agentKey = sess.AgentKey
+		agentKey = sess.Agent
 	}
 
 	ag, err := st.GetAgentByKey(runCtx, agentKey)
@@ -248,13 +248,17 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 		return err
 	}
 
-	prov, err := r.provider(runCtx, ag.Provider)
+	if ag.TxtModel == "" {
+		publisher(Event{Type: "error", Error: "agent has no txt_model"})
+		return fmt.Errorf("agent %q has no txt_model", agentKey)
+	}
+	prov, model, err := r.resolveTxtModel(runCtx, ag.TxtModel)
 	if err != nil {
 		publisher(Event{Type: "error", Error: err.Error()})
 		return err
 	}
 
-	history, err := st.ListMessages(runCtx, sessionKey)
+	history, err := st.ListMessages(runCtx, sessionID)
 	if err != nil {
 		publisher(Event{Type: "error", Error: "load history failed"})
 		return err
@@ -262,7 +266,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 	history = truncateHistory(history, r.deps.MaxHistoryMessages)
 
 	userMsg := store.Message{ID: util.NewID(), Role: "user", Content: userMessage}
-	if _, err := st.AppendMessage(runCtx, sessionKey, userMsg); err != nil {
+	if _, err := st.AppendMessage(runCtx, sessionID, userMsg); err != nil {
 		slog.Error("persist user message", "error", err)
 	}
 
@@ -290,7 +294,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 	)
 
 	for round := 0; round < rounds; round++ {
-		observe.RoundStart(sessionKey, round)
+		observe.RoundStart(sessionID, round)
 		roundTools := toolDefs
 
 		switch {
@@ -308,7 +312,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 			llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: softBudgetNudge})
 		}
 
-		req := llm.ChatRequest{Model: ag.Model, Messages: llmMsgs, Tools: roundTools}
+		req := llm.ChatRequest{Model: model, Messages: llmMsgs, Tools: roundTools}
 		resp, err := r.streamRound(runCtx, prov, req, publisher)
 		if err != nil {
 			publisher(Event{Type: "error", Error: err.Error()})
@@ -316,7 +320,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 		}
 
 		if len(resp.ToolCalls) > 0 && len(roundTools) > 0 {
-			observe.RoundEnd(sessionKey, round, true)
+			observe.RoundEnd(sessionID, round, true)
 			key := toolCallKey(resp.ToolCalls)
 			if key == lastKey {
 				repeat++
@@ -331,13 +335,13 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 			}
 
 			assistantMsg := store.Message{
-				ID:            util.NewID(),
-				Role:          "assistant",
-				Content:       resp.Content,
-				Thinking:      resp.Thinking,
-				ToolCallsJSON: marshalToolCalls(resp.ToolCalls),
+				ID:        util.NewID(),
+				Role:      "assistant",
+				Content:   resp.Content,
+				Thinking:  resp.Thinking,
+				ToolCalls: toStoreToolCalls(resp.ToolCalls),
 			}
-			if _, err := st.AppendMessage(runCtx, sessionKey, assistantMsg); err != nil {
+			if _, err := st.AppendMessage(runCtx, sessionID, assistantMsg); err != nil {
 				slog.Error("persist assistant (tool) message", "error", err)
 			}
 			llmMsgs = append(llmMsgs, toLLM(assistantMsg))
@@ -347,7 +351,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 				var result string
 				var execErr error
 				t0 := time.Now()
-				observe.ToolStart(sessionKey, tc.Name)
+				observe.ToolStart(sessionID, tc.Name)
 				if !st.ToolEnabled(runCtx, tc.Name) {
 					execErr = fmt.Errorf("tool %q is disabled", tc.Name)
 				} else {
@@ -357,12 +361,12 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 					}
 					tctx, tcancel := context.WithTimeout(runCtx, timeout)
 					result, execErr = r.deps.Tools.Execute(tool.WithRunContext(tctx, tool.RunContext{
-						SessionKey: sessionKey,
-						AgentKey:   agentKey,
+						SessionID: sessionID,
+						Agent:     agentKey,
 					}), tc.Name, tc.Arguments)
 					tcancel()
 				}
-				observe.ToolEnd(sessionKey, tc.Name, time.Since(t0), execErr)
+				observe.ToolEnd(sessionID, tc.Name, time.Since(t0), execErr)
 				isErr := execErr != nil
 				if isErr {
 					result = "error: " + execErr.Error()
@@ -380,10 +384,10 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 					ID:         util.NewID(),
 					Role:       "tool",
 					Content:    truncated,
-					ToolCallID: tc.ID,
+					ToolCallId: tc.ID,
 					ToolName:   tc.Name,
 				}
-				if _, err := st.AppendMessage(runCtx, sessionKey, toolMsg); err != nil {
+				if _, err := st.AppendMessage(runCtx, sessionID, toolMsg); err != nil {
 					slog.Error("persist tool message", "error", err)
 				}
 				llmMsgs = append(llmMsgs, llm.Message{
@@ -400,7 +404,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 			continue
 		}
 
-		observe.RoundEnd(sessionKey, round, false)
+		observe.RoundEnd(sessionID, round, false)
 		content := resp.Content
 		if strings.TrimSpace(content) == "" && (forceWrapUp || round == rounds-1) {
 			content = continueHint
@@ -411,7 +415,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 			Content:  content,
 			Thinking: resp.Thinking,
 		}
-		if _, err := st.AppendMessage(runCtx, sessionKey, assistantMsg); err != nil {
+		if _, err := st.AppendMessage(runCtx, sessionID, assistantMsg); err != nil {
 			slog.Error("persist assistant message", "error", err)
 		}
 		if content != "" && content != resp.Content {
@@ -421,7 +425,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 		title := ""
 		if sess.Title == "" {
 			title = titleFromMessage(firstUser)
-			if err := st.UpdateSessionTitle(runCtx, sessionKey, title); err != nil {
+			if err := st.UpdateSessionTitle(runCtx, sessionID, title); err != nil {
 				slog.Error("set session title", "error", err)
 			}
 		}
@@ -429,7 +433,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 		return nil
 	}
 
-	if _, err := st.AppendMessage(runCtx, sessionKey, store.Message{
+	if _, err := st.AppendMessage(runCtx, sessionID, store.Message{
 		ID: util.NewID(), Role: "assistant", Content: continueHint,
 	}); err != nil {
 		slog.Error("persist wrap-up message", "error", err)
@@ -439,17 +443,17 @@ func (r *Runner) RunOpts(ctx context.Context, sessionKey, agentKey, userMessage 
 	return nil
 }
 
-func (r *Runner) drainQueue(sessionKey string) {
+func (r *Runner) drainQueue(sessionID string) {
 	r.mu.Lock()
-	q := r.queue[sessionKey]
+	q := r.queue[sessionID]
 	if len(q) == 0 {
 		r.mu.Unlock()
 		return
 	}
 	next := q[0]
-	r.queue[sessionKey] = q[1:]
-	if len(r.queue[sessionKey]) == 0 {
-		delete(r.queue, sessionKey)
+	r.queue[sessionID] = q[1:]
+	if len(r.queue[sessionID]) == 0 {
+		delete(r.queue, sessionID)
 	}
 	r.mu.Unlock()
 
@@ -458,14 +462,14 @@ func (r *Runner) drainQueue(sessionKey string) {
 		ctx := context.Background()
 		emit := func(ev Event) {
 			if r.deps.Publish != nil {
-				r.deps.Publish.Publish(sessionKey, ev)
+				r.deps.Publish.Publish(sessionID, ev)
 			}
 		}
 		if r.deps.Publish != nil {
-			r.deps.Publish.Publish(sessionKey, Event{Type: "user", Content: next.Message})
+			r.deps.Publish.Publish(sessionID, Event{Type: "user", Content: next.Message})
 		}
-		if err := r.Run(ctx, sessionKey, next.AgentKey, next.Message, emit); err != nil {
-			slog.Warn("queue drain run", "session", sessionKey, "error", err)
+		if err := r.Run(ctx, sessionID, next.AgentKey, next.Message, emit); err != nil {
+			slog.Warn("queue drain run", "session", sessionID, "error", err)
 		}
 	}()
 }
@@ -487,26 +491,28 @@ func filterTools(defs []llm.ToolDef, opts RunOpts) []llm.ToolDef {
 	return out
 }
 
-func (r *Runner) provider(ctx context.Context, name string) (llm.Provider, error) {
+// resolveTxtModel looks up llm_provider by name (agent.txt_model) and returns
+// the chat client plus the model id defined on that provider row.
+func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llm.Provider, string, error) {
+	apiBase, apiKey, model, err := r.deps.Store.ProviderCreds(ctx, name)
+	if err != nil {
+		return nil, "", err
+	}
 	r.provMu.Lock()
 	if p, ok := r.provCache[name]; ok {
 		r.provMu.Unlock()
-		return p, nil
+		return p, model, nil
 	}
 	r.provMu.Unlock()
-	apiBase, apiKey, err := r.deps.Store.ProviderCreds(ctx, name)
-	if err != nil {
-		return nil, err
-	}
 	p := llm.NewOpenAIProvider(name, apiBase, apiKey, "")
 	r.provMu.Lock()
 	if existing, ok := r.provCache[name]; ok {
 		r.provMu.Unlock()
-		return existing, nil
+		return existing, model, nil
 	}
 	r.provCache[name] = p
 	r.provMu.Unlock()
-	return p, nil
+	return p, model, nil
 }
 
 func (r *Runner) streamRound(ctx context.Context, p llm.Provider, req llm.ChatRequest, onEvent func(Event)) (*llm.ChatResponse, error) {
@@ -523,9 +529,9 @@ func (r *Runner) streamRound(ctx context.Context, p llm.Provider, req llm.ChatRe
 func (r *Runner) buildSystem(ag *store.Agent) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are Swiflow agent %s.", ag.Key)
-	if ag.SystemExtra != "" {
+	if ag.SysPrompt != "" {
 		b.WriteString("\n\n")
-		b.WriteString(ag.SystemExtra)
+		b.WriteString(ag.SysPrompt)
 	}
 	if r.deps.Workspace != "" {
 		b.WriteString("\n\n## Workspace\nWorkspace root: ")
@@ -566,6 +572,10 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 	b.WriteString("\n\n## Clarify\n")
 	b.WriteString("When you need a user choice, confirmation, or missing info before continuing, call clarify. ")
 	b.WriteString("Do not invent answers; wait for the tool result. Prefer short options when choices are discrete.")
+	b.WriteString("\n\n## Learning & memory\n")
+	b.WriteString("After completing a significant task (success or failure), call experience_write to record: a one-sentence summary, the outcome, and 1-3 topic tags.\n")
+	b.WriteString("Before starting a complex or unfamiliar task, call experience_list to check for relevant prior experience that could shortcut the work.\n")
+	b.WriteString("When the same pattern appears in multiple experiences, use skill_manage to promote it into a reusable skill.")
 	return b.String()
 }
 
@@ -582,21 +592,29 @@ func toLLM(m store.Message) llm.Message {
 		Role:       m.Role,
 		Content:    m.Content,
 		Thinking:   m.Thinking,
-		ToolCallID: m.ToolCallID,
+		ToolCallID: m.ToolCallId,
 		ToolName:   m.ToolName,
 	}
-	if m.ToolCallsJSON != "" {
-		var tcs []llm.ToolCall
-		if json.Unmarshal([]byte(m.ToolCallsJSON), &tcs) == nil {
-			out.ToolCalls = tcs
+	if len(m.ToolCalls) > 0 {
+		out.ToolCalls = make([]llm.ToolCall, len(m.ToolCalls))
+		for i, tc := range m.ToolCalls {
+			out.ToolCalls[i] = llm.ToolCall{
+				ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments,
+			}
 		}
 	}
 	return out
 }
 
-func marshalToolCalls(tcs []llm.ToolCall) string {
-	b, _ := json.Marshal(tcs)
-	return string(b)
+func toStoreToolCalls(tcs []llm.ToolCall) []store.ToolCall {
+	if len(tcs) == 0 {
+		return nil
+	}
+	out := make([]store.ToolCall, len(tcs))
+	for i, tc := range tcs {
+		out[i] = store.ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments}
+	}
+	return out
 }
 
 func toolCallKey(tcs []llm.ToolCall) string {
@@ -651,7 +669,7 @@ func (r *Runner) RunChild(ctx context.Context, opts tool.ChildRunOpts, onDelta f
 			allow[n] = true
 		}
 	}
-	return r.RunOpts(ctx, opts.SessionKey, opts.AgentKey, opts.UserMessage, func(ev Event) {
+	return r.RunOpts(ctx, opts.SessionID, opts.AgentKey, opts.UserMessage, func(ev Event) {
 		if ev.Type == "delta" && onDelta != nil && ev.Content != "" {
 			onDelta(ev.Content)
 		}

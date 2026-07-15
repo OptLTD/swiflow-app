@@ -27,7 +27,7 @@ type Event struct {
 type EmitFunc func(Event)
 
 // FallbackEmit is used when no per-run BindEmit is registered (e.g. queue drain → sesshub).
-type FallbackEmit func(sessionKey string, ev Event)
+type FallbackEmit func(sessionID string, ev Event)
 
 type pending struct {
 	ch chan reply
@@ -65,36 +65,36 @@ func (b *Bridge) SetFallback(fn FallbackEmit) {
 }
 
 // BindEmit registers the SSE emitter for a session run. Replaces any prior binding.
-func (b *Bridge) BindEmit(sessionKey string, emit EmitFunc) {
-	if b == nil || sessionKey == "" || emit == nil {
+func (b *Bridge) BindEmit(sessionID string, emit EmitFunc) {
+	if b == nil || sessionID == "" || emit == nil {
 		return
 	}
 	b.mu.Lock()
-	b.emits[sessionKey] = emit
+	b.emits[sessionID] = emit
 	b.mu.Unlock()
 }
 
 // UnbindEmit clears the emitter for a session (call when the run ends).
-func (b *Bridge) UnbindEmit(sessionKey string) {
-	if b == nil || sessionKey == "" {
+func (b *Bridge) UnbindEmit(sessionID string) {
+	if b == nil || sessionID == "" {
 		return
 	}
 	b.mu.Lock()
-	delete(b.emits, sessionKey)
+	delete(b.emits, sessionID)
 	b.mu.Unlock()
 }
 
 // Request sends a ui_request to the bound UI and waits for Reply (default 8s).
-func (b *Bridge) Request(ctx context.Context, sessionKey, op string, args map[string]any) (string, error) {
-	return b.RequestTimeout(ctx, sessionKey, op, args, defaultTimeout)
+func (b *Bridge) Request(ctx context.Context, sessionID, op string, args map[string]any) (string, error) {
+	return b.RequestTimeout(ctx, sessionID, op, args, defaultTimeout)
 }
 
 // RequestTimeout is like Request with a custom wait bound.
-func (b *Bridge) RequestTimeout(ctx context.Context, sessionKey, op string, args map[string]any, timeout time.Duration) (string, error) {
+func (b *Bridge) RequestTimeout(ctx context.Context, sessionID, op string, args map[string]any, timeout time.Duration) (string, error) {
 	if b == nil {
 		return "", fmt.Errorf("ui client unavailable")
 	}
-	if sessionKey == "" {
+	if sessionID == "" {
 		return "", fmt.Errorf("ui client unavailable")
 	}
 	if args == nil {
@@ -107,7 +107,7 @@ func (b *Bridge) RequestTimeout(ctx context.Context, sessionKey, op string, args
 	ch := make(chan reply, 1)
 
 	b.mu.Lock()
-	emit := b.emits[sessionKey]
+	emit := b.emits[sessionID]
 	fallback := b.fallback
 	if emit == nil && fallback == nil {
 		b.mu.Unlock()
@@ -131,7 +131,7 @@ func (b *Bridge) RequestTimeout(ctx context.Context, sessionKey, op string, args
 	if emit != nil {
 		emit(ev)
 	} else {
-		fallback(sessionKey, ev)
+		fallback(sessionID, ev)
 	}
 
 	timer := time.NewTimer(timeout)

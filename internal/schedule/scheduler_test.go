@@ -30,19 +30,19 @@ func TestSchedulerReloadValidAndInvalidSchedules(t *testing.T) {
 	sched := newTestScheduler(t, st)
 
 	if err := st.CreateCronJob(ctx, &store.CronJob{
-		ID: "ok", Name: "ok", AgentKey: "default",
+		ID: "ok", Name: "ok", Agent: "default",
 		Message: "hi", Schedule: "@hourly", Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateCronJob(ctx, &store.CronJob{
-		ID: "bad", Name: "bad", AgentKey: "default",
+		ID: "bad", Name: "bad", Agent: "default",
 		Message: "hi", Schedule: "not-valid", Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateCronJob(ctx, &store.CronJob{
-		ID: "off", Name: "off", AgentKey: "default",
+		ID: "off", Name: "off", Agent: "default",
 		Message: "hi", Schedule: "@hourly", Enabled: false,
 	}); err != nil {
 		t.Fatal(err)
@@ -60,7 +60,7 @@ func TestSchedulerRunsJobAndSetsLastRunAt(t *testing.T) {
 	sched := newTestScheduler(t, st)
 
 	job := &store.CronJob{
-		ID: "tick", Name: "tick", AgentKey: "default",
+		ID: "tick", Name: "tick", Agent: "default",
 		Message: "cron ping", Schedule: "@every 100ms", Enabled: true,
 	}
 	if err := st.CreateCronJob(ctx, job); err != nil {
@@ -92,7 +92,7 @@ func TestSchedulerReloadAfterDelete(t *testing.T) {
 	sched := newTestScheduler(t, st)
 
 	if err := st.CreateCronJob(ctx, &store.CronJob{
-		ID: "gone", Name: "gone", AgentKey: "default",
+		ID: "gone", Name: "gone", Agent: "default",
 		Message: "x", Schedule: "@hourly", Enabled: true,
 	}); err != nil {
 		t.Fatal(err)

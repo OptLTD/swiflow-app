@@ -11,9 +11,15 @@ import (
 
 // Config holds server configuration.
 type Config struct {
-	Host           string      `json:"host"`
-	Port           int         `json:"port"`
-	DBPath         string      `json:"db_path"`
+	Host string `json:"host"`
+	Port int    `json:"port"`
+	// DBDriver selects the persistence backend: "sqlite" (default) or "postgres".
+	DBDriver string `json:"db_driver"`
+	// DBPath is the SQLite file path (when DBDriver=sqlite).
+	DBPath string `json:"db_path"`
+	// DBDSN is the Postgres connection string (when DBDriver=postgres),
+	// e.g. postgres://user:pass@localhost:5432/swiflow?sslmode=disable.
+	DBDSN          string      `json:"db_dsn"`
 	AuthToken      string      `json:"auth_token"`
 	EncryptionKey  string      `json:"encryption_key"`
 	WorkspaceDir   string      `json:"workspace_dir"`
@@ -44,6 +50,7 @@ type ToolsConfig struct {
 func Default() Config {
 	return Config{
 		Host: "127.0.0.1", Port: 8000,
+		DBDriver:       "sqlite",
 		DBPath:         "./data/swiflow.db",
 		InitSkillsDir:  "", // empty = embedded builtins; set for local dev override
 		UserSkillsDir:  "./data/user-skills",
@@ -85,8 +92,14 @@ func applyEnv(cfg *Config) {
 			cfg.Port = p
 		}
 	}
+	if v := os.Getenv("SWIFLOW_DB_DRIVER"); v != "" {
+		cfg.DBDriver = v
+	}
 	if v := os.Getenv("SWIFLOW_DB"); v != "" {
 		cfg.DBPath = v
+	}
+	if v := os.Getenv("SWIFLOW_DB_DSN"); v != "" {
+		cfg.DBDSN = v
 	}
 	if v := os.Getenv("SWIFLOW_AUTH_TOKEN"); v != "" {
 		cfg.AuthToken = v

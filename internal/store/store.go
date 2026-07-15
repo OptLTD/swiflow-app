@@ -6,83 +6,111 @@ import (
 	"context"
 )
 
-// Provider is an LLM endpoint configuration. APIKey is plaintext in memory;
-// the storage layer encrypts/decrypts at the boundary.
+// Provider is an LLM endpoint configuration. ApiKey is plaintext in memory;
+// the storage layer encrypts/decrypts at the boundary. Model is the default
+// model id used when an agent references this provider via txt_model/img_model.
 type Provider struct {
-	ID          string `json:"id" db:"id"`
-	Name        string `json:"name" db:"name"`
-	DisplayName string `json:"display_name" db:"display_name"`
-	APIBase     string `json:"api_base" db:"api_base"`
-	APIKey      string `json:"api_key,omitempty" db:"-"`
-	Enabled     bool   `json:"enabled" db:"enabled"`
-	CreatedAt   string `json:"created_at" db:"created_at"`
-	UpdatedAt   string `json:"updated_at" db:"updated_at"`
+	ID        string `json:"id" db:"id"`
+	Tid       string `json:"tid" db:"tid"`
+	Name      string `json:"name" db:"name"`
+	Display   string `json:"display" db:"display"`
+	ApiBase   string `json:"api_base" db:"api_base"`
+	ApiKey    string `json:"api_key,omitempty" db:"-"`
+	Model     string `json:"model" db:"model"`
+	Enabled   bool   `json:"enabled" db:"enabled"`
+	CreatedAt string `json:"created_at" db:"created_at"`
+	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
 
 // Agent is a runnable agent configuration.
+// TxtModel / ImgModel reference llm_provider.name.
 type Agent struct {
-	ID          string `json:"id" db:"id"`
-	Key         string `json:"key" db:"key"`
-	DisplayName string `json:"display_name" db:"display_name"`
-	Provider    string `json:"provider" db:"provider"`
-	Model       string `json:"model" db:"model"`
-	SystemExtra string `json:"system_extra" db:"system_extra"`
-	CreatedAt   string `json:"created_at" db:"created_at"`
-	UpdatedAt   string `json:"updated_at" db:"updated_at"`
+	ID        string `json:"id" db:"id"`
+	Tid       string `json:"tid" db:"tid"`
+	Key       string `json:"key" db:"key"`
+	Display   string `json:"display" db:"display"`
+	TxtModel  string `json:"txt_model" db:"txt_model"`
+	ImgModel  string `json:"img_model" db:"img_model"`
+	SysPrompt string `json:"sys_prompt" db:"sys_prompt"`
+	CreatedAt string `json:"created_at" db:"created_at"`
+	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
 
 // Session is a conversation thread.
 type Session struct {
 	ID        string `json:"id" db:"id"`
-	Key       string `json:"key" db:"key"`
-	AgentKey  string `json:"agent_key" db:"agent_key"`
+	Tid       string `json:"tid" db:"tid"`
+	Agent     string `json:"agent" db:"agent"`
 	Title     string `json:"title" db:"title"`
 	CreatedAt string `json:"created_at" db:"created_at"`
 	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
 
 // Message is one turn in a session.
+// ToolCalls is decoded for the API; the sqlstore persists it as JSON text.
 type Message struct {
-	ID           string `json:"id" db:"id"`
-	SessionID    string `json:"session_id" db:"session_id"`
-	Seq          int    `json:"seq" db:"seq"`
-	Role         string `json:"role" db:"role"`
-	Content      string `json:"content" db:"content"`
-	Thinking     string `json:"thinking" db:"thinking"`
-	ToolCallsJSON string `json:"tool_calls_json" db:"tool_calls_json"`
-	ToolCallID   string `json:"tool_call_id" db:"tool_call_id"`
-	ToolName     string `json:"tool_name" db:"tool_name"`
-	CreatedAt    string `json:"created_at" db:"created_at"`
+	ID         string     `json:"id" db:"id"`
+	Tid        string     `json:"tid" db:"tid"`
+	Sid        string     `json:"sid" db:"sid"`
+	Seq        int        `json:"seq" db:"seq"`
+	Role       string     `json:"role" db:"role"`
+	Content    string     `json:"content" db:"content"`
+	Thinking   string     `json:"thinking" db:"thinking"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty" db:"-"`
+	ToolCallId string     `json:"tool_call_id,omitempty" db:"tool_call_id"`
+	ToolName   string     `json:"tool_name,omitempty" db:"tool_name"`
+	CreatedAt  string     `json:"created_at" db:"created_at"`
 }
 
-// ToolPolicy is the enable state for a tool.
+// ToolCall is a model-requested tool invocation persisted with an assistant message.
+type ToolCall struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+// ToolPolicy is the enable state for a tool (not a direct table row).
 type ToolPolicy struct {
-	ToolName string `json:"tool_name" db:"tool_name"`
-	Enabled  bool   `json:"enabled" db:"enabled"`
+	ToolName string `json:"tool_name"`
+	Enabled  bool   `json:"enabled"`
+}
+
+// Experience is a persisted agent learning record.
+type Experience struct {
+	ID        string   `json:"id" db:"id"`
+	Tid       string   `json:"tid" db:"tid"`
+	Sid       string   `json:"sid" db:"sid"`
+	Agent     string   `json:"agent" db:"agent"`
+	Summary   string   `json:"summary" db:"summary"`
+	Outcome   string   `json:"outcome" db:"outcome"` // success|partial|failure|unknown
+	Tags      []string `json:"tags" db:"-"`
+	CreatedAt string   `json:"created_at" db:"created_at"`
 }
 
 // MCPServer is a configured MCP server connection (Phase 2).
+// Args / Env are decoded for the API; the sqlstore persists them as JSON text.
 type MCPServer struct {
-	ID          string   `json:"id" db:"id"`
-	Name        string   `json:"name" db:"name"`
-	DisplayName string   `json:"display_name" db:"display_name"`
-	Transport   string   `json:"transport" db:"transport"` // stdio|sse|streamable
-	Command     string   `json:"command,omitempty" db:"command"`
-	Args        []string `json:"args,omitempty" db:"-"`
-	ArgsJSON    string   `json:"-" db:"args_json"`
-	URL         string   `json:"url,omitempty" db:"url"`
-	Env         map[string]string `json:"env,omitempty" db:"-"`
-	EnvJSON     string   `json:"-" db:"env_json"`
-	Enabled     bool     `json:"enabled" db:"enabled"`
-	CreatedAt   string   `json:"created_at" db:"created_at"`
-	UpdatedAt   string   `json:"updated_at" db:"updated_at"`
+	ID   string   `json:"id" db:"id"`
+	Tid  string   `json:"tid" db:"tid"`
+	Name string   `json:"name" db:"name"`
+	Type string   `json:"type" db:"type"` // stdio|sse|streamable
+	Cmd  string   `json:"cmd,omitempty" db:"cmd"`
+	Args []string `json:"args,omitempty" db:"-"`
+	URL  string   `json:"url,omitempty" db:"url"`
+
+	Env map[string]string `json:"env,omitempty" db:"-"`
+
+	Enabled   bool   `json:"enabled" db:"enabled"`
+	CreatedAt string `json:"created_at" db:"created_at"`
+	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
 
 // CronJob is a scheduled agent task (Phase 2).
 type CronJob struct {
 	ID        string `json:"id" db:"id"`
+	Tid       string `json:"tid" db:"tid"`
 	Name      string `json:"name" db:"name"`
-	AgentKey  string `json:"agent_key" db:"agent_key"`
+	Agent     string `json:"agent" db:"agent"`
 	Message   string `json:"message" db:"message"`
 	Schedule  string `json:"schedule" db:"schedule"`
 	Enabled   bool   `json:"enabled" db:"enabled"`
@@ -100,7 +128,7 @@ type Store interface {
 	ListProviders(ctx context.Context) ([]Provider, error)
 	GetProviderByName(ctx context.Context, name string) (*Provider, error)
 	GetProviderByID(ctx context.Context, id string) (*Provider, error)
-	ProviderCreds(ctx context.Context, name string) (apiBase, apiKey string, err error)
+	ProviderCreds(ctx context.Context, name string) (apiBase, apiKey, model string, err error)
 	UpdateProvider(ctx context.Context, id string, fields map[string]any) error
 	DeleteProvider(ctx context.Context, id string) error
 
@@ -112,11 +140,11 @@ type Store interface {
 
 	// Sessions + messages
 	CreateSession(ctx context.Context, s *Session) error
-	GetSessionByKey(ctx context.Context, key string) (*Session, error)
+	GetSessionByID(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context) ([]Session, error)
-	UpdateSessionTitle(ctx context.Context, key, title string) error
-	AppendMessage(ctx context.Context, sessionKey string, msg Message) (Message, error)
-	ListMessages(ctx context.Context, sessionKey string) ([]Message, error)
+	UpdateSessionTitle(ctx context.Context, id, title string) error
+	AppendMessage(ctx context.Context, sessionID string, msg Message) (Message, error)
+	ListMessages(ctx context.Context, sessionID string) ([]Message, error)
 
 	// Policy
 	ToolEnabled(ctx context.Context, name string) bool
@@ -140,4 +168,13 @@ type Store interface {
 	UpdateCronJob(ctx context.Context, id string, fields map[string]any) error
 	DeleteCronJob(ctx context.Context, id string) error
 	SetCronJobLastRun(ctx context.Context, id string, at string) error
+
+	// Experience (Phase 3)
+	CreateExperience(ctx context.Context, e *Experience) error
+	ListExperiences(ctx context.Context, agentKey string, limit int) ([]Experience, error)
+	DeleteExperience(ctx context.Context, id string) error
+
+	// Session todos (Phase 3)
+	SaveTodos(ctx context.Context, sessionID string, itemsJSON string) error
+	LoadTodos(ctx context.Context, sessionID string) (string, error)
 }

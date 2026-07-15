@@ -40,7 +40,7 @@ func TestManagerSyncStreamableRegistersTool(t *testing.T) {
 	})
 
 	srv := &store.MCPServer{
-		ID: "s1", Name: "testsrv", Transport: "streamable",
+		ID: "s1", Name: "testsrv", Type: "streamable",
 		URL: ts.URL, Enabled: true,
 	}
 	if err := st.CreateMCPServer(ctx, srv); err != nil {
@@ -78,11 +78,11 @@ func TestManagerSyncSkipsDisabledAndReconnects(t *testing.T) {
 	})
 
 	disabled := &store.MCPServer{
-		ID: "s0", Name: "off", Transport: "streamable",
+		ID: "s0", Name: "off", Type: "streamable",
 		URL: "http://127.0.0.1:1", Enabled: false,
 	}
 	enabled := &store.MCPServer{
-		ID: "s1", Name: "on", Transport: "streamable",
+		ID: "s1", Name: "on", Type: "streamable",
 		URL: ts.URL, Enabled: true,
 	}
 	if err := st.CreateMCPServer(ctx, disabled); err != nil {
@@ -120,7 +120,7 @@ func TestManagerSyncToleratesBadServer(t *testing.T) {
 	t.Cleanup(mgr.Close)
 
 	srv := &store.MCPServer{
-		ID: "bad", Name: "bad", Transport: "streamable",
+		ID: "bad", Name: "bad", Type: "streamable",
 		URL: "http://127.0.0.1:1", Enabled: true,
 	}
 	if err := st.CreateMCPServer(ctx, srv); err != nil {

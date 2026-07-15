@@ -1,25 +1,31 @@
 export interface Agent {
   id: string
   key: string
-  display_name?: string
-  provider: string
-  model: string
-  system_extra?: string
+  display?: string
+  txt_model: string
+  img_model?: string
+  sys_prompt?: string
 }
 
 export interface Provider {
   id: string
   name: string
-  display_name?: string
+  display?: string
   api_base: string
+  model?: string
   enabled: boolean
 }
 
 export interface Session {
   id: string
-  key: string
-  agent_key: string
+  agent: string
   title?: string
+}
+
+export interface ToolCall {
+  id: string
+  name: string
+  arguments?: Record<string, unknown>
 }
 
 export interface Message {
@@ -27,7 +33,7 @@ export interface Message {
   role: string
   content: string
   thinking?: string
-  tool_calls_json?: string
+  tool_calls?: ToolCall[]
   tool_call_id?: string
   tool_name?: string
   seq?: number
@@ -80,9 +86,8 @@ export interface MCPResourceTemplateInfo {
 export interface MCPServer {
   id: string
   name: string
-  display_name?: string
-  transport: 'stdio' | 'sse' | 'streamable'
-  command?: string
+  type: 'stdio' | 'sse' | 'streamable'
+  cmd?: string
   args?: string[]
   url?: string
   env?: Record<string, string>
@@ -92,7 +97,7 @@ export interface MCPServer {
 export interface CronJob {
   id: string
   name: string
-  agent_key: string
+  agent: string
   message: string
   schedule: string
   enabled: boolean
@@ -127,4 +132,15 @@ export interface WorkspaceEntry {
   is_dir: boolean
   size?: number
   mod_time?: string
+}
+
+export interface RuntimeBinary {
+  found: boolean
+  path?: string
+  version?: string
+}
+
+export interface RuntimeInfo {
+  python3: RuntimeBinary
+  node: RuntimeBinary
 }

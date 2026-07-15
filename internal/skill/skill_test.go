@@ -9,23 +9,23 @@ import (
 func TestDiscoverEmbeddedBuiltin(t *testing.T) {
 	cat := NewCatalog("", "")
 	skills := cat.Discover(context.Background())
-	var example *Skill
+	var hit *Skill
 	for i := range skills {
-		if skills[i].Slug == "example" {
-			example = &skills[i]
+		if skills[i].Slug == "window-context" {
+			hit = &skills[i]
 			break
 		}
 	}
-	if example == nil {
-		t.Fatal("embedded example skill not found")
+	if hit == nil {
+		t.Fatal("embedded window-context skill not found")
 	}
-	if example.Source != "init" {
-		t.Fatalf("source = %q, want init", example.Source)
+	if hit.Source != "init" {
+		t.Fatalf("source = %q, want init", hit.Source)
 	}
-	if example.Body == "" {
-		t.Fatal("example skill body is empty")
+	if hit.Body == "" {
+		t.Fatal("skill body is empty")
 	}
-	if !strings.HasPrefix(example.Path, "embed:init-skills/") {
-		t.Fatalf("path = %q, want embed:init-skills/ prefix", example.Path)
+	if !strings.HasPrefix(hit.Path, "embed:init-skills/") {
+		t.Fatalf("path = %q, want embed:init-skills/ prefix", hit.Path)
 	}
 }

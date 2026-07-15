@@ -226,11 +226,8 @@ function mapStoredMessages(raw: Message[]): Msg[] {
   const toolByID = new Map<string, Msg>()
 
   for (const m of raw) {
-    if (m.role === 'assistant' && m.tool_calls_json) {
-      let tcs: { id: string; name: string; arguments?: Record<string, unknown> }[] = []
-      try {
-        tcs = JSON.parse(m.tool_calls_json)
-      } catch {}
+    if (m.role === 'assistant' && m.tool_calls?.length) {
+      const tcs = m.tool_calls
       if (m.content || m.thinking) {
         out.push({ role: 'assistant', content: m.content, thinking: m.thinking })
       }

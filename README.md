@@ -1,6 +1,6 @@
 # Swiflow
 
-A self-hosted AI agent runtime. Single Go binary + Vue UI, SQLite-backed,
+A self-hosted AI agent runtime. Single Go binary + Vue UI, SQLite or Postgres,
 OpenAI-compatible providers, tool use (filesystem / web / shell / skills),
 SSE streaming. See `docs/SPEC.md` for the full development specification.
 
@@ -13,6 +13,17 @@ make dev      # API :8000 + UI http://localhost:5173
 
 `serve` applies the database schema by default (`--migrate` is on). Use
 `--migrate=false` to skip.
+
+Postgres (optional): set `db_driver` to `postgres` and `db_dsn` to a pgx URL
+(or `SWIFLOW_DB_DRIVER` / `SWIFLOW_DB_DSN`). Schema is applied from
+`embed/schema.pg.sql` (greenfield; no SQLite upgrade scripts).
+
+```json
+{
+  "db_driver": "postgres",
+  "db_dsn": "postgres://swiflow:swiflow@localhost:5432/swiflow?sslmode=disable"
+}
+```
 
 Build & run:
 

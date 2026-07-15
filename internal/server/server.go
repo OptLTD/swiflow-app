@@ -40,8 +40,8 @@ type Server struct {
 func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *sesshub.Hub, win *window.Bridge) *Server {
 	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, window: win}
 	if win != nil && events != nil {
-		win.SetFallback(func(sessionKey string, ev window.Event) {
-			events.Publish(sessionKey, agent.Event{
+		win.SetFallback(func(sessionID string, ev window.Event) {
+			events.Publish(sessionID, agent.Event{
 				Type: ev.Type, ID: ev.ID, Name: ev.Name, Arguments: ev.Arguments,
 			})
 		})
@@ -53,6 +53,7 @@ func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Re
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("GET /api/runtime", s.getRuntime)
 
 	mux.HandleFunc("GET /api/providers", s.listProviders)
 	mux.HandleFunc("POST /api/providers", s.createProvider)
@@ -66,10 +67,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/agents/{key}", s.updateAgent)
 
 	mux.HandleFunc("GET /api/sessions", s.listSessions)
-	mux.HandleFunc("GET /api/sessions/{key}", s.getSession)
-	mux.HandleFunc("GET /api/sessions/{key}/watch", s.watchSession)
-	mux.HandleFunc("POST /api/sessions/{key}/chat", s.chat)
-	mux.HandleFunc("POST /api/sessions/{key}/abort", s.abort)
+	mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
+	mux.HandleFunc("GET /api/sessions/{id}/watch", s.watchSession)
+	mux.HandleFunc("POST /api/sessions/{id}/chat", s.chat)
+	mux.HandleFunc("POST /api/sessions/{id}/abort", s.abort)
 
 	mux.HandleFunc("GET /api/tools", s.listTools)
 	mux.HandleFunc("PUT /api/tools/{name}", s.setToolEnabled)
@@ -260,23 +261,27 @@ func (s *Server) listProviders(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name        string `json:"name"`
-		DisplayName string `json:"display_name"`
-		APIBase     string `json:"api_base"`
-		APIKey      string `json:"api_key"`
-		Enabled     *bool  `json:"enabled"`
+		Name    string `json:"name"`
+		Display string `json:"display"`
+		ApiBase string `json:"api_base"`
+		ApiKey  string `json:"api_key"`
+		Model   string `json:"model"`
+		Enabled *bool  `json:"enabled"`
 	}
 	if !bindJSON(w, r, &in) {
 		return
 	}
-	if in.Name == "" || in.APIKey == "" {
+	if in.Name == "" || in.ApiKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name, api_key required"})
 		return
 	}
-	if in.APIBase == "" {
-		in.APIBase = "https://api.openai.com/v1"
+	if in.ApiBase == "" {
+		in.ApiBase = "https://api.openai.com/v1"
 	}
-	if err := secure.ValidateHTTPURL(in.APIBase); err != nil {
+	if in.Model == "" {
+		in.Model = "gpt-4o-mini"
+	}
+	if err := secure.ValidateHTTPURL(in.ApiBase); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -285,19 +290,20 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 		enabled = *in.Enabled
 	}
 	p := &store.Provider{
-		ID:          util.NewID(),
-		Name:        in.Name,
-		DisplayName: in.DisplayName,
-		APIBase:     in.APIBase,
-		APIKey:      in.APIKey,
-		Enabled:     enabled,
+		ID:      util.NewID(),
+		Name:    in.Name,
+		Display: in.Display,
+		ApiBase: in.ApiBase,
+		ApiKey:  in.ApiKey,
+		Model:   in.Model,
+		Enabled: enabled,
 	}
 	if err := s.st.CreateProvider(r.Context(), p); err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "create failed"})
 		return
 	}
 	s.runner.InvalidateAll()
-	p.APIKey = ""
+	p.ApiKey = ""
 	writeJSON(w, http.StatusCreated, p)
 }
 
@@ -317,7 +323,7 @@ func (s *Server) updateProvider(w http.ResponseWriter, r *http.Request) {
 	if !bindJSON(w, r, &in) {
 		return
 	}
-	allowed := map[string]bool{"display_name": true, "api_base": true, "api_key": true, "enabled": true}
+	allowed := map[string]bool{"display": true, "api_base": true, "api_key": true, "model": true, "enabled": true}
 	fields := map[string]any{}
 	for k, v := range in {
 		if allowed[k] {
@@ -356,10 +362,10 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Key         string `json:"key"`
-		DisplayName string `json:"display_name"`
-		Provider    string `json:"provider"`
-		Model       string `json:"model"`
-		SystemExtra string `json:"system_extra"`
+		Display     string `json:"display"`
+		TxtModel    string `json:"txt_model"`
+		ImgModel    string `json:"img_model"`
+		SysPrompt string `json:"sys_prompt"`
 	}
 	if !bindJSON(w, r, &in) {
 		return
@@ -368,23 +374,26 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "key required"})
 		return
 	}
-	if in.Provider == "" {
-		in.Provider = "openai"
+	if in.TxtModel == "" {
+		in.TxtModel = "default"
 	}
-	if in.Model == "" {
-		in.Model = "gpt-4o-mini"
-	}
-	if _, err := s.st.GetProviderByName(r.Context(), in.Provider); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown provider"})
+	if _, err := s.st.GetProviderByName(r.Context(), in.TxtModel); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown txt_model provider"})
 		return
 	}
+	if in.ImgModel != "" {
+		if _, err := s.st.GetProviderByName(r.Context(), in.ImgModel); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown img_model provider"})
+			return
+		}
+	}
 	a := &store.Agent{
-		ID:          util.NewID(),
-		Key:         in.Key,
-		DisplayName: in.DisplayName,
-		Provider:    in.Provider,
-		Model:       in.Model,
-		SystemExtra: in.SystemExtra,
+		ID:        util.NewID(),
+		Key:       in.Key,
+		Display:   in.Display,
+		TxtModel:  in.TxtModel,
+		ImgModel:  in.ImgModel,
+		SysPrompt: in.SysPrompt,
 	}
 	if err := s.st.CreateAgent(r.Context(), a); err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "create failed"})
@@ -412,30 +421,36 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		DisplayName *string `json:"display_name"`
-		Provider    *string `json:"provider"`
-		Model       *string `json:"model"`
-		SystemExtra *string `json:"system_extra"`
+		Display     *string `json:"display"`
+		TxtModel    *string `json:"txt_model"`
+		ImgModel    *string `json:"img_model"`
+		SysPrompt *string `json:"sys_prompt"`
 	}
 	if !bindJSON(w, r, &in) {
 		return
 	}
 	fields := map[string]any{}
-	if in.DisplayName != nil {
-		fields["display_name"] = *in.DisplayName
+	if in.Display != nil {
+		fields["display"] = *in.Display
 	}
-	if in.Provider != nil {
-		if _, err := s.st.GetProviderByName(r.Context(), *in.Provider); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown provider"})
+	if in.TxtModel != nil {
+		if _, err := s.st.GetProviderByName(r.Context(), *in.TxtModel); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown txt_model provider"})
 			return
 		}
-		fields["provider"] = *in.Provider
+		fields["txt_model"] = *in.TxtModel
 	}
-	if in.Model != nil {
-		fields["model"] = *in.Model
+	if in.ImgModel != nil {
+		if *in.ImgModel != "" {
+			if _, err := s.st.GetProviderByName(r.Context(), *in.ImgModel); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown img_model provider"})
+				return
+			}
+		}
+		fields["img_model"] = *in.ImgModel
 	}
-	if in.SystemExtra != nil {
-		fields["system_extra"] = *in.SystemExtra
+	if in.SysPrompt != nil {
+		fields["sys_prompt"] = *in.SysPrompt
 	}
 	if len(fields) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no fields to update"})
@@ -462,13 +477,13 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("key")
-	sess, err := s.st.GetSessionByKey(r.Context(), key)
+	id := r.PathValue("id")
+	sess, err := s.st.GetSessionByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
 		return
 	}
-	msgs, err := s.st.ListMessages(r.Context(), key)
+	msgs, err := s.st.ListMessages(r.Context(), sess.ID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "load messages failed"})
 		return
@@ -477,10 +492,10 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("key")
+	id := r.PathValue("id")
 	var in struct {
-		Message  string `json:"message"`
-		AgentKey string `json:"agent_key"`
+		Message string `json:"message"`
+		Agent   string `json:"agent"`
 	}
 	if !bindJSON(w, r, &in) {
 		return
@@ -491,8 +506,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Mid-run: enqueue instead of 409 when session is busy.
-	if s.runner.IsBusy(key) {
-		pos := s.runner.Enqueue(key, in.AgentKey, in.Message)
+	if s.runner.IsBusy(id) {
+		pos := s.runner.Enqueue(id, in.Agent, in.Message)
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"queued":   true,
 			"position": pos,
@@ -524,24 +539,24 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if s.window != nil {
-		s.window.BindEmit(key, func(we window.Event) {
+		s.window.BindEmit(id, func(we window.Event) {
 			ae := agent.Event{
 				Type: we.Type, ID: we.ID, Name: we.Name, Arguments: we.Arguments,
 			}
 			emit(ae)
 			if s.events != nil {
-				s.events.Publish(key, ae)
+				s.events.Publish(id, ae)
 			}
 		})
-		defer s.window.UnbindEmit(key)
+		defer s.window.UnbindEmit(id)
 	}
-	err := s.runner.Run(ctx, key, in.AgentKey, in.Message, emit)
+	err := s.runner.Run(ctx, id, in.Agent, in.Message, emit)
 	if err == agent.ErrConcurrent {
 		emit(agent.Event{Type: "error", Error: err.Error()})
 		return
 	}
 	if err != nil && err != agent.ErrBusy {
-		slog.Error("chat.run", "session", key, "error", err)
+		slog.Error("chat.run", "session", id, "error", err)
 		emit(agent.Event{Type: "error", Error: err.Error()})
 	}
 }
@@ -571,7 +586,7 @@ func (s *Server) windowReply(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("key")
+	id := r.PathValue("id")
 	if s.events == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "session watch unavailable"})
 		return
@@ -587,7 +602,7 @@ func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	ch, cancel := s.events.Subscribe(key)
+	ch, cancel := s.events.Subscribe(id)
 	defer cancel()
 	ctx := r.Context()
 	for {
@@ -613,8 +628,8 @@ func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) abort(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("key")
-	ok := s.runner.Abort(key)
+	id := r.PathValue("id")
+	ok := s.runner.Abort(id)
 	writeJSON(w, http.StatusOK, map[string]bool{"aborted": ok})
 }
 

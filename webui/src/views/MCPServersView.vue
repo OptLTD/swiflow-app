@@ -13,9 +13,8 @@ const capsServer = ref<MCPServer | null>(null)
 const capsOpen = ref(false)
 const form = ref({
   name: '',
-  display_name: '',
-  transport: 'stdio' as MCPServer['transport'],
-  command: '',
+  type: 'stdio' as MCPServer['type'],
+  cmd: '',
   argsText: '',
   url: '',
   enabled: true,
@@ -30,15 +29,14 @@ function parseArgs(): string[] {
   return form.value.argsText.split('\n').map((s) => s.trim()).filter(Boolean)
 }
 function resetForm() {
-  form.value = { name: '', display_name: '', transport: 'stdio', command: '', argsText: '', url: '', enabled: true }
+  form.value = { name: '', type: 'stdio', cmd: '', argsText: '', url: '', enabled: true }
 }
 async function create() {
   try {
     await api.createMCPServer({
       name: form.value.name,
-      display_name: form.value.display_name,
-      transport: form.value.transport,
-      command: form.value.command,
+      type: form.value.type,
+      cmd: form.value.cmd,
       args: parseArgs(),
       url: form.value.url,
       enabled: form.value.enabled,
@@ -52,9 +50,8 @@ function startEdit(s: MCPServer) {
   editingId.value = s.id
   form.value = {
     name: s.name,
-    display_name: s.display_name || '',
-    transport: s.transport,
-    command: s.command || '',
+    type: s.type,
+    cmd: s.cmd || '',
     argsText: (s.args || []).join('\n'),
     url: s.url || '',
     enabled: s.enabled,
@@ -63,9 +60,8 @@ function startEdit(s: MCPServer) {
 async function saveEdit() {
   try {
     await api.updateMCPServer(editingId.value, {
-      display_name: form.value.display_name,
-      transport: form.value.transport,
-      command: form.value.command,
+      type: form.value.type,
+      cmd: form.value.cmd,
       args: parseArgs(),
       url: form.value.url,
       enabled: form.value.enabled,
@@ -106,14 +102,13 @@ function closeCapabilities() {
     <div v-if="error" class="text-red-600 mb-2">{{ error }}</div>
     <div v-if="showForm" class="border border-neutral-200 rounded p-4 mb-4 bg-white space-y-2">
       <input v-model="form.name" placeholder="name (unique)" class="w-full border rounded px-2 py-1" />
-      <input v-model="form.display_name" placeholder="display name" class="w-full border rounded px-2 py-1" />
-      <select v-model="form.transport" class="w-full border rounded px-2 py-1">
+      <select v-model="form.type" class="w-full border rounded px-2 py-1">
         <option value="stdio">stdio</option>
         <option value="sse">sse</option>
         <option value="streamable">streamable</option>
       </select>
-      <template v-if="form.transport === 'stdio'">
-        <input v-model="form.command" placeholder="command (e.g. npx)" class="w-full border rounded px-2 py-1" />
+      <template v-if="form.type === 'stdio'">
+        <input v-model="form.cmd" placeholder="cmd (e.g. npx)" class="w-full border rounded px-2 py-1" />
         <textarea v-model="form.argsText" placeholder="args (one per line)" class="w-full border rounded px-2 py-1" rows="3"></textarea>
       </template>
       <template v-else>
@@ -124,14 +119,13 @@ function closeCapabilities() {
     <div class="space-y-2">
       <div v-for="s in mcpStore.servers" :key="s.id" class="border border-neutral-200 rounded p-3 bg-white">
         <template v-if="editingId === s.id">
-          <input v-model="form.display_name" class="w-full border rounded px-2 py-1 mb-1" />
-          <select v-model="form.transport" class="w-full border rounded px-2 py-1 mb-1">
+          <select v-model="form.type" class="w-full border rounded px-2 py-1 mb-1">
             <option value="stdio">stdio</option>
             <option value="sse">sse</option>
             <option value="streamable">streamable</option>
           </select>
-          <input v-if="form.transport === 'stdio'" v-model="form.command" class="w-full border rounded px-2 py-1 mb-1" />
-          <textarea v-if="form.transport === 'stdio'" v-model="form.argsText" class="w-full border rounded px-2 py-1 mb-1" rows="2"></textarea>
+          <input v-if="form.type === 'stdio'" v-model="form.cmd" class="w-full border rounded px-2 py-1 mb-1" />
+          <textarea v-if="form.type === 'stdio'" v-model="form.argsText" class="w-full border rounded px-2 py-1 mb-1" rows="2"></textarea>
           <input v-else v-model="form.url" class="w-full border rounded px-2 py-1 mb-1" />
           <label class="text-sm flex items-center gap-2 mb-1">
             <input v-model="form.enabled" type="checkbox" /> enabled
@@ -146,10 +140,9 @@ function closeCapabilities() {
             <div>
               <div class="font-mono font-semibold">{{ s.name }}
                 <span v-if="!s.enabled" class="text-red-600 text-xs">(disabled)</span>
-                <span class="text-xs text-neutral-400 ml-1">{{ s.transport }}</span>
+                <span class="text-xs text-neutral-400 ml-1">{{ s.type }}</span>
               </div>
-              <div class="text-sm text-neutral-600">{{ s.display_name || '—' }}</div>
-              <div class="text-xs text-neutral-400 font-mono truncate">{{ s.transport === 'stdio' ? s.command + ' ' + (s.args || []).join(' ') : s.url }}</div>
+              <div class="text-xs text-neutral-400 font-mono truncate">{{ s.type === 'stdio' ? s.cmd + ' ' + (s.args || []).join(' ') : s.url }}</div>
             </div>
             <div class="flex gap-2 items-start">
               <button class="text-sm text-blue-600" @click="openCapabilities(s)">capabilities</button>

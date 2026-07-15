@@ -12,7 +12,7 @@ export const useToolsStore = defineStore('tools', {
   actions: {
     async load() {
       const r = await api.listTools()
-      this.tools = r.tools
+      this.tools = r.tools ?? []
       this.execEnabled = r.exec_enabled
       this.browserEnabled = r.browser_enabled
       this.loaded = true

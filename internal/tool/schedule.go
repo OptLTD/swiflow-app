@@ -11,7 +11,7 @@ import (
 )
 
 type jobScheduler interface {
-	ScheduleRun(sessionKey, agentKey, message string, after time.Duration)
+	ScheduleRun(sessionID, agentKey, message string, after time.Duration)
 	AddJob(ctx context.Context, job *store.CronJob) error
 }
 
@@ -42,7 +42,7 @@ func (t *scheduleRunTool) Parameters() map[string]any {
 }
 func (t *scheduleRunTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	rc, ok := RunContextFrom(ctx)
-	if !ok || rc.SessionKey == "" {
+	if !ok || rc.SessionID == "" {
 		return "", fmt.Errorf("no active session for scheduled task")
 	}
 	message, _ := args["message"].(string)
@@ -50,16 +50,16 @@ func (t *scheduleRunTool) Execute(ctx context.Context, args map[string]any) (str
 		return "", fmt.Errorf("message is required")
 	}
 	agentKey := "default"
-	if rc.AgentKey != "" {
-		agentKey = rc.AgentKey
+	if rc.Agent != "" {
+		agentKey = rc.Agent
 	}
 	if _, err := t.base.st.GetAgentByKey(ctx, agentKey); err != nil {
 		return "", fmt.Errorf("unknown agent: %s", agentKey)
 	}
 	delay := clampDelay(args)
 	after := time.Duration(delay) * time.Second
-	t.base.sched.ScheduleRun(rc.SessionKey, agentKey, message, after)
-	return fmt.Sprintf("scheduled agent run in %ds for session %s", delay, rc.SessionKey), nil
+	t.base.sched.ScheduleRun(rc.SessionID, agentKey, message, after)
+	return fmt.Sprintf("scheduled agent run in %ds for session %s", delay, rc.SessionID), nil
 }
 
 type scheduleCreateTool struct{ base *scheduleTools }
@@ -87,14 +87,14 @@ func (t *scheduleCreateTool) Execute(ctx context.Context, args map[string]any) (
 		return "", fmt.Errorf("name, message, and schedule are required")
 	}
 	agentKey := "default"
-	if rc, ok := RunContextFrom(ctx); ok && rc.AgentKey != "" {
-		agentKey = rc.AgentKey
+	if rc, ok := RunContextFrom(ctx); ok && rc.Agent != "" {
+		agentKey = rc.Agent
 	}
 	if _, err := t.base.st.GetAgentByKey(ctx, agentKey); err != nil {
 		return "", fmt.Errorf("unknown agent: %s", agentKey)
 	}
 	job := &store.CronJob{
-		ID: util.NewID(), Name: name, AgentKey: agentKey,
+		ID: util.NewID(), Name: name, Agent: agentKey,
 		Message: message, Schedule: schedExpr, Enabled: true,
 	}
 	if err := t.base.sched.AddJob(ctx, job); err != nil {

@@ -11,6 +11,6 @@
 **Related (outside docs/):**
 
 - [`config.example.json`](../config.example.json) — config keys including search / exec / browser.
-- [`embed/init-skills/`](../embed/init-skills/) — built-in skill packs (`window-context`, `example`).
+- [`embed/init-skills/`](../embed/init-skills/) — built-in skill packs (`window-context`, `reflection-loop`).
 
 **Reading order for the agent runtime:** `AGENT_ARCHITECTURE.md` → `AGENT_WORKFLOW_PATTERNS.md` (concepts) → `SPEC.md` §6.7 / §7 / §8 / §10 → `internal/agent/agent.go`.

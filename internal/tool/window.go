@@ -16,10 +16,10 @@ type windowTools struct {
 
 func (t *windowTools) call(ctx context.Context, op string, args map[string]any) (string, error) {
 	rc, ok := RunContextFrom(ctx)
-	if !ok || rc.SessionKey == "" {
+	if !ok || rc.SessionID == "" {
 		return "", fmt.Errorf("ui client unavailable")
 	}
-	return t.bridge.Request(ctx, rc.SessionKey, op, args)
+	return t.bridge.Request(ctx, rc.SessionID, op, args)
 }
 
 type windowOpenedTool struct{ base *windowTools }

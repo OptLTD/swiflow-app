@@ -92,7 +92,7 @@ func TestMCPHTTPValidationAndCRUD(t *testing.T) {
 	}
 
 	resp, _ = e.do(http.MethodPost, "/api/mcp/servers", map[string]any{
-		"name": "stdio-srv", "transport": "stdio",
+		"name": "stdio-srv", "type": "stdio",
 	})
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing command: %d", resp.StatusCode)
@@ -100,7 +100,7 @@ func TestMCPHTTPValidationAndCRUD(t *testing.T) {
 
 	disabled := false
 	resp, body := e.do(http.MethodPost, "/api/mcp/servers", map[string]any{
-		"name": "offline", "transport": "stdio", "command": "false",
+		"name": "offline", "type": "stdio", "cmd": "false",
 		"enabled": &disabled,
 	})
 	if resp.StatusCode != http.StatusCreated {
@@ -128,7 +128,7 @@ func TestMCPHTTPValidationAndCRUD(t *testing.T) {
 	}
 
 	resp, _ = e.do(http.MethodPut, "/api/mcp/servers/"+created.ID, map[string]any{
-		"display_name": "Offline MCP",
+		"enabled": true,
 	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("update: %d", resp.StatusCode)
@@ -151,7 +151,7 @@ func TestMCPHTTPValidationAndCRUD(t *testing.T) {
 
 func TestChatSupportsSSE(t *testing.T) {
 	e := newAPIEnv(t)
-	body := []byte(`{"message":"hi","agent_key":"default"}`)
+	body := []byte(`{"message":"hi","agent":"default"}`)
 	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/api/sessions/sse-test/chat", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -198,14 +198,14 @@ func TestCronHTTPValidationAndCRUD(t *testing.T) {
 	}
 
 	resp, _ = e.do(http.MethodPost, "/api/cron/jobs", map[string]any{
-		"name": "job1", "agent_key": "missing", "message": "hi", "schedule": "@hourly",
+		"name": "job1", "agent": "missing", "message": "hi", "schedule": "@hourly",
 	})
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unknown agent: %d", resp.StatusCode)
 	}
 
 	resp, body := e.do(http.MethodPost, "/api/cron/jobs", map[string]any{
-		"name": "job1", "agent_key": "default", "message": "hi", "schedule": "@hourly",
+		"name": "job1", "agent": "default", "message": "hi", "schedule": "@hourly",
 	})
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create: %d %s", resp.StatusCode, body)

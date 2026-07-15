@@ -29,12 +29,11 @@ func EnsureDefaults(ctx context.Context, st store.Store) error {
 	prov := providers[0].Name
 	ag := &store.Agent{
 		ID: util.NewID(), Key: "default",
-		Provider: prov, Model: "gpt-4o-mini",
-		DisplayName: "Default Agent",
+		TxtModel: prov, Display: "Default Agent",
 	}
 	if err := st.CreateAgent(ctx, ag); err != nil {
 		return err
 	}
-	slog.Info("seed created default agent", "provider", prov)
+	slog.Info("seed created default agent", "txt_model", prov)
 	return nil
 }

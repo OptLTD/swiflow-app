@@ -6,15 +6,17 @@ import { api } from '../api'
 import LocalSvgIcon from '../components/LocalSvgIcon.vue'
 import ProviderDialog from '../components/ProviderDialog.vue'
 import { DEFAULT_AGENT_KEY, DEFAULT_PROVIDER_NAME } from '../constants/defaults'
+import { PROMPT_STYLE_PRESETS, guessPromptStyleId } from '../constants/promptStyles'
 
 const agentsStore = useAgentsStore()
 const providersStore = useProvidersStore()
 const error = ref('')
 const saving = ref(false)
 const providerOpen = ref(false)
+const activePromptStyle = ref('none')
 const form = ref({
-  display_name: '',
-  system_extra: '',
+  display: '',
+  sys_prompt: '',
 })
 
 const defaultAgent = computed(() =>
@@ -40,9 +42,21 @@ function syncForm() {
   const a = defaultAgent.value
   if (!a) return
   form.value = {
-    display_name: a.display_name || '',
-    system_extra: a.system_extra || '',
+    display: a.display || '',
+    sys_prompt: a.sys_prompt || '',
   }
+  activePromptStyle.value = guessPromptStyleId(form.value.sys_prompt)
+}
+
+function applyPromptStyle(id: string) {
+  activePromptStyle.value = id
+  const preset = PROMPT_STYLE_PRESETS.find((p) => p.id === id)
+  if (!preset) return
+  form.value.sys_prompt = preset.prompt
+}
+
+function onPromptInput() {
+  activePromptStyle.value = guessPromptStyleId(form.value.sys_prompt)
 }
 
 async function onProviderSaved(model: string) {
@@ -51,9 +65,8 @@ async function onProviderSaved(model: string) {
     try {
       await api.createAgent({
         key: DEFAULT_AGENT_KEY,
-        display_name: 'Default Agent',
-        provider: DEFAULT_PROVIDER_NAME,
-        model,
+        display: 'Default Agent',
+        txt_model: DEFAULT_PROVIDER_NAME,
       })
       await agentsStore.load()
     } catch (e: any) {
@@ -70,9 +83,9 @@ async function save() {
   error.value = ''
   try {
     await api.updateAgent(a.key, {
-      display_name: form.value.display_name,
-      provider: DEFAULT_PROVIDER_NAME,
-      system_extra: form.value.system_extra,
+      display: form.value.display,
+      txt_model: DEFAULT_PROVIDER_NAME,
+      sys_prompt: form.value.sys_prompt,
     })
     await agentsStore.load()
     syncForm()
@@ -118,22 +131,35 @@ async function save() {
     <div v-else-if="defaultAgent" class="border border-neutral-200 rounded p-4 bg-white space-y-3">
       <div v-if="defaultProvider" class="text-xs text-neutral-400 font-mono truncate pb-1 border-b border-neutral-100">
         {{ defaultProvider.api_base }}
-        <span v-if="defaultAgent.model"> · {{ defaultAgent.model }}</span>
+        <span v-if="defaultProvider.model"> · {{ defaultProvider.model }}</span>
       </div>
 
       <div>
         <label class="block text-xs text-neutral-500 mb-1">Title</label>
-        <input v-model="form.display_name" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Default Agent" />
+        <input v-model="form.display" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Default Agent" />
       </div>
 
       <div>
         <label class="block text-xs text-neutral-500 mb-1">Prompt</label>
         <textarea
-          v-model="form.system_extra"
+          v-model="form.sys_prompt"
           class="w-full border rounded px-2 py-1.5 text-sm"
           rows="4"
           placeholder="Optional additional system instructions"
+          @input="onPromptInput"
         />
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <button
+            v-for="preset in PROMPT_STYLE_PRESETS"
+            :key="preset.id"
+            type="button"
+            class="px-2.5 py-1 rounded text-xs border transition-colors"
+            :class="activePromptStyle === preset.id
+              ? 'bg-neutral-800 text-white border-neutral-800'
+              : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'"
+            @click="applyPromptStyle(preset.id)"
+          >{{ preset.label }}</button>
+        </div>
       </div>
     </div>
 

@@ -52,8 +52,8 @@ func TestScheduleRunTool(t *testing.T) {
 		t.Fatal("schedule_run not registered")
 	}
 	ctx := tool.WithRunContext(context.Background(), tool.RunContext{
-		SessionKey: "chat-1",
-		AgentKey:   "default",
+		SessionID: "chat-1",
+		Agent:     "default",
 	})
 	out, err := tl.Execute(ctx, map[string]any{
 		"delay_seconds": float64(30),

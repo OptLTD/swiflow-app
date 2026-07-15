@@ -6,8 +6,8 @@ type runCtxKey struct{}
 
 // RunContext carries per-run metadata for tools (current session, agent).
 type RunContext struct {
-	SessionKey string
-	AgentKey   string
+	SessionID string
+	Agent     string
 }
 
 // WithRunContext attaches run metadata to ctx for tool execution.

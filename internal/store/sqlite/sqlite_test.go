@@ -33,23 +33,23 @@ func TestProviderEncryptAndCreds(t *testing.T) {
 	st := openTestDB(t)
 	ctx := context.Background()
 	p := &store.Provider{
-		ID: "p1", Name: "openai", APIBase: "https://api.openai.com/v1",
-		APIKey: "sk-test", Enabled: true,
+		ID: "p1", Name: "openai", ApiBase: "https://api.openai.com/v1",
+		ApiKey: "sk-test", Enabled: true,
 	}
 	if err := st.CreateProvider(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	base, key, err := st.ProviderCreds(ctx, "openai")
+	base, key, _, err := st.ProviderCreds(ctx, "openai")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if base != p.APIBase || key != "sk-test" {
+	if base != p.ApiBase || key != "sk-test" {
 		t.Fatalf("creds mismatch: %s %s", base, key)
 	}
 	if err := st.UpdateProvider(ctx, "p1", map[string]any{"enabled": false}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := st.ProviderCreds(ctx, "openai"); err == nil {
+	if _, _, _, err := st.ProviderCreds(ctx, "openai"); err == nil {
 		t.Fatal("expected disabled provider error")
 	}
 }
@@ -57,17 +57,17 @@ func TestProviderEncryptAndCreds(t *testing.T) {
 func TestMessageSeqMonotonic(t *testing.T) {
 	st := openTestDB(t)
 	ctx := context.Background()
-	sess := &store.Session{ID: "s1", Key: "k1", AgentKey: "default"}
+	sess := &store.Session{ID: "s1", Agent: "default"}
 	if err := st.CreateSession(ctx, sess); err != nil {
 		t.Fatal(err)
 	}
 	for i, mid := range []string{"m1", "m2", "m3"} {
-		if _, err := st.AppendMessage(ctx, "k1", store.Message{ID: mid, Role: "user", Content: "hi"}); err != nil {
+		if _, err := st.AppendMessage(ctx, "s1", store.Message{ID: mid, Role: "user", Content: "hi"}); err != nil {
 			t.Fatal(err)
 		}
 		_ = i
 	}
-	msgs, err := st.ListMessages(ctx, "k1")
+	msgs, err := st.ListMessages(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestMessageSeqMonotonic(t *testing.T) {
 func TestGetProviderByID(t *testing.T) {
 	st := openTestDB(t)
 	ctx := context.Background()
-	p := &store.Provider{ID: "pid", Name: "local", APIBase: "http://127.0.0.1:8080/v1", APIKey: "k", Enabled: true}
+	p := &store.Provider{ID: "pid", Name: "local", ApiBase: "http://127.0.0.1:8080/v1", ApiKey: "k", Enabled: true}
 	if err := st.CreateProvider(ctx, p); err != nil {
 		t.Fatal(err)
 	}

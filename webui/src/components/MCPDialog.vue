@@ -62,8 +62,7 @@ function onBackdrop(e: MouseEvent) {
     <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col" @click.stop>
       <div class="px-4 py-3 border-b border-neutral-200 flex justify-between items-center">
         <div>
-          <h2 class="font-semibold">{{ server.display_name || server.name }}</h2>
-          <p class="text-xs text-neutral-500 font-mono">{{ server.name }}</p>
+          <h2 class="font-semibold font-mono">{{ server.name }}</h2>
         </div>
         <button class="text-neutral-500 hover:text-neutral-800 text-xl leading-none px-2" @click="emit('close')">×</button>
       </div>

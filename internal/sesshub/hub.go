@@ -19,21 +19,21 @@ func New() *Hub {
 	return &Hub{subs: map[string]map[chan []byte]struct{}{}}
 }
 
-// Subscribe registers a watcher for sessionKey. The returned cancel removes it.
-func (h *Hub) Subscribe(sessionKey string) (<-chan []byte, func()) {
+// Subscribe registers a watcher for sessionID. The returned cancel removes it.
+func (h *Hub) Subscribe(sessionID string) (<-chan []byte, func()) {
 	ch := make(chan []byte, 64)
 	h.mu.Lock()
-	if h.subs[sessionKey] == nil {
-		h.subs[sessionKey] = map[chan []byte]struct{}{}
+	if h.subs[sessionID] == nil {
+		h.subs[sessionID] = map[chan []byte]struct{}{}
 	}
-	h.subs[sessionKey][ch] = struct{}{}
+	h.subs[sessionID][ch] = struct{}{}
 	h.mu.Unlock()
 	cancel := func() {
 		h.mu.Lock()
-		if m := h.subs[sessionKey]; m != nil {
+		if m := h.subs[sessionID]; m != nil {
 			delete(m, ch)
 			if len(m) == 0 {
-				delete(h.subs, sessionKey)
+				delete(h.subs, sessionID)
 			}
 		}
 		h.mu.Unlock()
@@ -41,8 +41,8 @@ func (h *Hub) Subscribe(sessionKey string) (<-chan []byte, func()) {
 	return ch, cancel
 }
 
-// Publish sends an event to all watchers of sessionKey. Nil hub is a no-op.
-func (h *Hub) Publish(sessionKey string, ev agent.Event) {
+// Publish sends an event to all watchers of sessionID. Nil hub is a no-op.
+func (h *Hub) Publish(sessionID string, ev agent.Event) {
 	if h == nil {
 		return
 	}
@@ -51,8 +51,8 @@ func (h *Hub) Publish(sessionKey string, ev agent.Event) {
 		return
 	}
 	h.mu.Lock()
-	targets := make([]chan []byte, 0, len(h.subs[sessionKey]))
-	for ch := range h.subs[sessionKey] {
+	targets := make([]chan []byte, 0, len(h.subs[sessionID]))
+	for ch := range h.subs[sessionID] {
 		targets = append(targets, ch)
 	}
 	h.mu.Unlock()

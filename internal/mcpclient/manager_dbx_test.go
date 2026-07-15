@@ -17,7 +17,7 @@ import (
 //
 // Equivalent Swiflow config:
 //
-//	{"name":"dbx","transport":"stdio","command":"dbx-mcp-server"}
+//	{"name":"dbx","type":"stdio","cmd":"dbx-mcp-server"}
 func TestManagerSyncStdioDBX(t *testing.T) {
 	path, err := exec.LookPath("dbx-mcp-server")
 	if err != nil {
@@ -33,8 +33,8 @@ func TestManagerSyncStdioDBX(t *testing.T) {
 	t.Cleanup(mgr.Close)
 
 	srv := &store.MCPServer{
-		ID: "dbx1", Name: "dbx", Transport: "stdio",
-		Command: path, Enabled: true,
+		ID: "dbx1", Name: "dbx", Type: "stdio",
+		Cmd: path, Enabled: true,
 	}
 	if err := st.CreateMCPServer(ctx, srv); err != nil {
 		t.Fatal(err)

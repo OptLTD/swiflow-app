@@ -1,7 +1,9 @@
 {
   "host": "127.0.0.1",
   "port": 8000,
+  "db_driver": "sqlite",
   "db_path": "./data/swiflow.db",
+  "db_dsn": "",
   "auth_token": "change-me",
   "encryption_key": "change-me-at-least-16-chars",
   "workspace_dir": "./data/workspace",

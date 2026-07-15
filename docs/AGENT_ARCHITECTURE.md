@@ -126,7 +126,7 @@ Built by `buildSystem`:
 - `## Checklist` — `todo_write` / `todo_read`
 - `## Delegation` — `delegate_task` (summary-only child run)
 
-Built-in skill guides: `embed/init-skills/window-context/`, `example/`.
+Built-in skill guides: `embed/init-skills/window-context/`, `reflection-loop/`.
 
 ## 4. Concurrency (multi-chat ≈ multi-open)
 

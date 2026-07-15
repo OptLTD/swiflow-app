@@ -21,16 +21,15 @@ import (
 
 	emb "github.com/OptLTD/swiflow/embed"
 	"github.com/OptLTD/swiflow/internal/agent"
+	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/browser"
 	"github.com/OptLTD/swiflow/internal/config"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
-	"github.com/OptLTD/swiflow/internal/migrate"
 	"github.com/OptLTD/swiflow/internal/schedule"
 	"github.com/OptLTD/swiflow/internal/seed"
 	"github.com/OptLTD/swiflow/internal/server"
 	"github.com/OptLTD/swiflow/internal/sesshub"
 	"github.com/OptLTD/swiflow/internal/skill"
-	"github.com/OptLTD/swiflow/internal/store/sqlite"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/internal/window"
 )
@@ -212,20 +211,9 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		}
 	}
 
-	st, err := sqlite.Open(cfg.DBPath, cfg.EncryptionKey)
+	st, err := appdb.MigrateAndOpen(ctx, cfg, true)
 	if err != nil {
-		slog.Error("open db", "error", err)
-		os.Exit(1)
-	}
-
-	// Auto-migrate
-	upgrades, err := emb.UpgradesDir()
-	if err != nil {
-		slog.Error("upgrades fs", "error", err)
-		os.Exit(1)
-	}
-	if err := migrate.Apply(ctx, st.DB(), emb.SchemaSQL, upgrades); err != nil {
-		slog.Error("migrate", "error", err)
+		slog.Error("open/migrate db", "error", err)
 		os.Exit(1)
 	}
 	if err := seed.EnsureDefaults(ctx, st); err != nil {
@@ -291,7 +279,8 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 
 	cronSched := schedule.New(st, runner, events)
 	tool.RegisterSchedule(toolsReg, st, cronSched)
-	tool.RegisterTodo(toolsReg)
+	tool.RegisterExperience(toolsReg, st)
+	tool.RegisterTodo(toolsReg, st)
 	tool.RegisterDelegate(toolsReg, runner)
 	tool.RegisterClarify(toolsReg, winBridge)
 	if err := cronSched.Start(ctx); err != nil {

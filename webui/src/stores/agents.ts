@@ -10,7 +10,7 @@ export const useAgentsStore = defineStore('agents', {
   actions: {
     async load() {
       const r = await api.listAgents()
-      this.agents = r.agents
+      this.agents = r.agents ?? []
       this.loaded = true
     },
   },

@@ -10,7 +10,7 @@ export const useMCPStore = defineStore('mcp', {
   actions: {
     async load() {
       const r = await api.listMCPServers()
-      this.servers = r.servers
+      this.servers = r.servers ?? []
       this.loaded = true
     },
   },

@@ -56,15 +56,16 @@ func SeedProviderAndAgent(t *testing.T, st store.Store) {
 	ctx := context.Background()
 	p := &store.Provider{
 		ID: "prov1", Name: "openai",
-		APIKey: "sk-test", Enabled: true,
-		APIBase: "http://127.0.0.1:9/v1",
+		ApiKey: "sk-test", Enabled: true,
+		ApiBase: "http://127.0.0.1:9/v1",
+		Model:   "gpt-4o-mini",
 	}
 	if err := st.CreateProvider(ctx, p); err != nil {
 		t.Fatal(err)
 	}
 	ag := &store.Agent{
-		ID: "ag1", Key: "default", DisplayName: "Default",
-		Provider: "openai", Model: "gpt-4o-mini",
+		ID: "ag1", Key: "default", Display: "Default",
+		TxtModel: "openai",
 	}
 	if err := st.CreateAgent(ctx, ag); err != nil {
 		t.Fatal(err)

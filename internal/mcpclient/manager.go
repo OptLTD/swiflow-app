@@ -132,12 +132,12 @@ func (m *Manager) unregisterConnLocked(c *conn) {
 }
 
 func newTransport(srv store.MCPServer) (sdkmcp.Transport, error) {
-	switch srv.Transport {
+	switch srv.Type {
 	case "stdio":
-		if srv.Command == "" {
-			return nil, fmt.Errorf("stdio transport requires command")
+		if srv.Cmd == "" {
+			return nil, fmt.Errorf("stdio type requires cmd")
 		}
-		cmd := exec.Command(srv.Command, srv.Args...)
+		cmd := exec.Command(srv.Cmd, srv.Args...)
 		cmd.Env = os.Environ()
 		for k, v := range srv.Env {
 			cmd.Env = append(cmd.Env, k+"="+v)
@@ -145,7 +145,7 @@ func newTransport(srv store.MCPServer) (sdkmcp.Transport, error) {
 		return &sdkmcp.CommandTransport{Command: cmd}, nil
 	case "sse":
 		if srv.URL == "" {
-			return nil, fmt.Errorf("sse transport requires url")
+			return nil, fmt.Errorf("sse type requires url")
 		}
 		return &sdkmcp.SSEClientTransport{
 			Endpoint:   srv.URL,
@@ -153,14 +153,14 @@ func newTransport(srv store.MCPServer) (sdkmcp.Transport, error) {
 		}, nil
 	case "streamable":
 		if srv.URL == "" {
-			return nil, fmt.Errorf("streamable transport requires url")
+			return nil, fmt.Errorf("streamable type requires url")
 		}
 		return &sdkmcp.StreamableClientTransport{
 			Endpoint:   srv.URL,
 			HTTPClient: &http.Client{Timeout: 0},
 		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported transport %q", srv.Transport)
+		return nil, fmt.Errorf("unsupported mcp type %q", srv.Type)
 	}
 }
 
