@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS sys_migration (
 CREATE TABLE IF NOT EXISTS sys_tenant (
     id         VARCHAR(36) PRIMARY KEY,
     name       VARCHAR(64) NOT NULL UNIQUE,
-    enabled    BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled    SMALLINT NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     id         VARCHAR(36) PRIMARY KEY,
     tid        VARCHAR(64) NOT NULL DEFAULT 'default',
     username   VARCHAR(64) NOT NULL UNIQUE,
-    enabled    BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled    SMALLINT NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS llm_provider (
     api_base     TEXT NOT NULL,
     api_key      BYTEA NOT NULL,
     model        VARCHAR(128) NOT NULL DEFAULT '',
-    enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled      SMALLINT NOT NULL DEFAULT 1,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS agent_sched (
     agent       VARCHAR(64) NOT NULL,
     message     TEXT NOT NULL,
     schedule    TEXT NOT NULL,
-    enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled     SMALLINT NOT NULL DEFAULT 1,
     last_run_at TIMESTAMPTZ,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS mcp_server (
     args         JSONB NOT NULL DEFAULT '[]'::jsonb,
     url          TEXT NOT NULL DEFAULT '',
     env          JSONB NOT NULL DEFAULT '{}'::jsonb,
-    enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled      SMALLINT NOT NULL DEFAULT 1,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );

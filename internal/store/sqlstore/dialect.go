@@ -15,10 +15,8 @@ const (
 	nowPostgres = "NOW()"
 )
 
+// boolArg returns 0/1 for both SQLite and Postgres SMALLINT enabled flags.
 func (s *Store) boolArg(b bool) any {
-	if s.driver == DialectPostgres {
-		return b
-	}
 	if b {
 		return 1
 	}

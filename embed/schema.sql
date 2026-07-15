@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS sys_migration (
 CREATE TABLE IF NOT EXISTS sys_tenant (
     id         VARCHAR(36) PRIMARY KEY,
     name       VARCHAR(64) NOT NULL UNIQUE,
-    enabled    INTEGER NOT NULL DEFAULT 1,
+    enabled    SMALLINT NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     id         VARCHAR(36) PRIMARY KEY,
     tid        VARCHAR(64) NOT NULL DEFAULT 'default',
     username   VARCHAR(64) NOT NULL UNIQUE,
-    enabled    INTEGER NOT NULL DEFAULT 1,
+    enabled    SMALLINT NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS llm_provider (
     api_base     TEXT NOT NULL,
     api_key      BLOB NOT NULL,
     model        VARCHAR(128) NOT NULL DEFAULT '',
-    enabled      INTEGER NOT NULL DEFAULT 1,
+    enabled      SMALLINT NOT NULL DEFAULT 1,
     created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS agent_sched (
     agent       VARCHAR(64) NOT NULL,
     message     TEXT NOT NULL,
     schedule    TEXT NOT NULL,
-    enabled     INTEGER NOT NULL DEFAULT 1,
+    enabled     SMALLINT NOT NULL DEFAULT 1,
     last_run_at DATETIME,
     created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS mcp_server (
     args         TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(args)),
     url          TEXT NOT NULL DEFAULT '',
     env          TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(env)),
-    enabled      INTEGER NOT NULL DEFAULT 1,
+    enabled      SMALLINT NOT NULL DEFAULT 1,
     created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

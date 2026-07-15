@@ -270,6 +270,9 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 		slog.Error("persist user message", "error", err)
 	}
 
+	// Persist tool pairing even if the run context is cancelled mid-loop.
+	persistCtx := context.WithoutCancel(runCtx)
+
 	llmMsgs := []llm.Message{{Role: "system", Content: r.buildSystem(ag)}}
 	for _, m := range history {
 		llmMsgs = append(llmMsgs, toLLM(m))
@@ -341,7 +344,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 				Thinking:  resp.Thinking,
 				ToolCalls: toStoreToolCalls(resp.ToolCalls),
 			}
-			if _, err := st.AppendMessage(runCtx, sessionID, assistantMsg); err != nil {
+			if _, err := st.AppendMessage(persistCtx, sessionID, assistantMsg); err != nil {
 				slog.Error("persist assistant (tool) message", "error", err)
 			}
 			llmMsgs = append(llmMsgs, toLLM(assistantMsg))
@@ -352,7 +355,9 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 				var execErr error
 				t0 := time.Now()
 				observe.ToolStart(sessionID, tc.Name)
-				if !st.ToolEnabled(runCtx, tc.Name) {
+				if err := runCtx.Err(); err != nil {
+					execErr = fmt.Errorf("cancelled: %w", err)
+				} else if !st.ToolEnabled(runCtx, tc.Name) {
 					execErr = fmt.Errorf("tool %q is disabled", tc.Name)
 				} else {
 					timeout := toolTimeout
@@ -387,7 +392,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 					ToolCallId: tc.ID,
 					ToolName:   tc.Name,
 				}
-				if _, err := st.AppendMessage(runCtx, sessionID, toolMsg); err != nil {
+				if _, err := st.AppendMessage(persistCtx, sessionID, toolMsg); err != nil {
 					slog.Error("persist tool message", "error", err)
 				}
 				llmMsgs = append(llmMsgs, llm.Message{
@@ -645,10 +650,71 @@ func firstUserMessage(history []store.Message, current string) string {
 }
 
 func truncateHistory(msgs []store.Message, max int) []store.Message {
-	if max <= 0 || len(msgs) <= max {
+	if max > 0 && len(msgs) > max {
+		msgs = msgs[len(msgs)-max:]
+		// Drop leading orphan tool messages created by a mid-pair cut.
+		for len(msgs) > 0 && msgs[0].Role == "tool" {
+			msgs = msgs[1:]
+		}
+	}
+	return sanitizeToolHistory(msgs)
+}
+
+// sanitizeToolHistory ensures every assistant tool_calls message is followed by
+// a tool result for each tool_call_id (required by OpenAI-compatible APIs).
+func sanitizeToolHistory(msgs []store.Message) []store.Message {
+	if len(msgs) == 0 {
 		return msgs
 	}
-	return msgs[len(msgs)-max:]
+	out := make([]store.Message, 0, len(msgs))
+	for i := 0; i < len(msgs); {
+		m := msgs[i]
+		if m.Role == "tool" {
+			// Orphan tool result without a preceding assistant tool_calls.
+			i++
+			continue
+		}
+		if m.Role != "assistant" || len(m.ToolCalls) == 0 {
+			out = append(out, m)
+			i++
+			continue
+		}
+
+		needed := make(map[string]store.ToolCall, len(m.ToolCalls))
+		for _, tc := range m.ToolCalls {
+			if tc.ID != "" {
+				needed[tc.ID] = tc
+			}
+		}
+		found := make(map[string]store.Message, len(needed))
+		j := i + 1
+		for j < len(msgs) && msgs[j].Role == "tool" {
+			id := msgs[j].ToolCallId
+			if _, ok := needed[id]; ok {
+				found[id] = msgs[j]
+			}
+			j++
+		}
+
+		out = append(out, m)
+		for _, tc := range m.ToolCalls {
+			if tc.ID == "" {
+				continue
+			}
+			if tm, ok := found[tc.ID]; ok {
+				out = append(out, tm)
+				continue
+			}
+			out = append(out, store.Message{
+				Role:       "tool",
+				Content:    "error: tool call interrupted or result missing",
+				ToolCallId: tc.ID,
+				ToolName:   tc.Name,
+			})
+		}
+		i = j
+	}
+	return out
 }
 
 func titleFromMessage(msg string) string {

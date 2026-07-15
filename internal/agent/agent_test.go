@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/OptLTD/swiflow/internal/llm"
+	"github.com/OptLTD/swiflow/internal/store"
 )
 
 func TestToolCallKeyOrderIndependent(t *testing.T) {
@@ -28,5 +29,60 @@ func TestEventJSON(t *testing.T) {
 	b, err := json.Marshal(ev)
 	if err != nil || !json.Valid(b) {
 		t.Fatal("invalid event json")
+	}
+}
+
+func TestSanitizeToolHistoryFillsMissing(t *testing.T) {
+	in := []store.Message{
+		{Role: "user", Content: "hi"},
+		{Role: "assistant", Content: "", ToolCalls: []store.ToolCall{
+			{ID: "c1", Name: "bash"},
+			{ID: "c2", Name: "read"},
+		}},
+		{Role: "tool", Content: "ok", ToolCallId: "c1", ToolName: "bash"},
+		{Role: "user", Content: "again"},
+	}
+	out := sanitizeToolHistory(in)
+	if len(out) != 5 {
+		t.Fatalf("want 5 msgs, got %d: %+v", len(out), out)
+	}
+	if out[3].Role != "tool" || out[3].ToolCallId != "c2" {
+		t.Fatalf("expected synthetic tool for c2, got %+v", out[3])
+	}
+	if out[4].Role != "user" {
+		t.Fatalf("expected trailing user, got %+v", out[4])
+	}
+}
+
+func TestSanitizeToolHistoryDropsOrphanTools(t *testing.T) {
+	in := []store.Message{
+		{Role: "tool", Content: "orphan", ToolCallId: "x"},
+		{Role: "user", Content: "hi"},
+	}
+	out := sanitizeToolHistory(in)
+	if len(out) != 1 || out[0].Role != "user" {
+		t.Fatalf("want only user, got %+v", out)
+	}
+}
+
+func TestTruncateHistoryKeepsToolPairs(t *testing.T) {
+	in := []store.Message{
+		{Role: "user", Content: "1"},
+		{Role: "assistant", ToolCalls: []store.ToolCall{{ID: "c1", Name: "bash"}}},
+		{Role: "tool", Content: "ok", ToolCallId: "c1"},
+		{Role: "user", Content: "2"},
+		{Role: "assistant", Content: "done"},
+	}
+	// Cut such that the window would start mid-pair without repair.
+	out := truncateHistory(in, 3)
+	for i, m := range out {
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			if i+1 >= len(out) || out[i+1].Role != "tool" || out[i+1].ToolCallId != m.ToolCalls[0].ID {
+				t.Fatalf("broken tool pair at %d: %+v", i, out)
+			}
+		}
+	}
+	if out[0].Role == "tool" {
+		t.Fatal("leading orphan tool after truncate")
 	}
 }
