@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { watch, onMounted } from 'vue'
+import { watch, onMounted, defineAsyncComponent } from 'vue'
 import { useAuthStore } from './stores/auth'
 import { useLayoutStore } from './stores/layout'
 import { useSetupStore } from './stores/setup'
 import ToastHost from './components/ToastHost.vue'
-import ChatPanel from './components/ChatPanel.vue'
 import HeadTabBar from './components/HeadTabBar.vue'
 import LoginDialog from './components/LoginDialog.vue'
 import SetupWizard from './components/SetupWizard.vue'
 import ResizeHandle from './components/ResizeHandle.vue'
 import FileDropZone from './components/FileDropZone.vue'
 import WelcomeView from './views/WelcomeView.vue'
-import FilePreview from './views/FilePreview.vue'
-import ExploreView from './views/ExploreView.vue'
-import SettingsView from './views/SettingsView.vue'
+
+// Heavy views load on demand — keeps the Windows WebView2 first paint small.
+const ChatPanel = defineAsyncComponent(() => import('./components/ChatPanel.vue'))
+const FilePreview = defineAsyncComponent(() => import('./views/FilePreview.vue'))
+const ExploreView = defineAsyncComponent(() => import('./views/ExploreView.vue'))
+const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'))
 
 const auth = useAuthStore()
 const layout = useLayoutStore()

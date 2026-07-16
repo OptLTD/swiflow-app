@@ -10,9 +10,10 @@ const props = defineProps<{ content: string; path: string }>()
 
 const host = ref<HTMLElement | null>(null)
 let view: EditorView | null = null
+let mountSeq = 0
 
-function buildExtensions(): Extension[] {
-  const lang = codemirrorLanguage(props.path)
+async function buildExtensions(): Promise<Extension[]> {
+  const lang = await codemirrorLanguage(props.path)
   return [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -33,21 +34,27 @@ function buildExtensions(): Extension[] {
   ]
 }
 
-function mountEditor() {
+async function mountEditor() {
   if (!host.value) return
+  const seq = ++mountSeq
+  const extensions = await buildExtensions()
+  if (seq !== mountSeq || !host.value) return
   view?.destroy()
   view = new EditorView({
     state: EditorState.create({
       doc: props.content,
-      extensions: buildExtensions(),
+      extensions,
     }),
     parent: host.value,
   })
 }
 
-onMounted(mountEditor)
-onBeforeUnmount(() => view?.destroy())
-watch(() => [props.content, props.path], mountEditor)
+onMounted(() => { void mountEditor() })
+onBeforeUnmount(() => {
+  mountSeq++
+  view?.destroy()
+})
+watch(() => [props.content, props.path], () => { void mountEditor() })
 </script>
 
 <template>

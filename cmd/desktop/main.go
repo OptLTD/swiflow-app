@@ -23,7 +23,9 @@ import (
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
+	"github.com/OptLTD/swiflow/internal/httputil"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
+	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/schedule"
 	"github.com/OptLTD/swiflow/internal/server"
 	"github.com/OptLTD/swiflow/internal/skill"
@@ -33,6 +35,7 @@ import (
 )
 
 func main() {
+	start := time.Now()
 	ctx := context.Background()
 
 	// 1. Load Swiflow config (.app launches with cwd=/ so use Application Support)
@@ -48,10 +51,16 @@ func main() {
 	}
 	cfg = resolveDesktopPaths(cfg, filepath.Dir(cfgPath))
 
-	// 2. Start Swiflow backend in background (skip auth in desktop mode)
+	// File logs under workspace so Settings / Explore can open them.
+	if _, err := observe.SetupFileLog(cfg.WorkspaceDir, slog.LevelInfo); err != nil {
+		slog.Warn("file log setup", "error", err)
+	}
+
+	// 2. Start Swiflow backend (skip auth in desktop mode). MCP sync is deferred.
 	cfg.SkipAuth = true
 	shutdown := startSwiflowBackend(ctx, cfg)
 	defer shutdown()
+	slog.Info("desktop backend ready", "elapsed", time.Since(start).Round(time.Millisecond))
 
 	// 3. Create wails3 application
 	backendURL := fmt.Sprintf("http://%s", cfg.Addr())
@@ -73,17 +82,25 @@ func main() {
 
 	app.SetIcon(emb.AppIconPNG)
 
-	// 4. Create main window (macOS fusion title bar: no system header, traffic lights kept)
-	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		URL: "/", Title: "Swiflow",
-		EnableFileDrop: true,
-		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBarHiddenInset,
-		},
+	// 4. Create main window.
+	// macOS: fusion title bar (traffic lights kept, content inset).
+	// Windows: frameless so HeadTabBar replaces the native title bar.
+	winOpts := application.WebviewWindowOptions{
+		URL: "/", Title: "Swiflow", EnableFileDrop: true,
 		Width: 1200, Height: 800, MinWidth: 800, MinHeight: 600,
 		BackgroundColour: application.NewRGB(255, 255, 255),
-	})
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		winOpts.Mac = application.MacWindow{
+			TitleBar: application.MacTitleBarHiddenInset,
+		}
+	case "windows":
+		winOpts.Frameless = true
+	}
+	win := app.Window.NewWithOptions(winOpts)
 	bindWorkspaceFileDrop(win, cfg)
+	slog.Info("desktop window created", "elapsed", time.Since(start).Round(time.Millisecond))
 
 	// 5. Run
 	if err := app.Run(); err != nil {
@@ -204,7 +221,9 @@ func resolveDesktopPaths(cfg config.Config, baseDir string) config.Config {
 }
 
 // startSwiflowBackend starts the Swiflow HTTP server in a goroutine and waits for it to be ready.
+// MCP sync runs in the background so a hanging MCP server cannot block the first paint.
 func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
+	start := time.Now()
 	for _, dir := range []string{filepath.Dir(cfg.DBPath), cfg.WorkspaceDir, cfg.UserSkillsDir} {
 		if dir != "" {
 			_ = os.MkdirAll(dir, 0o755)
@@ -220,6 +239,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		slog.Error("seed", "error", err)
 		os.Exit(1)
 	}
+	slog.Info("desktop db ready", "elapsed", time.Since(start).Round(time.Millisecond))
 
 	skillsCat := skill.NewCatalog(cfg.InitSkillsDir, cfg.UserSkillsDir)
 
@@ -268,9 +288,6 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	}
 
 	mcpMgr := mcpclient.NewManager(st, toolsReg)
-	if err := mcpMgr.Sync(ctx); err != nil {
-		slog.Warn("mcp initial sync", "error", err)
-	}
 
 	events := server.NewSessionHub()
 
@@ -308,19 +325,36 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		}
 	}()
 
-	// Wait for backend to be ready
+	// Localhost must bypass system proxy (common Windows startup hang).
+	healthClient := httputil.DirectClient(500 * time.Millisecond)
+	ready := false
 	for i := 0; i < 50; i++ {
-		resp, err := http.Get(fmt.Sprintf("http://%s/api/health", cfg.Addr()))
+		resp, err := healthClient.Get(fmt.Sprintf("http://%s/api/health", cfg.Addr()))
 		if err == nil && resp.StatusCode == 200 {
 			resp.Body.Close()
-			slog.Info("swiflow backend ready")
+			ready = true
 			break
 		}
 		if resp != nil {
 			resp.Body.Close()
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
+	if !ready {
+		slog.Warn("swiflow backend health check timed out", "elapsed", time.Since(start).Round(time.Millisecond))
+	} else {
+		slog.Info("swiflow backend ready", "elapsed", time.Since(start).Round(time.Millisecond))
+	}
+
+	// Connect MCP servers after the UI can show; each connect may take up to 60s.
+	go func() {
+		mcpStart := time.Now()
+		if err := mcpMgr.Sync(context.Background()); err != nil {
+			slog.Warn("mcp initial sync", "error", err, "elapsed", time.Since(mcpStart).Round(time.Millisecond))
+			return
+		}
+		slog.Info("mcp initial sync done", "elapsed", time.Since(mcpStart).Round(time.Millisecond))
+	}()
 
 	return func() {
 		cronSched.Stop()
@@ -346,6 +380,8 @@ func mustDesktopFrontendHandler() http.Handler {
 // apiProxyMiddleware returns a wails3 Middleware that proxies /api/* requests
 // to the Swiflow backend, letting all other requests fall through to the static file handler.
 func apiProxyMiddleware(backendURL string) application.Middleware {
+	// Localhost must bypass system proxy; Timeout 0 keeps SSE streams open.
+	client := httputil.DirectClient(0)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -368,7 +404,7 @@ func apiProxyMiddleware(backendURL string) application.Middleware {
 					proxyReq.Header.Add(k, v)
 				}
 			}
-			resp, err := http.DefaultClient.Do(proxyReq)
+			resp, err := client.Do(proxyReq)
 			if err != nil {
 				http.Error(w, "backend unreachable", http.StatusBadGateway)
 				return

@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { defineAsyncComponent, ref, watch } from 'vue'
 import { api } from '../api'
 import { previewKind, type ExcelSheet } from '../lib/filePreview'
-import { parseExcel } from '../lib/parseExcel'
+import { useToastStore } from '../stores/toast'
 import LocalSvgIcon from './LocalSvgIcon.vue'
-import TextPreview from './preview/TextPreview.vue'
-import MarkdownPreview from './preview/MarkdownPreview.vue'
-import ExcelPreview from './preview/ExcelPreview.vue'
-import PdfPreview from './preview/PdfPreview.vue'
-import DocPreview from './preview/DocPreview.vue'
-import ImagePreview from './preview/ImagePreview.vue'
+
+const TextPreview = defineAsyncComponent(() => import('./preview/TextPreview.vue'))
+const MarkdownPreview = defineAsyncComponent(() => import('./preview/MarkdownPreview.vue'))
+const ExcelPreview = defineAsyncComponent(() => import('./preview/ExcelPreview.vue'))
+const PdfPreview = defineAsyncComponent(() => import('./preview/PdfPreview.vue'))
+const DocPreview = defineAsyncComponent(() => import('./preview/DocPreview.vue'))
+const ImagePreview = defineAsyncComponent(() => import('./preview/ImagePreview.vue'))
 
 const props = defineProps<{ path: string }>()
+const toast = useToastStore()
 
 const loading = ref(true)
 const error = ref('')
@@ -20,6 +22,20 @@ const textContent = ref('')
 const binaryData = ref<ArrayBuffer | null>(null)
 const excelSheets = ref<ExcelSheet[]>([])
 const mdMode = ref<'preview' | 'source'>('preview')
+
+async function copyText() {
+  const text = textContent.value
+  if (!text) {
+    toast.error('暂无内容可复制')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.success('已复制')
+  } catch {
+    toast.error('复制失败')
+  }
+}
 
 async function load() {
   if (!props.path) return
@@ -46,6 +62,7 @@ async function load() {
     }
     const data = await api.downloadWorkspaceFile(props.path)
     if (kind.value === 'excel') {
+      const { parseExcel } = await import('../lib/parseExcel')
       excelSheets.value = parseExcel(data)
       return
     }
@@ -86,6 +103,16 @@ watch(() => props.path, load, { immediate: true })
           Source
         </button>
       </div>
+      <button
+        v-if="kind === 'text' || kind === 'markdown'"
+        type="button"
+        class="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 hover:text-neutral-800"
+        title="复制"
+        :disabled="loading || !textContent"
+        @click="copyText"
+      >
+        <LocalSvgIcon name="copy" :size="15" />
+      </button>
       <button
         type="button"
         class="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 hover:text-neutral-800"

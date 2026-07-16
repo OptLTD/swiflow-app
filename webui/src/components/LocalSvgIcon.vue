@@ -15,6 +15,7 @@ withDefaults(
     | 'chat-off'
     | 'history'
     | 'refresh'
+    | 'copy'
     | 'provider'
     | 'maximize'
     | 'minimize'
@@ -92,6 +93,10 @@ withDefaults(
       <!-- open arc (gap at top-right) + arrowhead -->
       <path d="M12.8 5.2A4.8 4.8 0 1 0 13.5 9.5" />
       <path d="M12.8 2.4v3.2h-3.2" />
+    </template>
+    <template v-else-if="name === 'copy'">
+      <rect x="5.5" y="5.5" width="7.5" height="8" rx="1" />
+      <path d="M3.5 10.5V3.5a1 1 0 0 1 1-1H10" />
     </template>
     <template v-else-if="name === 'edit'">
       <path d="M3.5 12.5l1.2-4.2L11 2.5l2.5 2.5-6.3 6.3L3.5 12.5z" />

@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import AgentsView from './AgentsView.vue'
-import SkillsView from './SkillsView.vue'
-import ToolsView from './ToolsView.vue'
-import MCPServersView from './MCPServersView.vue'
-import CronView from './CronView.vue'
+import { defineAsyncComponent, ref } from 'vue'
+import { useLayoutStore } from '../stores/layout'
+import LocalSvgIcon from '../components/LocalSvgIcon.vue'
+
+const AgentsView = defineAsyncComponent(() => import('./AgentsView.vue'))
+const SkillsView = defineAsyncComponent(() => import('./SkillsView.vue'))
+const ToolsView = defineAsyncComponent(() => import('./ToolsView.vue'))
+const MCPServersView = defineAsyncComponent(() => import('./MCPServersView.vue'))
+const CronView = defineAsyncComponent(() => import('./CronView.vue'))
+
+const LOG_REL_PATH = 'swiflow.log'
 
 const tabs = [
   { key: 'agents', label: 'Agent' },
@@ -12,10 +17,20 @@ const tabs = [
   { key: 'tools', label: 'Tools' },
   { key: 'mcp', label: 'MCP' },
   { key: 'cron', label: 'Cron' },
+  { key: 'system', label: 'System' },
 ] as const
 
 type SubTab = (typeof tabs)[number]['key']
 const activeSubTab = ref<SubTab>('agents')
+const layout = useLayoutStore()
+
+function openLogs() {
+  layout.openFile(LOG_REL_PATH)
+}
+
+function openWorkspace() {
+  layout.openExplore('.')
+}
 </script>
 
 <template>
@@ -36,6 +51,34 @@ const activeSubTab = ref<SubTab>('agents')
       <ToolsView v-else-if="activeSubTab === 'tools'" />
       <MCPServersView v-else-if="activeSubTab === 'mcp'" />
       <CronView v-else-if="activeSubTab === 'cron'" />
+      <div v-else-if="activeSubTab === 'system'" class="p-6 max-w-xl space-y-4">
+        <div>
+          <h2 class="text-sm font-semibold text-neutral-900">Logs</h2>
+          <p class="text-sm text-neutral-500 mt-1">
+            Application logs are written to
+            <code class="text-xs bg-neutral-100 px-1 py-0.5 rounded">{{ LOG_REL_PATH }}</code>
+            in the workspace root. You can also open it from Explore.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-neutral-200 rounded hover:bg-neutral-50"
+            @click="openLogs"
+          >
+            <LocalSvgIcon name="file" :size="14" />
+            View log file
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-neutral-200 rounded hover:bg-neutral-50"
+            @click="openWorkspace"
+          >
+            <LocalSvgIcon name="folder" :size="14" />
+            Open workspace
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>

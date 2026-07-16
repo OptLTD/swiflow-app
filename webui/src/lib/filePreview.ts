@@ -1,10 +1,3 @@
-import { javascript } from '@codemirror/lang-javascript'
-import { json } from '@codemirror/lang-json'
-import { markdown } from '@codemirror/lang-markdown'
-import { python } from '@codemirror/lang-python'
-import { css } from '@codemirror/lang-css'
-import { html } from '@codemirror/lang-html'
-import { yaml } from '@codemirror/lang-yaml'
 import type { Extension } from '@codemirror/state'
 
 export type PreviewKind = 'text' | 'markdown' | 'excel' | 'pdf' | 'doc' | 'image' | 'unsupported'
@@ -37,28 +30,6 @@ const TEXT_EXTENSIONS = new Set([
   'dockerfile', 'makefile', 'gradle', 'properties',
 ])
 
-const LANG_MAP: Record<string, () => Extension> = {
-  js: javascript,
-  jsx: () => javascript({ jsx: true }),
-  ts: () => javascript({ typescript: true }),
-  tsx: () => javascript({ jsx: true, typescript: true }),
-  json: json,
-  py: python,
-  md: markdown,
-  markdown: markdown,
-  yaml: yaml,
-  yml: yaml,
-  html: html,
-  htm: html,
-  xml: html,
-  css: css,
-  vue: html,
-  sh: () => javascript(),
-  bash: () => javascript(),
-  zsh: () => javascript(),
-  go: () => javascript(),
-}
-
 export function fileExtension(path: string): string {
   const base = path.split('/').pop() || path
   const dot = base.lastIndexOf('.')
@@ -72,12 +43,6 @@ export function previewKind(path: string): PreviewKind {
   if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
   if (TEXT_EXTENSIONS.has(ext) || !ext) return 'text'
   return 'unsupported'
-}
-
-export function codemirrorLanguage(path: string): Extension | null {
-  const ext = fileExtension(path)
-  const factory = LANG_MAP[ext]
-  return factory ? factory() : null
 }
 
 export interface ExcelSheet {
@@ -100,4 +65,49 @@ const IMAGE_MIME: Record<string, string> = {
 export function imageMimeType(path: string): string {
   const ext = fileExtension(path)
   return IMAGE_MIME[ext] || 'application/octet-stream'
+}
+
+/** Lazy-loaded so opening text files does not inflate the initial desktop bundle. */
+export async function codemirrorLanguage(path: string): Promise<Extension | null> {
+  const ext = fileExtension(path)
+  const [
+    { javascript },
+    { json },
+    { markdown },
+    { python },
+    { css },
+    { html },
+    { yaml },
+  ] = await Promise.all([
+    import('@codemirror/lang-javascript'),
+    import('@codemirror/lang-json'),
+    import('@codemirror/lang-markdown'),
+    import('@codemirror/lang-python'),
+    import('@codemirror/lang-css'),
+    import('@codemirror/lang-html'),
+    import('@codemirror/lang-yaml'),
+  ])
+  const LANG_MAP: Record<string, () => Extension> = {
+    js: javascript,
+    jsx: () => javascript({ jsx: true }),
+    ts: () => javascript({ typescript: true }),
+    tsx: () => javascript({ jsx: true, typescript: true }),
+    json,
+    py: python,
+    md: markdown,
+    markdown,
+    yaml,
+    yml: yaml,
+    html,
+    htm: html,
+    xml: html,
+    css,
+    vue: html,
+    sh: () => javascript(),
+    bash: () => javascript(),
+    zsh: () => javascript(),
+    go: () => javascript(),
+  }
+  const factory = LANG_MAP[ext]
+  return factory ? factory() : null
 }

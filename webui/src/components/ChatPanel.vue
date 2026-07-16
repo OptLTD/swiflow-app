@@ -128,7 +128,7 @@ function closeHistory() {
 async function pickSession(key: string) {
   if (isTabMode.value) {
     // Another (or same) session opens as its own tab; same key reuses that tab.
-    const known = sessions.value.find((s) => s.key === key)
+    const known = sessions.value.find((s) => s.id === key)
     layout.openChatTab(key, known?.title || '')
     showHistory.value = false
     return
@@ -142,8 +142,8 @@ async function loadSessions() {
     const r = await api.listSessions()
     sessions.value = r.sessions || []
     if (!currentKey.value) return
-    const s = sessions.value.find((x) => x.key === currentKey.value)
-    if (s?.title) setSessionMeta(s.key, s.title)
+    const s = sessions.value.find((x) => x.id === currentKey.value)
+    if (s?.title) setSessionMeta(s.id, s.title)
   } catch {}
 }
 
@@ -276,7 +276,7 @@ function looksLikeToolError(content: string | undefined): boolean {
 async function selectSession(key: string) {
   if (!key) return
   stopWatch()
-  const known = sessions.value.find((s) => s.key === key)
+  const known = sessions.value.find((s) => s.id === key)
   const fallbackTitle = isTabMode.value
     ? localTitle.value
     : key === chatStore.currentKey
@@ -311,7 +311,7 @@ async function restoreLastSession() {
     return
   }
   if (sessions.value.length) {
-    await selectSession(sessions.value[0].key)
+    await selectSession(sessions.value[0].id)
   }
 }
 
@@ -557,13 +557,13 @@ function gapClass(m: Msg, i: number): string {
         <div v-else class="py-1">
           <button
             v-for="s in sessions"
-            :key="s.key"
+            :key="s.id"
             type="button"
             class="w-full text-left pl-3 pr-4 py-2.5 text-base hover:bg-neutral-50 border-b border-neutral-100 flex items-center gap-2"
-            :class="s.key === currentKey ? 'bg-neutral-50 font-medium' : ''"
-            @click="pickSession(s.key)"
+            :class="s.id === currentKey ? 'bg-neutral-50 font-medium' : ''"
+            @click="pickSession(s.id)"
           >
-            <span class="truncate flex-1">{{ s.title || s.key }}</span>
+            <span class="truncate flex-1">{{ s.title || s.id }}</span>
           </button>
         </div>
       </div>

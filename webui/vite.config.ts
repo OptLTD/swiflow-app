@@ -13,5 +13,19 @@ export default defineConfig({
   build: {
     outDir: '../embed/frontend',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('pdfjs-dist')) return 'pdfjs'
+          if (id.includes('xlsx')) return 'xlsx'
+          if (id.includes('jspreadsheet') || id.includes('jsuites')) return 'spreadsheet'
+          if (id.includes('mammoth')) return 'mammoth'
+          if (id.includes('@codemirror')) return 'codemirror'
+          if (id.includes('highlight.js') || id.includes('markdown-it')) return 'markdown'
+          if (id.includes('vue') || id.includes('pinia')) return 'vue'
+        },
+      },
+    },
   },
 })

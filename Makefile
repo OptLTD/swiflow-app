@@ -1,8 +1,13 @@
-.PHONY: dev dev-backend dev-frontend build image test migrate tidy desktop desktop-app wails3 wails3-frontend wails3-app
+.PHONY: dev dev-backend dev-frontend build image test migrate tidy \
+	macos macos-app windows \
+	wails3 wails3-frontend wails3-app
 
 # Wails CGO objects must match the linker min macOS version to avoid ld warnings.
 DESKTOP_LDFLAGS := CGO_CFLAGS="-mmacosx-version-min=11.0" CGO_LDFLAGS="-mmacosx-version-min=11.0"
 FRONTEND_DEVSERVER_URL ?= http://localhost:5173
+
+APP_NAME := Swiflow
+APP_VERSION := 0.1.0
 
 # Local dev: API :8000 + Vite :5173 (proxies /api)
 dev:
@@ -34,18 +39,47 @@ test:
 tidy:
 	go mod tidy
 
-# Desktop app: wails3 native window with embedded backend + Vue UI
-desktop:
+# macOS desktop app (.app)
+macos:
 	cd webui && pnpm install && pnpm build
 	$(DESKTOP_LDFLAGS) go build -o swiflow-desktop ./cmd/desktop
-	@if [ "$$(uname)" = "Darwin" ]; then $(MAKE) desktop-app; fi
+	@$(MAKE) macos-app
 
-desktop-app:
+macos-app:
 	mkdir -p bin/Swiflow.app/Contents/{MacOS,Resources}
 	cp build/darwin/Info.plist bin/Swiflow.app/Contents/
 	cp build/darwin/icons.icns bin/Swiflow.app/Contents/Resources/
 	cp swiflow-desktop bin/Swiflow.app/Contents/MacOS/Swiflow
 	codesign --force --deep --sign - bin/Swiflow.app
+
+# Windows desktop: amd64 + arm64 binaries in one NSIS installer
+# Requires: wails3, makensis (brew install makensis / choco install nsis)
+#   go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+# Usage: make windows
+# Output: bin/Swiflow-installer.exe
+windows:
+	@command -v wails3 >/dev/null 2>&1 || { echo "error: wails3 not found (go install github.com/wailsapp/wails/v3/cmd/wails3@latest)"; exit 1; }
+	@command -v makensis >/dev/null 2>&1 || { echo "error: makensis not found (brew install makensis / choco install nsis)"; exit 1; }
+	cd webui && pnpm install && pnpm build
+	mkdir -p bin
+	@for arch in amd64 arm64; do \
+		wails3 generate syso -arch $$arch \
+			-icon build/windows/icon.ico \
+			-manifest build/windows/wails.exe.manifest \
+			-info build/windows/info.json \
+			-out cmd/desktop/wails_windows_$$arch.syso; \
+		GOOS=windows GOARCH=$$arch CGO_ENABLED=0 \
+			go build -trimpath -ldflags="-H windowsgui -s -w" \
+			-o bin/$(APP_NAME)-$$arch.exe ./cmd/desktop; \
+		rm -f cmd/desktop/wails_windows_$$arch.syso; \
+		echo "Built bin/$(APP_NAME)-$$arch.exe"; \
+	done
+	wails3 generate webview2bootstrapper -dir build/windows/nsis
+	cd build/windows/nsis && makensis \
+		-DARG_WAILS_AMD64_BINARY="$(CURDIR)/bin/$(APP_NAME)-amd64.exe" \
+		-DARG_WAILS_ARM64_BINARY="$(CURDIR)/bin/$(APP_NAME)-arm64.exe" \
+		project.nsi
+	@echo "Installer: bin/$(APP_NAME)-installer.exe"
 
 # Wails3 desktop development mode: Vite HMR + live desktop window
 # Uses FRONTEND_DEVSERVER_URL so AssetFileServerFS proxies to Vite (non-production build).

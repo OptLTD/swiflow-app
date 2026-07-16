@@ -8,9 +8,14 @@
 *.dll
 *.so
 *.dylib
+*.syso
 *.test
 *.out
 coverage.*
+
+# Windows packaging artifacts (generated)
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+cmd/desktop/*.syso
 
 # Local config (keep config.example.json)
 config.json
