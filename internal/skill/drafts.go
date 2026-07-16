@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 // Draft is a skill proposal awaiting human confirmation.
@@ -41,7 +41,7 @@ func (c *Catalog) SaveDraft(slug, content, note string) (Draft, error) {
 	if parsed.Slug != "" && parsed.Slug != slug {
 		return Draft{}, fmt.Errorf("front matter slug %q does not match %q", parsed.Slug, slug)
 	}
-	id := util.NewID()
+	id := support.NewID()
 	dir := filepath.Join(c.draftsDir(), id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return Draft{}, err

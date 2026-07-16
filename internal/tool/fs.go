@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/OptLTD/swiflow/internal/secure"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 // WorkspaceRoots holds the agent workspace base.
@@ -29,7 +29,7 @@ func (t *readFileTool) Parameters() map[string]any {
 }
 func (t *readFileTool) Execute(_ context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
-	full, err := secure.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(t.ws.Base, path)
 	if err != nil {
 		return "", err
 	}
@@ -46,8 +46,10 @@ func (t *readFileTool) Execute(_ context.Context, args map[string]any) (string, 
 
 type writeFileTool struct{ ws WorkspaceRoots }
 
-func (t *writeFileTool) Name() string        { return "fs_write" }
-func (t *writeFileTool) Description() string { return "Write text to a file in the workspace (creates/overwrites)." }
+func (t *writeFileTool) Name() string { return "fs_write" }
+func (t *writeFileTool) Description() string {
+	return "Write text to a file in the workspace (creates/overwrites)."
+}
 func (t *writeFileTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -61,7 +63,7 @@ func (t *writeFileTool) Parameters() map[string]any {
 func (t *writeFileTool) Execute(_ context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
-	full, err := secure.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(t.ws.Base, path)
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +93,7 @@ func (t *listFilesTool) Execute(_ context.Context, args map[string]any) (string,
 	if path == "" {
 		path = "."
 	}
-	full, err := secure.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(t.ws.Base, path)
 	if err != nil {
 		return "", err
 	}
@@ -113,8 +115,10 @@ func (t *listFilesTool) Execute(_ context.Context, args map[string]any) (string,
 
 type editFileTool struct{ ws WorkspaceRoots }
 
-func (t *editFileTool) Name() string        { return "fs_edit" }
-func (t *editFileTool) Description() string { return "Replace a unique old string with a new string in a file." }
+func (t *editFileTool) Name() string { return "fs_edit" }
+func (t *editFileTool) Description() string {
+	return "Replace a unique old string with a new string in a file."
+}
 func (t *editFileTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -130,7 +134,7 @@ func (t *editFileTool) Execute(_ context.Context, args map[string]any) (string, 
 	path, _ := args["path"].(string)
 	oldS, _ := args["old"].(string)
 	newS, _ := args["new"].(string)
-	full, err := secure.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(t.ws.Base, path)
 	if err != nil {
 		return "", err
 	}

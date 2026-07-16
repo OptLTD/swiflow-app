@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 func (s *Server) listCronJobs(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +40,7 @@ func (s *Server) createCronJob(w http.ResponseWriter, r *http.Request) {
 		enabled = *in.Enabled
 	}
 	job := &store.CronJob{
-		ID: util.NewID(), Name: in.Name, Agent: in.Agent,
+		ID: support.NewID(), Name: in.Name, Agent: in.Agent,
 		Message: in.Message, Schedule: in.Schedule, Enabled: enabled,
 	}
 	if err := s.st.CreateCronJob(r.Context(), job); err != nil {

@@ -2,23 +2,25 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
-	"github.com/OptLTD/swiflow/internal/llm"
+	"github.com/OptLTD/swiflow/internal/llmclient"
 	"github.com/OptLTD/swiflow/internal/store"
 )
 
 func TestToolCallKeyOrderIndependent(t *testing.T) {
-	a := []llm.ToolCall{{ID: "b", Name: "x"}, {ID: "a", Name: "y"}}
-	b := []llm.ToolCall{{ID: "a", Name: "y"}, {ID: "b", Name: "x"}}
+	a := []llmclient.ToolCall{{ID: "b", Name: "x"}, {ID: "a", Name: "y"}}
+	b := []llmclient.ToolCall{{ID: "a", Name: "y"}, {ID: "b", Name: "x"}}
 	if toolCallKey(a) != toolCallKey(b) {
 		t.Fatal("expected same key for permuted tool calls")
 	}
 }
 
 func TestToolCallKeyDiffers(t *testing.T) {
-	a := []llm.ToolCall{{ID: "a", Name: "x"}}
-	b := []llm.ToolCall{{ID: "b", Name: "x"}}
+	a := []llmclient.ToolCall{{ID: "a", Name: "x"}}
+	b := []llmclient.ToolCall{{ID: "b", Name: "x"}}
 	if toolCallKey(a) == toolCallKey(b) {
 		t.Fatal("expected different keys")
 	}
@@ -62,6 +64,23 @@ func TestSanitizeToolHistoryDropsOrphanTools(t *testing.T) {
 	out := sanitizeToolHistory(in)
 	if len(out) != 1 || out[0].Role != "user" {
 		t.Fatalf("want only user, got %+v", out)
+	}
+}
+
+func TestFormatToolErrorKeepsOutput(t *testing.T) {
+	got := formatToolError("Traceback...\nTypeError: bad", fmt.Errorf("failed: exit status 1"))
+	if !strings.Contains(got, "Traceback") {
+		t.Fatalf("expected traceback in result, got %q", got)
+	}
+	if !strings.Contains(got, "error: failed: exit status 1") {
+		t.Fatalf("expected error suffix, got %q", got)
+	}
+}
+
+func TestFormatToolErrorEmptyOutput(t *testing.T) {
+	got := formatToolError("", fmt.Errorf("tool disabled: exec"))
+	if got != "error: tool disabled: exec" {
+		t.Fatalf("got %q", got)
 	}
 }
 

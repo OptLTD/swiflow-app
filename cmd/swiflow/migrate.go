@@ -11,7 +11,6 @@ import (
 
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
-	"github.com/OptLTD/swiflow/internal/seed"
 	"github.com/OptLTD/swiflow/internal/store/sqlstore"
 )
 
@@ -34,7 +33,7 @@ func migrateCmd() *cobra.Command {
 				return err
 			}
 			defer st.Close()
-			if err := seed.EnsureDefaults(context.Background(), st); err != nil {
+			if err := appdb.EnsureDefaults(context.Background(), st); err != nil {
 				return fmt.Errorf("seed: %w", err)
 			}
 			if st.Driver() == sqlstore.DialectPostgres {

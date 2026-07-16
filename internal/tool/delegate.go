@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 // ChildRunner runs an isolated agent turn for delegate_task (implemented by agent.Runner).
@@ -93,7 +93,7 @@ func (t *delegateTaskTool) Execute(ctx context.Context, args map[string]any) (st
 	if parent == "" {
 		parent = "unknown"
 	}
-	id := util.NewID()
+	id := support.NewID()
 	if len(id) > 8 {
 		id = id[:8]
 	}
@@ -139,7 +139,6 @@ type todoItem struct {
 	Text string `json:"text"`
 	Done bool   `json:"done"`
 }
-
 
 type todoStore interface {
 	SaveTodos(ctx context.Context, sessionID string, itemsJSON string) error

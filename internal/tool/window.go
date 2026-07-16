@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/OptLTD/swiflow/internal/secure"
-	"github.com/OptLTD/swiflow/internal/window"
+	"github.com/OptLTD/swiflow/library/support"
+	"github.com/OptLTD/swiflow/library/window"
 )
 
 type windowTools struct {
@@ -77,7 +77,7 @@ func (t *windowOpenTool) Execute(ctx context.Context, args map[string]any) (stri
 	if path == "" {
 		return "", fmt.Errorf("path required")
 	}
-	full, err := secure.SandboxPath(t.base.ws.Base, path)
+	full, err := support.SandboxPath(t.base.ws.Base, path)
 	if err != nil {
 		return "", err
 	}

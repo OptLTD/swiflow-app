@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OptLTD/swiflow/internal/secure"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/library/support"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -38,7 +38,7 @@ func OpenSQLite(path string, encryptionKey string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(8)
 	return &Store{
-		db: db, key: secure.DeriveKey(encryptionKey),
+		db: db, key: support.DeriveKey(encryptionKey),
 		now: nowSQLite, driver: DialectSQLite,
 	}, nil
 }
@@ -52,7 +52,7 @@ func OpenPostgres(dsn string, encryptionKey string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(16)
 	return &Store{
-		db: db, key: secure.DeriveKey(encryptionKey),
+		db: db, key: support.DeriveKey(encryptionKey),
 		now: nowPostgres, driver: DialectPostgres,
 	}, nil
 }
@@ -102,7 +102,7 @@ func quotePGTypeColumn(q string) string {
 // --- Providers ---
 
 func (s *Store) CreateProvider(ctx context.Context, p *store.Provider) error {
-	enc, err := secure.Encrypt(s.key, []byte(p.ApiKey))
+	enc, err := support.Encrypt(s.key, []byte(p.ApiKey))
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (s *Store) DecryptAPIKey(ctx context.Context, name string) (string, error) 
 	if err := s.db.GetContext(ctx, &enc, s.sql(`SELECT api_key FROM llm_provider WHERE name = ?`), name); err != nil {
 		return "", err
 	}
-	pt, err := secure.Decrypt(s.key, enc)
+	pt, err := support.Decrypt(s.key, enc)
 	if err != nil {
 		return "", err
 	}
@@ -168,7 +168,7 @@ func (s *Store) ProviderCreds(ctx context.Context, name string) (apiBase, apiKey
 		}
 		return "", "", "", err
 	}
-	pt, err := secure.Decrypt(s.key, r.ApiKeyBlob)
+	pt, err := support.Decrypt(s.key, r.ApiKeyBlob)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -191,7 +191,7 @@ func (s *Store) UpdateProvider(ctx context.Context, id string, fields map[string
 			if !ok {
 				return fmt.Errorf("api_key must be a string")
 			}
-			enc, err := secure.Encrypt(s.key, []byte(keyStr))
+			enc, err := support.Encrypt(s.key, []byte(keyStr))
 			if err != nil {
 				return err
 			}

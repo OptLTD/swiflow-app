@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OptLTD/swiflow/internal/llm"
+	"github.com/OptLTD/swiflow/internal/llmclient"
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store"
 	"github.com/OptLTD/swiflow/internal/tool"
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 // maxRoundsDefault is only a safety fuse against runaway tool use.
@@ -49,7 +49,7 @@ type Event struct {
 	Position  int    `json:"position,omitempty"` // queued position (1-based)
 }
 
-// EventPublisher fans out events (typically sesshub.Hub).
+// EventPublisher fans out events (typically server.SessionHub).
 type EventPublisher interface {
 	Publish(sessionID string, ev Event)
 }
@@ -95,7 +95,7 @@ type Runner struct {
 	cancels   map[string]context.CancelFunc
 	queue     map[string][]queuedMsg
 	provMu    sync.Mutex
-	provCache map[string]llm.Provider
+	provCache map[string]llmclient.Provider
 }
 
 // NewRunner constructs a Runner.
@@ -105,7 +105,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 		busy:      map[string]struct{}{},
 		cancels:   map[string]context.CancelFunc{},
 		queue:     map[string][]queuedMsg{},
-		provCache: map[string]llm.Provider{},
+		provCache: map[string]llmclient.Provider{},
 	}
 }
 
@@ -165,7 +165,7 @@ func (r *Runner) Abort(sessionID string) bool {
 // InvalidateAll drops cached LLM providers so subsequent runs re-read config.
 func (r *Runner) InvalidateAll() {
 	r.provMu.Lock()
-	r.provCache = map[string]llm.Provider{}
+	r.provCache = map[string]llmclient.Provider{}
 	r.provMu.Unlock()
 }
 
@@ -265,7 +265,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 	}
 	history = truncateHistory(history, r.deps.MaxHistoryMessages)
 
-	userMsg := store.Message{ID: util.NewID(), Role: "user", Content: userMessage}
+	userMsg := store.Message{ID: support.NewID(), Role: "user", Content: userMessage}
 	if _, err := st.AppendMessage(runCtx, sessionID, userMsg); err != nil {
 		slog.Error("persist user message", "error", err)
 	}
@@ -273,11 +273,11 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 	// Persist tool pairing even if the run context is cancelled mid-loop.
 	persistCtx := context.WithoutCancel(runCtx)
 
-	llmMsgs := []llm.Message{{Role: "system", Content: r.buildSystem(ag)}}
+	llmMsgs := []llmclient.Message{{Role: "system", Content: r.buildSystem(ag)}}
 	for _, m := range history {
 		llmMsgs = append(llmMsgs, toLLM(m))
 	}
-	llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: userMessage})
+	llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: userMessage})
 
 	toolDefs := filterTools(r.deps.Tools.Definitions(), opts)
 
@@ -309,13 +309,13 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 			}
 			forceWrapUp = false
 			wrapReason = ""
-			llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: nudge})
+			llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: nudge})
 		case !softNudged && round >= rounds*3/4:
 			softNudged = true
-			llmMsgs = append(llmMsgs, llm.Message{Role: "user", Content: softBudgetNudge})
+			llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: softBudgetNudge})
 		}
 
-		req := llm.ChatRequest{Model: model, Messages: llmMsgs, Tools: roundTools}
+		req := llmclient.ChatRequest{Model: model, Messages: llmMsgs, Tools: roundTools}
 		resp, err := r.streamRound(runCtx, prov, req, publisher)
 		if err != nil {
 			publisher(Event{Type: "error", Error: err.Error()})
@@ -338,7 +338,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 			}
 
 			assistantMsg := store.Message{
-				ID:        util.NewID(),
+				ID:        support.NewID(),
 				Role:      "assistant",
 				Content:   resp.Content,
 				Thinking:  resp.Thinking,
@@ -374,7 +374,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 				observe.ToolEnd(sessionID, tc.Name, time.Since(t0), execErr)
 				isErr := execErr != nil
 				if isErr {
-					result = "error: " + execErr.Error()
+					result = formatToolError(result, execErr)
 					consecErrors++
 				} else {
 					consecErrors = 0
@@ -386,7 +386,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 				publisher(Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: truncated, IsError: isErr})
 
 				toolMsg := store.Message{
-					ID:         util.NewID(),
+					ID:         support.NewID(),
 					Role:       "tool",
 					Content:    truncated,
 					ToolCallId: tc.ID,
@@ -395,7 +395,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 				if _, err := st.AppendMessage(persistCtx, sessionID, toolMsg); err != nil {
 					slog.Error("persist tool message", "error", err)
 				}
-				llmMsgs = append(llmMsgs, llm.Message{
+				llmMsgs = append(llmMsgs, llmclient.Message{
 					Role:       "tool",
 					Content:    truncated,
 					ToolCallID: tc.ID,
@@ -415,7 +415,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 			content = continueHint
 		}
 		assistantMsg := store.Message{
-			ID:       util.NewID(),
+			ID:       support.NewID(),
 			Role:     "assistant",
 			Content:  content,
 			Thinking: resp.Thinking,
@@ -439,7 +439,7 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 	}
 
 	if _, err := st.AppendMessage(runCtx, sessionID, store.Message{
-		ID: util.NewID(), Role: "assistant", Content: continueHint,
+		ID: support.NewID(), Role: "assistant", Content: continueHint,
 	}); err != nil {
 		slog.Error("persist wrap-up message", "error", err)
 	}
@@ -479,11 +479,11 @@ func (r *Runner) drainQueue(sessionID string) {
 	}()
 }
 
-func filterTools(defs []llm.ToolDef, opts RunOpts) []llm.ToolDef {
+func filterTools(defs []llmclient.ToolDef, opts RunOpts) []llmclient.ToolDef {
 	if opts.AllowTools == nil && len(opts.DenyTools) == 0 {
 		return defs
 	}
-	out := make([]llm.ToolDef, 0, len(defs))
+	out := make([]llmclient.ToolDef, 0, len(defs))
 	for _, d := range defs {
 		if opts.DenyTools[d.Name] {
 			continue
@@ -498,7 +498,7 @@ func filterTools(defs []llm.ToolDef, opts RunOpts) []llm.ToolDef {
 
 // resolveTxtModel looks up llm_provider by name (agent.txt_model) and returns
 // the chat client plus the model id defined on that provider row.
-func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llm.Provider, string, error) {
+func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llmclient.Provider, string, error) {
 	apiBase, apiKey, model, err := r.deps.Store.ProviderCreds(ctx, name)
 	if err != nil {
 		return nil, "", err
@@ -509,7 +509,7 @@ func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llm.Provider
 		return p, model, nil
 	}
 	r.provMu.Unlock()
-	p := llm.NewOpenAIProvider(name, apiBase, apiKey, "")
+	p := llmclient.NewOpenAIProvider(name, apiBase, apiKey, "")
 	r.provMu.Lock()
 	if existing, ok := r.provCache[name]; ok {
 		r.provMu.Unlock()
@@ -520,8 +520,8 @@ func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llm.Provider
 	return p, model, nil
 }
 
-func (r *Runner) streamRound(ctx context.Context, p llm.Provider, req llm.ChatRequest, onEvent func(Event)) (*llm.ChatResponse, error) {
-	return p.ChatStream(ctx, req, func(c llm.StreamChunk) {
+func (r *Runner) streamRound(ctx context.Context, p llmclient.Provider, req llmclient.ChatRequest, onEvent func(Event)) (*llmclient.ChatResponse, error) {
+	return p.ChatStream(ctx, req, func(c llmclient.StreamChunk) {
 		if c.Thinking != "" {
 			emit(onEvent, Event{Type: "thinking", Content: c.Thinking})
 		}
@@ -592,8 +592,8 @@ func emit(onEvent func(Event), ev Event) {
 	onEvent(ev)
 }
 
-func toLLM(m store.Message) llm.Message {
-	out := llm.Message{
+func toLLM(m store.Message) llmclient.Message {
+	out := llmclient.Message{
 		Role:       m.Role,
 		Content:    m.Content,
 		Thinking:   m.Thinking,
@@ -601,9 +601,9 @@ func toLLM(m store.Message) llm.Message {
 		ToolName:   m.ToolName,
 	}
 	if len(m.ToolCalls) > 0 {
-		out.ToolCalls = make([]llm.ToolCall, len(m.ToolCalls))
+		out.ToolCalls = make([]llmclient.ToolCall, len(m.ToolCalls))
 		for i, tc := range m.ToolCalls {
-			out.ToolCalls[i] = llm.ToolCall{
+			out.ToolCalls[i] = llmclient.ToolCall{
 				ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments,
 			}
 		}
@@ -611,7 +611,7 @@ func toLLM(m store.Message) llm.Message {
 	return out
 }
 
-func toStoreToolCalls(tcs []llm.ToolCall) []store.ToolCall {
+func toStoreToolCalls(tcs []llmclient.ToolCall) []store.ToolCall {
 	if len(tcs) == 0 {
 		return nil
 	}
@@ -622,11 +622,11 @@ func toStoreToolCalls(tcs []llm.ToolCall) []store.ToolCall {
 	return out
 }
 
-func toolCallKey(tcs []llm.ToolCall) string {
+func toolCallKey(tcs []llmclient.ToolCall) string {
 	if len(tcs) == 0 {
 		return ""
 	}
-	sorted := append([]llm.ToolCall(nil), tcs...)
+	sorted := append([]llmclient.ToolCall(nil), tcs...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
 	b, _ := json.Marshal(sorted)
 	return string(b)
@@ -638,6 +638,16 @@ func truncateToolResult(s string) string {
 		return s
 	}
 	return s[:max] + "\n...[truncated]"
+}
+
+// formatToolError keeps command/tool output (stdout/stderr) when execution fails.
+func formatToolError(output string, err error) string {
+	msg := "error: " + err.Error()
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return msg
+	}
+	return output + "\n" + msg
 }
 
 func firstUserMessage(history []store.Message, current string) string {
@@ -747,7 +757,7 @@ func (r *Runner) RunChild(ctx context.Context, opts tool.ChildRunOpts, onDelta f
 }
 
 // SetProvider injects a cached LLM provider (tests / overrides).
-func (r *Runner) SetProvider(name string, p llm.Provider) {
+func (r *Runner) SetProvider(name string, p llmclient.Provider) {
 	r.provMu.Lock()
 	defer r.provMu.Unlock()
 	r.provCache[name] = p

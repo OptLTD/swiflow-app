@@ -14,9 +14,8 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 
-	"github.com/OptLTD/swiflow/internal/browser"
-	"github.com/OptLTD/swiflow/internal/secure"
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/browser"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 const ToolBrowser = "browser"
@@ -48,8 +47,8 @@ func (t *browserTool) Parameters() map[string]any {
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
-				"type": "string",
-				"enum": []string{"navigate", "content", "screenshot", "click", "type", "eval"},
+				"type":        "string",
+				"enum":        []string{"navigate", "content", "screenshot", "click", "type", "eval"},
 				"description": "navigate: open URL; content: page text; screenshot: PNG to workspace; click/type: interact with selector; eval: run JS.",
 			},
 			"url": map[string]any{
@@ -102,7 +101,7 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		if url == "" {
 			return "", fmt.Errorf("url is required for navigate")
 		}
-		if err := secure.CheckURL(url); err != nil {
+		if err := support.CheckURL(url); err != nil {
 			return "", err
 		}
 		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
@@ -148,13 +147,13 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 	case "screenshot":
 		name, _ := args["filename"].(string)
 		if name == "" {
-			name = "shot-" + util.NewID() + ".png"
+			name = "shot-" + support.NewID() + ".png"
 		}
 		if !strings.HasSuffix(strings.ToLower(name), ".png") {
 			name += ".png"
 		}
 		rel := filepath.Join("browser", filepath.Base(name))
-		full, err := secure.SandboxPath(t.ws.Base, rel)
+		full, err := support.SandboxPath(t.ws.Base, rel)
 		if err != nil {
 			return "", err
 		}

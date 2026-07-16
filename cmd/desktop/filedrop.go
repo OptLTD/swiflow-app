@@ -8,7 +8,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/OptLTD/swiflow/internal/config"
-	"github.com/OptLTD/swiflow/internal/workspace"
+	"github.com/OptLTD/swiflow/library/workspace"
 )
 
 func bindWorkspaceFileDrop(win *application.WebviewWindow, cfg config.Config) {

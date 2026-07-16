@@ -8,7 +8,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 func TestPostgresCRUDSmoke(t *testing.T) {
@@ -29,7 +29,7 @@ func TestPostgresCRUDSmoke(t *testing.T) {
 	defer st.Close()
 
 	p := &store.Provider{
-		ID: util.NewID(), Name: "pg-smoke",
+		ID: support.NewID(), Name: "pg-smoke",
 		ApiBase: "http://127.0.0.1:9/v1", ApiKey: "sk-test",
 		Model: "gpt-4o-mini", Enabled: true,
 	}
@@ -41,7 +41,7 @@ func TestPostgresCRUDSmoke(t *testing.T) {
 		t.Fatalf("creds: %s %s %s err=%v", base, key, model, err)
 	}
 	a := &store.Agent{
-		ID: util.NewID(), Key: "pg-default", TxtModel: "pg-smoke", Display: "PG",
+		ID: support.NewID(), Key: "pg-default", TxtModel: "pg-smoke", Display: "PG",
 	}
 	if err := st.CreateAgent(ctx, a); err != nil {
 		t.Fatal(err)

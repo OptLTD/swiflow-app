@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 func (s *Store) CreateExperience(ctx context.Context, e *store.Experience) error {
 	if e.ID == "" {
-		e.ID = util.NewID()
+		e.ID = support.NewID()
 	}
 	tags, _ := json.Marshal(e.Tags)
 	if len(tags) == 0 {

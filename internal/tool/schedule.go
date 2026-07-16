@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 type jobScheduler interface {
@@ -94,7 +94,7 @@ func (t *scheduleCreateTool) Execute(ctx context.Context, args map[string]any) (
 		return "", fmt.Errorf("unknown agent: %s", agentKey)
 	}
 	job := &store.CronJob{
-		ID: util.NewID(), Name: name, Agent: agentKey,
+		ID: support.NewID(), Name: name, Agent: agentKey,
 		Message: message, Schedule: schedExpr, Enabled: true,
 	}
 	if err := t.base.sched.AddJob(ctx, job); err != nil {

@@ -15,16 +15,14 @@ import (
 
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
-	"github.com/OptLTD/swiflow/internal/browser"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/schedule"
-	"github.com/OptLTD/swiflow/internal/seed"
 	"github.com/OptLTD/swiflow/internal/server"
-	"github.com/OptLTD/swiflow/internal/sesshub"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store/sqlstore"
 	"github.com/OptLTD/swiflow/internal/tool"
-	"github.com/OptLTD/swiflow/internal/window"
+	"github.com/OptLTD/swiflow/library/browser"
+	"github.com/OptLTD/swiflow/library/window"
 )
 
 var autoMigrate bool
@@ -70,7 +68,7 @@ func runServe() error {
 	defer st.Close()
 
 	if autoMigrate {
-		if err := seed.EnsureDefaults(context.Background(), st); err != nil {
+		if err := appdb.EnsureDefaults(context.Background(), st); err != nil {
 			return fmt.Errorf("seed: %w", err)
 		}
 	}
@@ -86,6 +84,14 @@ func runServe() error {
 	})
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
+	tool.RegisterDocument(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, tool.DocumentOptions{
+		Enabled:   cfg.Tools.DocumentEnabled,
+		BaseURL:   cfg.Tools.DocumentBaseURL,
+		APIKey:    cfg.Tools.DocumentAPIKey,
+		Model:     cfg.Tools.DocumentModel,
+		Timeout:   time.Duration(cfg.Tools.DocumentTimeout) * time.Second,
+		Workspace: cfg.WorkspaceDir,
+	})
 
 	winBridge := window.NewBridge()
 	tool.RegisterWindow(toolsReg, winBridge, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
@@ -120,7 +126,7 @@ func runServe() error {
 	}
 	defer mcpMgr.Close()
 
-	events := sesshub.New()
+	events := server.NewSessionHub()
 
 	runner := agent.NewRunner(agent.RunnerDeps{
 		Store:              st,

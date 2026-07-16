@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OptLTD/swiflow/internal/secure"
-	"github.com/OptLTD/swiflow/internal/workspace"
+	"github.com/OptLTD/swiflow/library/support"
+	"github.com/OptLTD/swiflow/library/workspace"
 )
 
 const maxWorkspaceUpload = workspace.MaxFileSize
@@ -30,7 +30,7 @@ func (s *Server) listWorkspace(w http.ResponseWriter, r *http.Request) {
 	if dir == "" {
 		dir = "."
 	}
-	full, err := secure.SandboxPath(s.cfg.WorkspaceDir, dir)
+	full, err := support.SandboxPath(s.cfg.WorkspaceDir, dir)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -102,7 +102,7 @@ func (s *Server) readWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
 		return
 	}
-	full, err := secure.SandboxPath(s.cfg.WorkspaceDir, path)
+	full, err := support.SandboxPath(s.cfg.WorkspaceDir, path)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -175,7 +175,7 @@ func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
 	if dir == "" {
 		dir = "."
 	}
-	destDir, err := secure.SandboxPath(s.cfg.WorkspaceDir, dir)
+	destDir, err := support.SandboxPath(s.cfg.WorkspaceDir, dir)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -220,7 +220,7 @@ func saveUploadedFile(workspaceDir, dir string, fh *multipart.FileHeader) (uploa
 	if dir != "." {
 		rel = filepath.ToSlash(filepath.Join(dir, name))
 	}
-	full, err := secure.SandboxPath(workspaceDir, rel)
+	full, err := support.SandboxPath(workspaceDir, rel)
 	if err != nil {
 		return uploadedFile{}, err
 	}

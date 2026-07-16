@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/OptLTD/swiflow/internal/browser"
 	"github.com/OptLTD/swiflow/internal/tool"
+	"github.com/OptLTD/swiflow/library/browser"
 )
 
 func TestBrowserToolDisabled(t *testing.T) {

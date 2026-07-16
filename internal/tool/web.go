@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/OptLTD/swiflow/internal/httputil"
-	"github.com/OptLTD/swiflow/internal/secure"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 type webFetchTool struct {
@@ -32,7 +32,7 @@ func (t *webFetchTool) Parameters() map[string]any {
 }
 func (t *webFetchTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	rawURL, _ := args["url"].(string)
-	if err := secure.CheckURL(rawURL); err != nil {
+	if err := support.CheckURL(rawURL); err != nil {
 		return "", err
 	}
 	maxChars := 20000

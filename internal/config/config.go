@@ -19,14 +19,14 @@ type Config struct {
 	DBPath string `json:"db_path"`
 	// DBDSN is the Postgres connection string (when DBDriver=postgres),
 	// e.g. postgres://user:pass@localhost:5432/swiflow?sslmode=disable.
-	DBDSN          string      `json:"db_dsn"`
-	AuthToken      string      `json:"auth_token"`
-	EncryptionKey  string      `json:"encryption_key"`
-	WorkspaceDir   string      `json:"workspace_dir"`
-	InitSkillsDir  string      `json:"init_skills_dir"`
-	UserSkillsDir  string      `json:"user_skills_dir"`
-	AllowedOrigins []string    `json:"allowed_origins"`
-	MaxHistoryMsgs int         `json:"max_history_msgs"`
+	DBDSN          string   `json:"db_dsn"`
+	AuthToken      string   `json:"auth_token"`
+	EncryptionKey  string   `json:"encryption_key"`
+	WorkspaceDir   string   `json:"workspace_dir"`
+	InitSkillsDir  string   `json:"init_skills_dir"`
+	UserSkillsDir  string   `json:"user_skills_dir"`
+	AllowedOrigins []string `json:"allowed_origins"`
+	MaxHistoryMsgs int      `json:"max_history_msgs"`
 	// MaxConcurrentRuns caps in-flight Runner.Run calls globally; 0 = unlimited.
 	MaxConcurrentRuns int `json:"max_concurrent_runs"`
 	// ToolTimeoutSec wraps each tool Execute; 0 = 120s default.
@@ -37,9 +37,14 @@ type Config struct {
 
 // ToolsConfig controls optional tools.
 type ToolsConfig struct {
-	ExecEnabled     bool `json:"exec_enabled"`
-	BrowserEnabled  bool `json:"browser_enabled"`
-	BrowserHeadless bool `json:"browser_headless"`
+	ExecEnabled     bool   `json:"exec_enabled"`
+	BrowserEnabled  bool   `json:"browser_enabled"`
+	BrowserHeadless bool   `json:"browser_headless"`
+	DocumentEnabled bool   `json:"document_enabled"`
+	DocumentBaseURL string `json:"document_base_url"`
+	DocumentAPIKey  string `json:"document_api_key"`
+	DocumentModel   string `json:"document_model"`
+	DocumentTimeout int    `json:"document_timeout_sec"`
 	// web search
 	SearchProvider string `json:"search_provider"` // duckduckgo|brave|searxng; empty = disabled
 	SearchBaseURL  string `json:"search_base_url"` // searxng base URL
@@ -56,7 +61,11 @@ func Default() Config {
 		UserSkillsDir:  "./data/user-skills",
 		WorkspaceDir:   "./data/workspace",
 		MaxHistoryMsgs: 100,
-		Tools:          ToolsConfig{BrowserHeadless: true},
+		Tools: ToolsConfig{
+			BrowserHeadless: true,
+			DocumentModel:   "gpt-4o-mini",
+			DocumentTimeout: 120,
+		},
 	}
 }
 
@@ -121,6 +130,23 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("SWIFLOW_BROWSER"); v != "" {
 		cfg.Tools.BrowserEnabled = v == "1" || v == "true"
+	}
+	if v := os.Getenv("SWIFLOW_DOCUMENT"); v != "" {
+		cfg.Tools.DocumentEnabled = v == "1" || v == "true"
+	}
+	if v := os.Getenv("SWIFLOW_DOCUMENT_BASE_URL"); v != "" {
+		cfg.Tools.DocumentBaseURL = v
+	}
+	if v := os.Getenv("SWIFLOW_DOCUMENT_API_KEY"); v != "" {
+		cfg.Tools.DocumentAPIKey = v
+	}
+	if v := os.Getenv("SWIFLOW_DOCUMENT_MODEL"); v != "" {
+		cfg.Tools.DocumentModel = v
+	}
+	if v := os.Getenv("SWIFLOW_DOCUMENT_TIMEOUT_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Tools.DocumentTimeout = n
+		}
 	}
 	if v := os.Getenv("SWIFLOW_SEARCH_PROVIDER"); v != "" {
 		cfg.Tools.SearchProvider = v

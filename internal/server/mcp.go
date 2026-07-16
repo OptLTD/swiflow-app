@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 func (s *Server) listMCPServers(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +55,7 @@ func (s *Server) createMCPServer(w http.ResponseWriter, r *http.Request) {
 		enabled = *in.Enabled
 	}
 	srv := &store.MCPServer{
-		ID: util.NewID(), Name: in.Name,
+		ID: support.NewID(), Name: in.Name,
 		Type: in.Type, Cmd: in.Cmd, Args: in.Args,
 		URL: in.URL, Env: in.Env, Enabled: enabled,
 	}

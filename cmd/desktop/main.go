@@ -22,16 +22,14 @@ import (
 	emb "github.com/OptLTD/swiflow/embed"
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
-	"github.com/OptLTD/swiflow/internal/browser"
 	"github.com/OptLTD/swiflow/internal/config"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/schedule"
-	"github.com/OptLTD/swiflow/internal/seed"
 	"github.com/OptLTD/swiflow/internal/server"
-	"github.com/OptLTD/swiflow/internal/sesshub"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/tool"
-	"github.com/OptLTD/swiflow/internal/window"
+	"github.com/OptLTD/swiflow/library/browser"
+	"github.com/OptLTD/swiflow/library/window"
 )
 
 func main() {
@@ -164,9 +162,11 @@ func ensureDesktopConfig() (string, error) {
 		"user_skills_dir":  filepath.Join(dir, "data", "user-skills"),
 		"allowed_origins":  []string{"*"},
 		"max_history_msgs": 100, "tools": map[string]any{
-			"exec_enabled":     true,
-			"browser_enabled":  true,
-			"browser_headless": true,
+			"exec_enabled":         true,
+			"browser_enabled":      true,
+			"browser_headless":     true,
+			"document_model":       "gpt-4o-mini",
+			"document_timeout_sec": 120,
 		},
 	}
 	raw, err := json.MarshalIndent(cfg, "", "  ")
@@ -216,7 +216,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		slog.Error("open/migrate db", "error", err)
 		os.Exit(1)
 	}
-	if err := seed.EnsureDefaults(ctx, st); err != nil {
+	if err := appdb.EnsureDefaults(ctx, st); err != nil {
 		slog.Error("seed", "error", err)
 		os.Exit(1)
 	}
@@ -232,6 +232,14 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	})
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
+	tool.RegisterDocument(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, tool.DocumentOptions{
+		Enabled:   cfg.Tools.DocumentEnabled,
+		BaseURL:   cfg.Tools.DocumentBaseURL,
+		APIKey:    cfg.Tools.DocumentAPIKey,
+		Model:     cfg.Tools.DocumentModel,
+		Timeout:   time.Duration(cfg.Tools.DocumentTimeout) * time.Second,
+		Workspace: cfg.WorkspaceDir,
+	})
 
 	winBridge := window.NewBridge()
 	tool.RegisterWindow(toolsReg, winBridge, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
@@ -264,7 +272,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		slog.Warn("mcp initial sync", "error", err)
 	}
 
-	events := sesshub.New()
+	events := server.NewSessionHub()
 
 	runner := agent.NewRunner(agent.RunnerDeps{
 		Store:              st,

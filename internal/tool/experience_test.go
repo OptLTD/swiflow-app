@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/internal/testutil"
+	"github.com/OptLTD/swiflow/internal/store/testutil"
 	"github.com/OptLTD/swiflow/internal/tool"
 )
 

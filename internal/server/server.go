@@ -14,13 +14,11 @@ import (
 	"github.com/OptLTD/swiflow/internal/config"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/schedule"
-	"github.com/OptLTD/swiflow/internal/secure"
-	"github.com/OptLTD/swiflow/internal/sesshub"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store"
 	"github.com/OptLTD/swiflow/internal/tool"
-	"github.com/OptLTD/swiflow/internal/util"
-	"github.com/OptLTD/swiflow/internal/window"
+	"github.com/OptLTD/swiflow/library/support"
+	"github.com/OptLTD/swiflow/library/window"
 )
 
 // Server is the HTTP API server.
@@ -32,12 +30,12 @@ type Server struct {
 	skills *skill.Catalog
 	mcp    *mcpclient.Manager
 	cron   *schedule.Scheduler
-	events *sesshub.Hub
+	events *SessionHub
 	window *window.Bridge
 }
 
 // New constructs a server.
-func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *sesshub.Hub, win *window.Bridge) *Server {
+func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *SessionHub, win *window.Bridge) *Server {
 	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, window: win}
 	if win != nil && events != nil {
 		win.SetFallback(func(sessionID string, ev window.Event) {
@@ -117,7 +115,7 @@ func (s *Server) requestLogMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		rid := r.Header.Get("X-Request-Id")
 		if rid == "" {
-			rid = util.NewID()
+			rid = support.NewID()
 		}
 		w.Header().Set("X-Request-Id", rid)
 		rw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
@@ -281,7 +279,7 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 	if in.Model == "" {
 		in.Model = "gpt-4o-mini"
 	}
-	if err := secure.ValidateHTTPURL(in.ApiBase); err != nil {
+	if err := support.ValidateHTTPURL(in.ApiBase); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -290,7 +288,7 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 		enabled = *in.Enabled
 	}
 	p := &store.Provider{
-		ID:      util.NewID(),
+		ID:      support.NewID(),
 		Name:    in.Name,
 		Display: in.Display,
 		ApiBase: in.ApiBase,
@@ -361,10 +359,10 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Key         string `json:"key"`
-		Display     string `json:"display"`
-		TxtModel    string `json:"txt_model"`
-		ImgModel    string `json:"img_model"`
+		Key       string `json:"key"`
+		Display   string `json:"display"`
+		TxtModel  string `json:"txt_model"`
+		ImgModel  string `json:"img_model"`
 		SysPrompt string `json:"sys_prompt"`
 	}
 	if !bindJSON(w, r, &in) {
@@ -388,7 +386,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a := &store.Agent{
-		ID:        util.NewID(),
+		ID:        support.NewID(),
 		Key:       in.Key,
 		Display:   in.Display,
 		TxtModel:  in.TxtModel,
@@ -421,9 +419,9 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Display     *string `json:"display"`
-		TxtModel    *string `json:"txt_model"`
-		ImgModel    *string `json:"img_model"`
+		Display   *string `json:"display"`
+		TxtModel  *string `json:"txt_model"`
+		ImgModel  *string `json:"img_model"`
 		SysPrompt *string `json:"sys_prompt"`
 	}
 	if !bindJSON(w, r, &in) {
@@ -645,9 +643,10 @@ func (s *Server) listTools(w http.ResponseWriter, _ *http.Request) {
 		out = append(out, t)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"tools":           out,
-		"exec_enabled":    s.cfg.Tools.ExecEnabled,
-		"browser_enabled": s.cfg.Tools.BrowserEnabled,
+		"tools":            out,
+		"exec_enabled":     s.cfg.Tools.ExecEnabled,
+		"browser_enabled":  s.cfg.Tools.BrowserEnabled,
+		"document_enabled": s.cfg.Tools.DocumentEnabled,
 	})
 }
 
@@ -668,6 +667,12 @@ func (s *Server) setToolEnabled(w http.ResponseWriter, r *http.Request) {
 	if in.Enabled && tool.IsBrowserTool(name) && !s.cfg.Tools.BrowserEnabled {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "browser tool requires tools.browser_enabled or SWIFLOW_BROWSER=true in config",
+		})
+		return
+	}
+	if in.Enabled && tool.IsDocumentTool(name) && !s.cfg.Tools.DocumentEnabled {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "document tool requires tools.document_enabled or SWIFLOW_DOCUMENT=true in config",
 		})
 		return
 	}

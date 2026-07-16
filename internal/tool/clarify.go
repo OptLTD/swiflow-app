@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/OptLTD/swiflow/internal/window"
+	"github.com/OptLTD/swiflow/library/window"
 )
 
 type clarifyTool struct {

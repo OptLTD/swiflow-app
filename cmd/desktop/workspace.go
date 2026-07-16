@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/OptLTD/swiflow/internal/config"
-	"github.com/OptLTD/swiflow/internal/workspace"
+	"github.com/OptLTD/swiflow/library/workspace"
 )
 
 // Workspace exposes workspace file reads to the desktop frontend via Wails IPC.

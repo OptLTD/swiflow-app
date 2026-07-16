@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/OptLTD/swiflow/internal/tool"
@@ -83,6 +84,19 @@ func TestExecDisabled(t *testing.T) {
 	}
 	if len(reg.Definitions()) != 0 {
 		t.Fatal("disabled exec should not be advertised to the LLM")
+	}
+}
+
+func TestExecFailureIncludesOutput(t *testing.T) {
+	reg := tool.NewRegistry()
+	tool.RegisterExec(reg, tool.WorkspaceRoots{Base: t.TempDir()}, true)
+	tl, _ := reg.Get("exec")
+	out, err := tl.Execute(context.Background(), map[string]any{"command": "sh -c 'echo boom 1>&2; exit 1'"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(out, "boom") {
+		t.Fatalf("expected stderr in output, got %q", out)
 	}
 }
 

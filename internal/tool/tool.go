@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/OptLTD/swiflow/internal/llm"
+	"github.com/OptLTD/swiflow/internal/llmclient"
 )
 
 // Tool is a capability an agent may invoke.
@@ -82,13 +82,13 @@ func (r *Registry) UnregisterPrefix(prefix string) {
 }
 
 // Definitions returns tool defs for all enabled tools, for advertising to the LLM.
-func (r *Registry) Definitions() []llm.ToolDef {
-	out := make([]llm.ToolDef, 0, len(r.tools))
+func (r *Registry) Definitions() []llmclient.ToolDef {
+	out := make([]llmclient.ToolDef, 0, len(r.tools))
 	for _, t := range r.tools {
 		if r.disabled[t.Name()] {
 			continue
 		}
-		out = append(out, llm.ToolDef{
+		out = append(out, llmclient.ToolDef{
 			Name:        t.Name(),
 			Description: t.Description(),
 			Parameters:  t.Parameters(),

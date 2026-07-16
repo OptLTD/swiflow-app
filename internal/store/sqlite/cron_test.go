@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/internal/testutil"
+	"github.com/OptLTD/swiflow/internal/store/testutil"
 )
 
 func TestCronJobCRUD(t *testing.T) {

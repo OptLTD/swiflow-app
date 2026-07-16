@@ -11,7 +11,7 @@ import (
 
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/internal/util"
+	"github.com/OptLTD/swiflow/library/support"
 )
 
 // EventPublisher broadcasts agent events to session watchers (optional).
@@ -90,7 +90,7 @@ func (s *Scheduler) runJob(jobID string) {
 	if err != nil || !job.Enabled {
 		return
 	}
-	sessionID := util.NewID()
+	sessionID := support.NewID()
 	slog.Info("cron job running", "job", job.Name, "session", sessionID)
 	err = s.runner.Run(ctx, sessionID, job.Agent, job.Message, func(ev agent.Event) {
 		if ev.Type == "error" {

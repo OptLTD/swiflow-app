@@ -7,41 +7,41 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/OptLTD/swiflow/internal/llm"
-	"github.com/OptLTD/swiflow/internal/testutil"
+	"github.com/OptLTD/swiflow/internal/llmclient"
+	"github.com/OptLTD/swiflow/internal/store/testutil"
 	"github.com/OptLTD/swiflow/internal/tool"
 )
 
 // scriptedProvider returns canned ChatResponses in order.
 type scriptedProvider struct {
 	mu    sync.Mutex
-	steps []*llm.ChatResponse
+	steps []*llmclient.ChatResponse
 	i     int
 }
 
 func (p *scriptedProvider) Name() string         { return "openai" }
 func (p *scriptedProvider) DefaultModel() string { return "mock" }
 
-func (p *scriptedProvider) Chat(ctx context.Context, req llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *scriptedProvider) Chat(ctx context.Context, req llmclient.ChatRequest) (*llmclient.ChatResponse, error) {
 	return p.next()
 }
 
-func (p *scriptedProvider) ChatStream(ctx context.Context, req llm.ChatRequest, onChunk func(llm.StreamChunk)) (*llm.ChatResponse, error) {
+func (p *scriptedProvider) ChatStream(ctx context.Context, req llmclient.ChatRequest, onChunk func(llmclient.StreamChunk)) (*llmclient.ChatResponse, error) {
 	resp, err := p.next()
 	if err != nil {
 		return nil, err
 	}
 	if resp.Content != "" && onChunk != nil {
-		onChunk(llm.StreamChunk{Content: resp.Content})
+		onChunk(llmclient.StreamChunk{Content: resp.Content})
 	}
 	return resp, nil
 }
 
-func (p *scriptedProvider) next() (*llm.ChatResponse, error) {
+func (p *scriptedProvider) next() (*llmclient.ChatResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.i >= len(p.steps) {
-		return &llm.ChatResponse{Content: "unexpected extra call", FinishReason: "stop"}, nil
+		return &llmclient.ChatResponse{Content: "unexpected extra call", FinishReason: "stop"}, nil
 	}
 	resp := p.steps[p.i]
 	p.i++
@@ -56,10 +56,10 @@ func TestDelegateTaskSummary(t *testing.T) {
 	// Register a noop so whitelist filtering can be exercised separately;
 	// this test uses child with no tools (one-shot text reply).
 	prov := &scriptedProvider{
-		steps: []*llm.ChatResponse{
+		steps: []*llmclient.ChatResponse{
 			// Parent: request delegate_task
 			{
-				ToolCalls: []llm.ToolCall{{
+				ToolCalls: []llmclient.ToolCall{{
 					ID:   "call1",
 					Name: "delegate_task",
 					Arguments: map[string]any{
@@ -132,9 +132,9 @@ func TestDelegateToolsWhitelist(t *testing.T) {
 
 	var childToolNames []string
 	prov := &scriptedProvider{
-		steps: []*llm.ChatResponse{
+		steps: []*llmclient.ChatResponse{
 			{
-				ToolCalls: []llm.ToolCall{{
+				ToolCalls: []llmclient.ToolCall{{
 					ID:   "c1",
 					Name: "delegate_task",
 					Arguments: map[string]any{
@@ -152,7 +152,7 @@ func TestDelegateToolsWhitelist(t *testing.T) {
 	}
 
 	// Wrap provider to capture tools offered on 2nd call (child).
-	capturing := &captureToolsProvider{inner: prov, onCall: func(i int, tools []llm.ToolDef) {
+	capturing := &captureToolsProvider{inner: prov, onCall: func(i int, tools []llmclient.ToolDef) {
 		if i == 1 {
 			for _, d := range tools {
 				childToolNames = append(childToolNames, d.Name)
@@ -196,13 +196,13 @@ func (t *echoTool) Execute(ctx context.Context, args map[string]any) (string, er
 
 type captureToolsProvider struct {
 	inner  *scriptedProvider
-	onCall func(i int, tools []llm.ToolDef)
+	onCall func(i int, tools []llmclient.ToolDef)
 	n      int
 }
 
 func (p *captureToolsProvider) Name() string         { return p.inner.Name() }
 func (p *captureToolsProvider) DefaultModel() string { return p.inner.DefaultModel() }
-func (p *captureToolsProvider) Chat(ctx context.Context, req llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *captureToolsProvider) Chat(ctx context.Context, req llmclient.ChatRequest) (*llmclient.ChatResponse, error) {
 	i := p.n
 	p.n++
 	if p.onCall != nil {
@@ -210,7 +210,7 @@ func (p *captureToolsProvider) Chat(ctx context.Context, req llm.ChatRequest) (*
 	}
 	return p.inner.Chat(ctx, req)
 }
-func (p *captureToolsProvider) ChatStream(ctx context.Context, req llm.ChatRequest, onChunk func(llm.StreamChunk)) (*llm.ChatResponse, error) {
+func (p *captureToolsProvider) ChatStream(ctx context.Context, req llmclient.ChatRequest, onChunk func(llmclient.StreamChunk)) (*llmclient.ChatResponse, error) {
 	i := p.n
 	p.n++
 	if p.onCall != nil {
