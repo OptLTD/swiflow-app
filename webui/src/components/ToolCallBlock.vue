@@ -1,9 +1,45 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
-const props = defineProps<{ name: string; args?: any; content: string; isError?: boolean }>()
-const emit = defineEmits<{ openSession: [key: string, title?: string] }>()
+const props = defineProps<{
+  name: string
+  args?: any
+  content: string
+  isError?: boolean
+  progress?: string
+  childSession?: string
+  startedAt?: number
+  endedAt?: number
+}>()
+const emit = defineEmits<{ viewChild: [key: string] }>()
 const open = ref(false) // collapsed by default
+
+// Live clock so the elapsed time keeps ticking while the tool is running.
+const now = ref(Date.now())
+let timer: number | undefined
+onMounted(() => {
+  timer = window.setInterval(() => {
+    if (running.value) now.value = Date.now()
+  }, 1000)
+})
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+})
+
+function fmtDur(ms: number): string {
+  if (ms < 0) ms = 0
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const rem = s % 60
+  return rem ? `${m}m${rem}s` : `${m}m`
+}
+
+const elapsed = computed(() => {
+  if (!props.startedAt) return ''
+  const end = props.endedAt ?? now.value
+  return fmtDur(end - props.startedAt)
+})
 
 function pick(a: any, k: string): string {
   const v = a?.[k]
@@ -13,8 +49,12 @@ function trim(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + '…' : s
 }
 
+// Prefer the live child-session key from progress events; fall back to the final
+// delegate_task result JSON once the call completes.
 const childSession = computed(() => {
-  if (props.name !== 'delegate_task' || !props.content) return ''
+  if (props.name !== 'delegate_task') return ''
+  if (props.childSession) return props.childSession
+  if (!props.content) return ''
   try {
     const j = JSON.parse(props.content)
     return typeof j.child_session === 'string' ? j.child_session : ''
@@ -100,12 +140,15 @@ const body = computed(() => {
   return out
 })
 
-// Done when we have a result body or an explicit error (empty body alone = still running).
-const running = computed(() => !props.isError && !(props.content && props.content.length > 0))
+// Running while we have no final result yet (tool_result not received).
+const running = computed(() => {
+  if (props.isError) return false
+  return !props.content
+})
 
-function openChild(e: Event) {
+function viewChild(e: Event) {
   e.stopPropagation()
-  if (childSession.value) emit('openSession', childSession.value, 'Subagent')
+  if (childSession.value) emit('viewChild', childSession.value)
 }
 </script>
 
@@ -120,17 +163,30 @@ function openChild(e: Event) {
         <span class="truncate">{{ intent }}</span>
         <span class="text-neutral-400 font-mono shrink-0">{{ name }}</span>
       </span>
-      <span class="shrink-0 flex items-center gap-1" :class="isError ? 'text-red-600' : 'text-green-600'">
-        <template v-if="running"><span class="swiflow-spin"></span><span class="text-neutral-500">running</span></template>
-        <template v-else>{{ isError ? 'error' : 'ok' }}</template>
+      <span class="shrink-0 flex items-center gap-1.5">
+        <span v-if="elapsed" class="text-neutral-400 tabular-nums">{{ elapsed }}</span>
+        <span class="flex items-center gap-1" :class="isError ? 'text-red-600' : 'text-green-600'">
+          <template v-if="running"><span class="swiflow-spin"></span><span class="text-neutral-500">running</span></template>
+          <template v-else>{{ isError ? 'error' : 'ok' }}</template>
+        </span>
       </span>
     </button>
-    <div v-if="childSession && !isError" class="px-2 py-1 bg-neutral-50 border-t border-neutral-100">
+    <div
+      v-if="name === 'delegate_task' && running && progress"
+      class="px-2 py-1 bg-neutral-50 border-t border-neutral-100 flex items-center gap-1.5 text-neutral-500 truncate"
+    >
+      <span class="swiflow-spin shrink-0"></span>
+      <span class="truncate">{{ progress }}</span>
+    </div>
+    <div
+      v-if="name === 'delegate_task' && !running && !isError && childSession"
+      class="px-2 py-1 bg-neutral-50 border-t border-neutral-100"
+    >
       <button
         type="button"
-        class="text-neutral-700 hover:underline font-mono"
-        @click="openChild"
-      >Open {{ childSession }}</button>
+        class="text-neutral-700 hover:underline"
+        @click="viewChild"
+      >查看子任务过程</button>
     </div>
     <pre v-show="open" class="p-2 whitespace-pre-wrap max-h-64 overflow-y-auto bg-neutral-50 border-t border-neutral-100">{{ body }}</pre>
   </div>

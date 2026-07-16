@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/library/support"
 )
 
 // ChildRunner runs an isolated agent turn for delegate_task (implemented by agent.Runner).
 type ChildRunner interface {
-	RunChild(ctx context.Context, opts ChildRunOpts, onDelta func(string)) error
+	RunChild(ctx context.Context, opts ChildRunOpts, onDelta func(string)) (ChildResult, error)
+	LastAssistantContent(ctx context.Context, sessionID string) string
 }
 
 // ChildRunOpts configures a subagent run.
@@ -19,8 +23,35 @@ type ChildRunOpts struct {
 	AgentKey    string
 	UserMessage string
 	MaxRounds   int
-	// AllowTools: if non-nil, only these tool names are offered (delegate_task always denied).
+	// ParentSessionID marks the child's session as owned by this parent so it
+	// stays out of the top-level session list.
+	ParentSessionID string
+	// OnProgress, when non-nil, receives the child's latest action (tool name or
+	// streamed text) so the parent UI can show live progress on the delegate block.
+	OnProgress func(ToolProgress)
+	// MaxWallClock caps the child's wall-clock independently of the parent's tool
+	// timeout; 0 = inherit parent context deadline only.
+	MaxWallClock time.Duration
+	// AllowTools: optional; if non-nil, only these tool names are offered.
+	// delegate_task does not expose this — children get the full toolkit (minus DenyTools).
 	AllowTools []string
+}
+
+// ChildMetrics summarizes a child run for the parent (kept small on purpose).
+type ChildMetrics struct {
+	Rounds    int `json:"rounds"`
+	ToolCalls int `json:"tool_calls"`
+	Failures  int `json:"failures"`
+}
+
+// ChildResult is the structured outcome of a delegated run. The parent only ever
+// sees this (plus artifacts left in the workspace) — keeping its context clean.
+type ChildResult struct {
+	Status    string       `json:"status"` // done|budget|stall|error|blocked
+	Summary   string       `json:"summary"`
+	Artifacts []string     `json:"artifacts,omitempty"`
+	Metrics   ChildMetrics `json:"metrics"`
+	Err       string       `json:"error,omitempty"`
 }
 
 type delegateTaskTool struct {
@@ -37,20 +68,22 @@ func RegisterDelegate(r *Registry, runner ChildRunner) {
 
 func (t *delegateTaskTool) Name() string { return "delegate_task" }
 func (t *delegateTaskTool) Description() string {
-	return "Spawn an isolated sub-agent with its own session and round budget. Returns only the child's final summary."
+	return "Spawn ONE isolated sub-agent for a BATCH of remaining work (own session + round budget); " +
+		"returns only its final summary. Put EVERY remaining @/ path and the output artifact " +
+		"(e.g. xlsx under workspace) inside goal — never one file per delegate_task, never invent a path/tools parameter. " +
+		"The child picks tools itself (document_extract, fs_*, etc.). Required when many attachments or table/Excel batch work remains."
 }
 func (t *delegateTaskTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"goal":       map[string]any{"type": "string", "description": "What the sub-agent should accomplish"},
-			"context":    map[string]any{"type": "string", "description": "Brief context; keep short"},
-			"max_rounds": map[string]any{"type": "integer", "description": "Child round budget (default 8, max 16)"},
-			"tools": map[string]any{
-				"type":        "array",
-				"items":       map[string]any{"type": "string"},
-				"description": "Optional tool-name whitelist for the child (omit = all except delegate_task)",
+			"goal": map[string]any{
+				"type": "string",
+				"description": "Full batch instructions for the child: list every remaining @/ path inline, " +
+					"what to extract, and where to write the deliverable (e.g. @/result.xlsx). One call covers all remaining files.",
 			},
+			"context":    map[string]any{"type": "string", "description": "Brief shared context; keep short (schema hints, column names)"},
+			"max_rounds": map[string]any{"type": "integer", "description": "Child round budget (default 10, max 16)"},
 		},
 		"required": []any{"goal"},
 	}
@@ -65,7 +98,7 @@ func (t *delegateTaskTool) Execute(ctx context.Context, args map[string]any) (st
 		return "", fmt.Errorf("goal required")
 	}
 	contextHint, _ := args["context"].(string)
-	maxRounds := 8
+	maxRounds := 10
 	switch v := args["max_rounds"].(type) {
 	case float64:
 		maxRounds = int(v)
@@ -73,19 +106,10 @@ func (t *delegateTaskTool) Execute(ctx context.Context, args map[string]any) (st
 		maxRounds = v
 	}
 	if maxRounds <= 0 {
-		maxRounds = 8
+		maxRounds = 10
 	}
 	if maxRounds > 16 {
 		maxRounds = 16
-	}
-
-	var allowTools []string
-	if raw, ok := args["tools"].([]any); ok && len(raw) > 0 {
-		for _, it := range raw {
-			if s, ok := it.(string); ok && s != "" && s != "delegate_task" {
-				allowTools = append(allowTools, s)
-			}
-		}
 	}
 
 	rc, _ := RunContextFrom(ctx)
@@ -109,25 +133,45 @@ func (t *delegateTaskTool) Execute(ctx context.Context, args map[string]any) (st
 	}
 
 	var lastAssistant string
-	err := t.runner.RunChild(ctx, ChildRunOpts{
-		SessionID:   childKey,
-		AgentKey:    agentKey,
-		UserMessage: userMsg,
-		MaxRounds:   maxRounds,
-		AllowTools:  allowTools,
+	observe.DelegateStart(parent, childKey, maxRounds)
+	t0 := time.Now()
+	result, err := t.runner.RunChild(ctx, ChildRunOpts{
+		SessionID:       childKey,
+		AgentKey:        agentKey,
+		UserMessage:     userMsg,
+		MaxRounds:       maxRounds,
+		ParentSessionID: parent,
+		OnProgress:      rc.Emit,
+		// Child gets the full toolkit (minus deny list); it chooses tools from the goal.
 	}, func(delta string) {
 		lastAssistant += delta
 	})
-	if err != nil {
+	observe.DelegateEnd(parent, childKey, time.Since(t0).Milliseconds(), err)
+
+	summary := strings.TrimSpace(result.Summary)
+	if summary == "" {
+		summary = strings.TrimSpace(lastAssistant)
+	}
+	if summary == "" {
+		summary = strings.TrimSpace(t.runner.LastAssistantContent(ctx, childKey))
+	}
+	// Hard failure with no usable work: surface the error to the parent.
+	if err != nil && summary == "" {
 		return "", fmt.Errorf("sub-agent %s: %w", childKey, err)
 	}
-	summary := lastAssistant
 	if summary == "" {
 		summary = "(sub-agent finished with empty summary)"
 	}
+	status := result.Status
+	if status == "" {
+		status = "done"
+	}
 	out, _ := json.Marshal(map[string]any{
 		"child_session": childKey,
+		"status":        status,
 		"summary":       summary,
+		"artifacts":     result.Artifacts,
+		"metrics":       result.Metrics,
 	})
 	return string(out), nil
 }

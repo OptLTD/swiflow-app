@@ -33,7 +33,6 @@ func TestWorkspaceUpload(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+e.token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -95,7 +94,6 @@ func TestWorkspaceUploadRejectsEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+e.token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

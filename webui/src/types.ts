@@ -20,6 +20,7 @@ export interface Session {
   id: string
   agent: string
   title?: string
+  parent?: string
 }
 
 export interface ToolCall {
@@ -116,6 +117,7 @@ export interface ChatEvent {
   error?: string
   title?: string
   position?: number
+  child?: string
 }
 
 export interface SkillDraft {

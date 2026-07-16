@@ -32,9 +32,9 @@ migrate:
 
 test:
 	cd webui && pnpm install && pnpm build
-	go vet ./...
-	go test ./...
-	go build ./...
+	CGO_ENABLED=0 go vet $$(go list ./... | grep -v '/cmd/desktop$$')
+	CGO_ENABLED=0 go test $$(go list ./... | grep -v '/cmd/desktop$$')
+	CGO_ENABLED=0 go build -o /dev/null ./cmd/swiflow
 
 tidy:
 	go mod tidy

@@ -14,7 +14,7 @@ import (
 func openTestDB(t *testing.T) *sqlite.Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
-	st, err := sqlite.Open(path, "test-encryption-key-16")
+	st, err := sqlite.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func openTestDB(t *testing.T) *sqlite.Store {
 	return st
 }
 
-func TestProviderEncryptAndCreds(t *testing.T) {
+func TestProviderCreds(t *testing.T) {
 	st := openTestDB(t)
 	ctx := context.Background()
 	p := &store.Provider{
@@ -86,5 +86,25 @@ func TestGetProviderByID(t *testing.T) {
 	got, err := st.GetProviderByID(ctx, "pid")
 	if err != nil || got.Name != "local" {
 		t.Fatalf("got %+v err %v", got, err)
+	}
+}
+
+func TestUpdateToolMessageByCallID(t *testing.T) {
+	st := openTestDB(t)
+	ctx := context.Background()
+	if err := st.CreateSession(ctx, &store.Session{ID: "s1", Agent: "default"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AppendMessage(ctx, "s1", store.Message{
+		ID: "t1", Role: "tool", Content: "running", ToolCallId: "call-9", ToolName: "x",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateToolMessageByCallID(ctx, "s1", "call-9", "done"); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := st.ListMessages(ctx, "s1")
+	if err != nil || len(msgs) != 1 || msgs[0].Content != "done" {
+		t.Fatalf("got %+v err %v", msgs, err)
 	}
 }

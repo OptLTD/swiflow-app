@@ -56,9 +56,31 @@ func Decrypt(key, data []byte) ([]byte, error) {
 	return gcm.Open(nil, nonce, ct, nil)
 }
 
+// NormalizeWorkspaceRel strips the chat @/ alias (workspace root) and cleans
+// leading ./ so tool args like "@/notes.txt" resolve under the workspace.
+func NormalizeWorkspaceRel(requested string) string {
+	p := strings.TrimSpace(requested)
+	p = strings.ReplaceAll(p, "\\", "/")
+	if strings.HasPrefix(p, "@/") {
+		p = p[2:]
+	} else if p == "@" {
+		p = "."
+	}
+	for strings.HasPrefix(p, "./") {
+		p = p[2:]
+	}
+	p = strings.TrimPrefix(p, "/")
+	if p == "" {
+		return "."
+	}
+	return p
+}
+
 // SandboxPath resolves requested against workspace and rejects any path that
 // escapes the workspace. Returns the cleaned absolute path.
+// Accepts workspace-relative paths and the chat alias @/… (@/ = workspace root).
 func SandboxPath(workspace, requested string) (string, error) {
+	requested = NormalizeWorkspaceRel(requested)
 	ws, err := filepath.Abs(workspace)
 	if err != nil {
 		return "", err

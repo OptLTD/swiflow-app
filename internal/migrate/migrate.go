@@ -30,10 +30,21 @@ func Apply(ctx context.Context, db *sql.DB, schemaSQL string, upgradesFS fs.FS) 
 	return nil
 }
 
-// ApplyPostgres applies the Postgres schema only (greenfield; no SQLite upgrades).
+// ApplyPostgres applies the Postgres schema, then reconciles columns that were
+// added to existing tables after their initial creation (CREATE TABLE IF NOT
+// EXISTS never alters an existing table). Postgres supports ADD COLUMN IF NOT
+// EXISTS, so each reconcile statement is idempotent.
 func ApplyPostgres(ctx context.Context, db *sql.DB, schemaSQL string) error {
 	if err := execInTx(ctx, db, schemaSQL); err != nil {
 		return fmt.Errorf("schema: %w", err)
+	}
+	reconcile := []string{
+		`ALTER TABLE agent_session ADD COLUMN IF NOT EXISTS parent VARCHAR(36) NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range reconcile {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("reconcile: %w", err)
+		}
 	}
 	return nil
 }

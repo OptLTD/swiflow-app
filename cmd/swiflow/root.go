@@ -19,5 +19,6 @@ func rootCmd() *cobra.Command {
 
 	root.AddCommand(serveCmd())
 	root.AddCommand(migrateCmd())
+	root.AddCommand(evalCmd())
 	return root
 }

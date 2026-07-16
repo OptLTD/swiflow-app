@@ -7,6 +7,6 @@ import "github.com/OptLTD/swiflow/internal/store/sqlstore"
 type Store = sqlstore.Store
 
 // Open opens a Postgres database using a pgx DSN.
-func Open(dsn string, encryptionKey string) (*Store, error) {
-	return sqlstore.OpenPostgres(dsn, encryptionKey)
+func Open(dsn string) (*Store, error) {
+	return sqlstore.OpenPostgres(dsn)
 }

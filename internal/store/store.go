@@ -6,9 +6,8 @@ import (
 	"context"
 )
 
-// Provider is an LLM endpoint configuration. ApiKey is plaintext in memory;
-// the storage layer encrypts/decrypts at the boundary. Model is the default
-// model id used when an agent references this provider via txt_model/img_model.
+// Provider is an LLM endpoint configuration. ApiKey is stored plaintext for now.
+// Model is the default model id used when an agent references this provider via txt_model/img_model.
 type Provider struct {
 	ID        string `json:"id" db:"id"`
 	Tid       string `json:"tid" db:"tid"`
@@ -42,6 +41,7 @@ type Session struct {
 	Tid       string `json:"tid" db:"tid"`
 	Agent     string `json:"agent" db:"agent"`
 	Title     string `json:"title" db:"title"`
+	Parent    string `json:"parent" db:"parent"`
 	CreatedAt string `json:"created_at" db:"created_at"`
 	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
@@ -144,6 +144,8 @@ type Store interface {
 	ListSessions(ctx context.Context) ([]Session, error)
 	UpdateSessionTitle(ctx context.Context, id, title string) error
 	AppendMessage(ctx context.Context, sessionID string, msg Message) (Message, error)
+	// UpdateToolMessageByCallID patches a tool message content after soft-async completion.
+	UpdateToolMessageByCallID(ctx context.Context, sessionID, toolCallID, content string) error
 	ListMessages(ctx context.Context, sessionID string) ([]Message, error)
 
 	// Policy
@@ -152,6 +154,8 @@ type Store interface {
 	ListToolPolicy(ctx context.Context) ([]ToolPolicy, error)
 	DisabledSkills(ctx context.Context) ([]string, error)
 	SetSkillEnabled(ctx context.Context, slug string, enabled bool) error
+	GetSysSetting(ctx context.Context, key string) (value string, ok bool, err error)
+	SetSysSetting(ctx context.Context, key, value string) error
 
 	// MCP servers (Phase 2)
 	CreateMCPServer(ctx context.Context, s *MCPServer) error

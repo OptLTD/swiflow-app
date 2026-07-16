@@ -123,7 +123,71 @@ func TestDelegateTaskSummary(t *testing.T) {
 	}
 }
 
-func TestDelegateToolsWhitelist(t *testing.T) {
+// The delegated child session must be marked with its parent (so it stays out of
+// the top-level list) and the parent must receive live tool_progress events that
+// carry the child session key.
+func TestDelegateMarksParentAndEmitsProgress(t *testing.T) {
+	st := testutil.OpenStore(t)
+	testutil.SeedProviderAndAgent(t, st)
+
+	reg := tool.NewRegistry()
+	reg.Register(&echoTool{})
+	prov := &scriptedProvider{
+		steps: []*llmclient.ChatResponse{
+			// Parent: delegate
+			{
+				ToolCalls: []llmclient.ToolCall{{
+					ID: "call1", Name: "delegate_task",
+					Arguments: map[string]any{"goal": "do work", "max_rounds": float64(3)},
+				}},
+				FinishReason: "tool_calls",
+			},
+			// Child round 1: call echo (produces a tool_call progress)
+			{
+				ToolCalls:    []llmclient.ToolCall{{ID: "e1", Name: "echo"}},
+				FinishReason: "tool_calls",
+			},
+			// Child round 2: text summary (produces a delta progress)
+			{Content: "all done", FinishReason: "stop"},
+			// Parent final
+			{Content: "child finished", FinishReason: "stop"},
+		},
+	}
+
+	runner := NewRunner(RunnerDeps{Store: st, Tools: reg})
+	runner.SetProvider("openai", prov)
+	tool.RegisterDelegate(reg, runner)
+
+	var progressChild string
+	var sawToolProgress bool
+	err := runner.Run(context.Background(), "parent-9", "default", "go", func(ev Event) {
+		if ev.Type == "tool_progress" {
+			sawToolProgress = true
+			if ev.Child != "" {
+				progressChild = ev.Child
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !sawToolProgress {
+		t.Fatal("expected at least one tool_progress event")
+	}
+	if !strings.HasPrefix(progressChild, "sub-parent-9-") {
+		t.Fatalf("progress child=%q", progressChild)
+	}
+
+	sess, err := st.GetSessionByID(context.Background(), progressChild)
+	if err != nil {
+		t.Fatalf("get child session: %v", err)
+	}
+	if sess.Parent != "parent-9" {
+		t.Fatalf("child parent=%q, want parent-9", sess.Parent)
+	}
+}
+
+func TestDelegateChildFullToolkit(t *testing.T) {
 	st := testutil.OpenStore(t)
 	testutil.SeedProviderAndAgent(t, st)
 
@@ -138,20 +202,16 @@ func TestDelegateToolsWhitelist(t *testing.T) {
 					ID:   "c1",
 					Name: "delegate_task",
 					Arguments: map[string]any{
-						"goal":  "echo",
-						"tools": []any{"echo"},
+						"goal": "echo",
 					},
 				}},
 				FinishReason: "tool_calls",
 			},
-			// Child sees only echo (+ no delegate). Capture via side channel in first child call —
-			// we inspect during ChatStream by wrapping... easier: child replies with text.
 			{Content: "child done", FinishReason: "stop"},
 			{Content: "parent done", FinishReason: "stop"},
 		},
 	}
 
-	// Wrap provider to capture tools offered on 2nd call (child).
 	capturing := &captureToolsProvider{inner: prov, onCall: func(i int, tools []llmclient.ToolDef) {
 		if i == 1 {
 			for _, d := range tools {
@@ -179,7 +239,7 @@ func TestDelegateToolsWhitelist(t *testing.T) {
 		}
 	}
 	if !foundEcho {
-		t.Fatalf("child tools=%v, want echo", childToolNames)
+		t.Fatalf("child tools=%v, want echo (full toolkit, no tools whitelist)", childToolNames)
 	}
 }
 

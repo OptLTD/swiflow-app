@@ -49,3 +49,62 @@ func Abort(session string) {
 func Queued(session string, position int) {
 	slog.Info("agent.queued", "session", session, "position", position)
 }
+
+// RunStart logs the beginning of an agent run.
+func RunStart(session string, child bool, maxRounds int, chatModel string) {
+	slog.Info("agent.run_start", "session", session, "child", child, "max_rounds", maxRounds, "chat_model", chatModel)
+}
+
+// LLMStillWaiting logs periodic heartbeat while an LLM stream is in flight.
+func LLMStillWaiting(session string, round int, model string, elapsed time.Duration, ctxRemain string) {
+	slog.Info("agent.llm_still_waiting",
+		"session", session, "round", round, "model", model,
+		"elapsed", elapsed.Round(time.Second).String(), "ctx_remain", ctxRemain)
+}
+
+// SoftAsyncPlaceholder logs when a tool returns the soft-async placeholder.
+func SoftAsyncPlaceholder(session, tool, callID string, pending int) {
+	slog.Info("agent.soft_async_placeholder",
+		"session", session, "tool", tool, "call_id", callID, "pending", pending)
+}
+
+// SoftAsyncDone logs when a background soft-async job finishes.
+func SoftAsyncDone(session, tool, callID string, ms int64, pending int, isErr bool) {
+	slog.Info("agent.soft_async_done",
+		"session", session, "tool", tool, "call_id", callID,
+		"ms", ms, "pending", pending, "error", isErr)
+}
+
+// AwaitAll logs blocking until pending soft-async jobs finish.
+func AwaitAll(session, reason string, count int) {
+	slog.Info("agent.await_all", "session", session, "reason", reason, "pending", count)
+}
+
+// AwaitSlot logs waiting for a parallel soft-async slot.
+func AwaitSlot(session, tool string, inFlight, cap int) {
+	slog.Info("agent.await_slot", "session", session, "tool", tool, "in_flight", inFlight, "cap", cap)
+}
+
+// Stall logs forced wrap-up due to repeated tools or async re-ask cap.
+func Stall(session, reason string, round int) {
+	slog.Warn("agent.stall", "session", session, "reason", reason, "round", round)
+}
+
+// SoftAsyncReask logs when the model tried to stop while async work was pending.
+func SoftAsyncReask(session string, round, reask, pending int) {
+	slog.Info("agent.soft_async_reask", "session", session, "round", round, "reask", reask, "pending", pending)
+}
+
+// DelegateStart logs sub-agent handoff.
+func DelegateStart(parent, child string, maxRounds int) {
+	slog.Info("agent.delegate_start", "parent", parent, "child", child, "max_rounds", maxRounds)
+}
+
+// DelegateEnd logs sub-agent completion.
+func DelegateEnd(parent, child string, ms int64, err error) {
+	if err != nil {
+		slog.Warn("agent.delegate_end", "parent", parent, "child", child, "ms", ms, "error", err.Error())
+		return
+	}
+	slog.Info("agent.delegate_end", "parent", parent, "child", child, "ms", ms)
+}

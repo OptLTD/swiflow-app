@@ -5,7 +5,6 @@ import { useLayoutStore } from './stores/layout'
 import { useSetupStore } from './stores/setup'
 import ToastHost from './components/ToastHost.vue'
 import HeadTabBar from './components/HeadTabBar.vue'
-import LoginDialog from './components/LoginDialog.vue'
 import SetupWizard from './components/SetupWizard.vue'
 import ResizeHandle from './components/ResizeHandle.vue'
 import FileDropZone from './components/FileDropZone.vue'
@@ -22,7 +21,7 @@ const layout = useLayoutStore()
 const setup = useSetupStore()
 
 async function maybeCheckSetup() {
-  if (!auth.isAuthed || auth.needsLogin) return
+  if (!auth.isAuthed) return
   if (setup.checked) return
   try {
     await setup.check()
@@ -33,9 +32,6 @@ async function maybeCheckSetup() {
 
 onMounted(maybeCheckSetup)
 watch(() => auth.isAuthed, maybeCheckSetup)
-watch(() => auth.needsLogin, (need) => {
-  if (!need) maybeCheckSetup()
-})
 
 async function onSetupDone() {
   await setup.complete()
@@ -92,12 +88,8 @@ async function onSetupDone() {
       </div>
     </div>
 
-    <!-- Login dialog (server mode only) -->
-    <LoginDialog v-if="auth.needsLogin" />
-
-    <!-- Setup must finish before using the app; covers tabs + chat sidebar -->
     <SetupWizard
-      v-if="!auth.needsLogin && setup.showWizard"
+      v-if="setup.showWizard"
       @done="onSetupDone"
     />
 

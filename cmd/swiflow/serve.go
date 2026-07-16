@@ -81,19 +81,28 @@ func runServe() error {
 
 	toolsReg := tool.NewRegistry()
 	tool.RegisterFS(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
-	tool.RegisterWeb(toolsReg, tool.WebOptions{
+	webOpts := &tool.WebOptions{
 		SearchProvider: cfg.Tools.SearchProvider,
 		SearchBaseURL:  cfg.Tools.SearchBaseURL,
 		SearchAPIKey:   cfg.Tools.SearchAPIKey,
-	})
+	}
+	if webOpts.SearchProvider == "" {
+		webOpts.SearchProvider = "duckduckgo"
+	}
+	server.LoadSearchSettings(context.Background(), st, webOpts)
+	tool.RegisterWeb(toolsReg, webOpts)
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
-	tool.RegisterDocument(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, tool.DocumentOptions{
+	docTimeout := time.Duration(cfg.Tools.DocumentTimeout) * time.Second
+	if docTimeout <= 0 {
+		docTimeout = 120 * time.Second
+	}
+	tool.RegisterDocument(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, st, tool.DocumentOptions{
 		Enabled:   cfg.Tools.DocumentEnabled,
 		BaseURL:   cfg.Tools.DocumentBaseURL,
 		APIKey:    cfg.Tools.DocumentAPIKey,
 		Model:     cfg.Tools.DocumentModel,
-		Timeout:   time.Duration(cfg.Tools.DocumentTimeout) * time.Second,
+		Timeout:   docTimeout,
 		Workspace: cfg.WorkspaceDir,
 	})
 
@@ -141,6 +150,9 @@ func runServe() error {
 		Publish:            events,
 		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
 		ToolTimeoutSec:     cfg.ToolTimeoutSec,
+		ToolTimeouts: map[string]time.Duration{
+			tool.ToolDocumentExtract: docTimeout + 30*time.Second,
+		},
 	})
 
 	cronSched := schedule.New(st, runner, events)
@@ -154,7 +166,7 @@ func runServe() error {
 	}
 	defer cronSched.Stop()
 
-	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge)
+	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts)
 	httpServer := &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           srv.Handler(),

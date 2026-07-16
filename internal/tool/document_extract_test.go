@@ -6,19 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/OptLTD/swiflow/library/document"
 )
-
-type stubProvider struct{}
-
-func (stubProvider) Extract(_ context.Context, req document.ProviderRequest) (*document.Result, error) {
-	return &document.Result{
-		DocType: "note",
-		Fields:  map[string]any{"task": "demo"},
-		Meta:    map[string]any{"input": req.InputType},
-	}, nil
-}
 
 func TestDocumentToolDisabled(t *testing.T) {
 	tl := &documentExtractTool{allowed: false}
@@ -28,7 +16,7 @@ func TestDocumentToolDisabled(t *testing.T) {
 	}
 }
 
-func TestDocumentToolValidatesExtractionRequest(t *testing.T) {
+func TestDocumentToolRequiresProvider(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("demo"), 0o644); err != nil {
@@ -36,11 +24,21 @@ func TestDocumentToolValidatesExtractionRequest(t *testing.T) {
 	}
 	tl := &documentExtractTool{
 		ws:      WorkspaceRoots{Base: dir},
-		svc:     document.NewService(stubProvider{}),
 		allowed: true,
 	}
-	_, err := tl.Execute(context.Background(), map[string]any{"path": "a.txt"})
-	if err == nil || !strings.Contains(err.Error(), "fields, schema, or prompt required") {
+	_, err := tl.Execute(context.Background(), map[string]any{"path": "a.txt", "prompt": "extract"})
+	if err == nil || !strings.Contains(err.Error(), "not configured") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestDocumentToolRequiresPath(t *testing.T) {
+	tl := &documentExtractTool{
+		allowed: true,
+		opt:     DocumentOptions{APIKey: "sk-test"},
+	}
+	_, err := tl.Execute(context.Background(), map[string]any{"prompt": "x"})
+	if err == nil || !strings.Contains(err.Error(), "path required") {
 		t.Fatalf("err=%v", err)
 	}
 }

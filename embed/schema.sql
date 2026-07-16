@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS agent_session (
     tid        VARCHAR(64) NOT NULL DEFAULT 'default',
     agent      VARCHAR(64) NOT NULL,
     title      VARCHAR(128),
+    parent     VARCHAR(36) NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

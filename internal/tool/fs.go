@@ -22,7 +22,7 @@ func (t *readFileTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"path": map[string]any{"type": "string", "description": "Path relative to the workspace."},
+			"path": map[string]any{"type": "string", "description": "Path relative to the workspace (also accepts @/… where @/ is the workspace root)."},
 		},
 		"required": []string{"path"},
 	}

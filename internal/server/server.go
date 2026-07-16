@@ -23,20 +23,24 @@ import (
 
 // Server is the HTTP API server.
 type Server struct {
-	cfg    config.Config
-	st     store.Store
-	runner *agent.Runner
-	tools  *tool.Registry
-	skills *skill.Catalog
-	mcp    *mcpclient.Manager
-	cron   *schedule.Scheduler
-	events *SessionHub
-	window *window.Bridge
+	cfg     config.Config
+	st      store.Store
+	runner  *agent.Runner
+	tools   *tool.Registry
+	skills  *skill.Catalog
+	mcp     *mcpclient.Manager
+	cron    *schedule.Scheduler
+	events  *SessionHub
+	window  *window.Bridge
+	webOpts *tool.WebOptions
 }
 
-// New constructs a server.
-func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *SessionHub, win *window.Bridge) *Server {
-	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, window: win}
+// New constructs a server. webOpts may be nil; search settings API needs a shared pointer to update live.
+func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *SessionHub, win *window.Bridge, webOpts *tool.WebOptions) *Server {
+	if webOpts == nil {
+		webOpts = &tool.WebOptions{}
+	}
+	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, window: win, webOpts: webOpts}
 	if win != nil && events != nil {
 		win.SetFallback(func(sessionID string, ev window.Event) {
 			events.Publish(sessionID, agent.Event{
@@ -73,6 +77,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tools", s.listTools)
 	mux.HandleFunc("PUT /api/tools/{name}", s.setToolEnabled)
 
+	mux.HandleFunc("GET /api/settings/search", s.getSearchSettings)
+	mux.HandleFunc("PUT /api/settings/search", s.putSearchSettings)
+
 	mux.HandleFunc("GET /api/skills", s.listSkills)
 	mux.HandleFunc("PUT /api/skills/{slug}", s.setSkillEnabled)
 	mux.HandleFunc("POST /api/skills/reload", s.reloadSkills)
@@ -104,7 +111,6 @@ func (s *Server) Handler() http.Handler {
 
 	var h http.Handler = mux
 	h = s.requestLogMiddleware(h)
-	h = s.authMiddleware(h)
 	h = s.corsMiddleware(s.cfg.AllowedOrigins)(h)
 	h = s.staticMiddleware(h)
 	return h
@@ -155,24 +161,6 @@ func (w *statusWriter) Unwrap() http.ResponseWriter {
 }
 
 // --- middleware ---
-
-func (s *Server) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/health" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if strings.HasPrefix(r.URL.Path, "/api/") && !s.cfg.SkipAuth {
-			tok := r.Header.Get("Authorization")
-			tok = strings.TrimPrefix(tok, "Bearer ")
-			if tok == "" || tok != s.cfg.AuthToken {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
 
 func (s *Server) corsMiddleware(allowed []string) func(http.Handler) http.Handler {
 	allowAll := len(allowed) == 0
@@ -241,8 +229,7 @@ func bindJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":    "ok",
-		"skip_auth": s.cfg.SkipAuth,
+		"status": "ok",
 	})
 }
 
@@ -471,7 +458,15 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": list})
+	// Hide subagent (child) sessions: only top-level sessions (no parent) appear
+	// in the list. Child sessions are still reachable individually via getSession.
+	roots := make([]store.Session, 0, len(list))
+	for _, sess := range list {
+		if sess.Parent == "" {
+			roots = append(roots, sess)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": roots})
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {

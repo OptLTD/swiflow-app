@@ -21,7 +21,6 @@ import (
 type apiEnv struct {
 	t      *testing.T
 	server *httptest.Server
-	token  string
 	st     store.Store
 }
 
@@ -36,15 +35,17 @@ func newAPIEnv(t *testing.T) *apiEnv {
 	tool.RegisterSkill(reg, skills, st)
 	mcpMgr := mcpclient.NewManager(st, reg)
 	t.Cleanup(mcpMgr.Close)
-	runner := agent.NewRunner(agent.RunnerDeps{Store: st, Tools: reg, Skills: skills})
 	events := server.NewSessionHub()
+	runner := agent.NewRunner(agent.RunnerDeps{
+		Store: st, Tools: reg, Skills: skills,
+	})
 	cron := schedule.New(st, runner, events)
 
-	srv := server.New(cfg, st, runner, reg, skills, mcpMgr, cron, events, nil)
+	srv := server.New(cfg, st, runner, reg, skills, mcpMgr, cron, events, nil, nil)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
-	return &apiEnv{t: t, server: ts, token: cfg.AuthToken, st: st}
+	return &apiEnv{t: t, server: ts, st: st}
 }
 
 func (e *apiEnv) do(method, path string, body any) (*http.Response, []byte) {
@@ -64,7 +65,6 @@ func (e *apiEnv) do(method, path string, body any) (*http.Response, []byte) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", "Bearer "+e.token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		e.t.Fatal(err)

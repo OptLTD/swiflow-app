@@ -30,13 +30,34 @@ const hardBudgetNudge = "You have hit the tool-call safety limit for this turn. 
 
 const stallNudge = "Progress has stalled (repeated tools or repeated failures). Do not call tools again. Tell the user what you tried, why it is stuck, and the best next step — ask them to continue if needed."
 
+const childWrapUpNudge = "Sub-agent budget is running low. Finish the batch now: if the deliverable file (e.g. xlsx) exists, reply with ONLY its @/ path and row count — no more tools. If blocked, summarize what failed and stop."
+
+// maxLLMRetries caps how many times a single round retries after a transient
+// LLM stall/network error before falling back to a graceful wrap-up.
+const maxLLMRetries = 1
+
 const continueHint = "I could not fully finish this turn. Tell me to continue and I will pick up from here."
+
+// SoftAsyncPlaceholder is retained only for backward compatibility with older
+// persisted messages / eval harnesses. The runtime no longer produces it: tool
+// calls now run concurrently within a turn and the loop awaits them all.
+const SoftAsyncPlaceholder = "工具运行中, 耗时较长, 执行完毕后补全执行结果"
+
+// runResult is the terminal outcome of a run, surfaced to delegate_task parents.
+type runResult struct {
+	status    string // done|budget|stall|error|blocked
+	summary   string
+	artifacts []string
+	rounds    int
+	toolCalls int
+	failures  int
+}
 
 type object = map[string]any
 
 // Event is one event streamed to the client during a run.
 type Event struct {
-	Type      string `json:"type"` // delta|thinking|tool_call|tool_result|done|error|ui_request|user|queued
+	Type      string `json:"type"` // delta|thinking|tool_call|tool_result|tool_progress|done|error|ui_request|user|queued
 	Content   string `json:"content,omitempty"`
 	Thinking  string `json:"thinking,omitempty"`
 	ID        string `json:"id,omitempty"`
@@ -47,6 +68,10 @@ type Event struct {
 	Error     string `json:"error,omitempty"`
 	Title     string `json:"title,omitempty"`
 	Position  int    `json:"position,omitempty"` // queued position (1-based)
+	// Child is the subagent session key carried by tool_progress events so the
+	// parent UI can attach live progress (and later open the child) for a
+	// delegate_task call.
+	Child string `json:"child,omitempty"`
 }
 
 // EventPublisher fans out events (typically server.SessionHub).
@@ -70,6 +95,9 @@ type RunnerDeps struct {
 	MaxConcurrentRuns int
 	// ToolTimeoutSec wraps each tool call; 0 = 120s.
 	ToolTimeoutSec int
+	// ToolTimeouts overrides per-tool timeouts (single source of truth), e.g.
+	// {"document_extract": DocumentTimeout}. Falls back to ToolTimeoutSec.
+	ToolTimeouts map[string]time.Duration
 }
 
 type queuedMsg struct {
@@ -80,10 +108,16 @@ type queuedMsg struct {
 // RunOpts controls a single Run (used by subagents).
 type RunOpts struct {
 	MaxRounds int // 0 = default 32
+	// MaxWallClock, when > 0, caps the run's wall clock independently of the
+	// caller ctx (children get their own budget, decoupled from parent tool timeout).
+	MaxWallClock time.Duration
 	// AllowTools: if non-nil, only these tool names are offered.
 	AllowTools map[string]bool
 	// DenyTools: always excluded (e.g. delegate_task for children).
 	DenyTools map[string]bool
+	// ParentSession, when non-empty, marks this run's session as a subagent
+	// child of the given parent session (hidden from the top-level list).
+	ParentSession string
 }
 
 // Runner executes agent runs and enforces single-run-per-session.
@@ -183,10 +217,21 @@ func (r *Runner) Run(ctx context.Context, sessionID, agentKey, userMessage strin
 
 // RunOpts executes one agent run with options (subagent budgets / tool filters).
 func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage string, onEvent func(Event), opts RunOpts) error {
+	_, err := r.run(ctx, sessionID, agentKey, userMessage, onEvent, opts)
+	return err
+}
+
+// run is the core loop. It returns a structured runResult (surfaced to
+// delegate_task parents) plus a hard error only when no usable work was produced.
+// Tool calls in a turn run concurrently and are all awaited before the next LLM
+// turn; messages are written only here (single writer) — no soft-async, no races.
+func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage string, onEvent func(Event), opts RunOpts) (runResult, error) {
 	rounds := opts.MaxRounds
 	if rounds <= 0 {
 		rounds = maxRoundsDefault
 	}
+	childRun := isChildRun(opts)
+	res := runResult{status: "done"}
 
 	publisher := func(ev Event) {
 		emit(onEvent, ev)
@@ -201,16 +246,19 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 		r.mu.Unlock()
 		observe.BusyReject(sessionID)
 		publisher(Event{Type: "error", Error: "session busy"})
-		return ErrBusy
+		return runResult{status: "error"}, ErrBusy
 	}
 	if max := r.deps.MaxConcurrentRuns; max > 0 && len(r.busy) >= max {
 		n := len(r.busy)
 		r.mu.Unlock()
 		observe.ConcurrentReject(sessionID, n, max)
 		publisher(Event{Type: "error", Error: "too many concurrent runs"})
-		return ErrConcurrent
+		return runResult{status: "error"}, ErrConcurrent
 	}
 	runCtx, cancel := context.WithCancel(ctx)
+	if opts.MaxWallClock > 0 {
+		runCtx, cancel = context.WithTimeout(runCtx, opts.MaxWallClock)
+	}
 	r.busy[sessionID] = struct{}{}
 	r.cancels[sessionID] = cancel
 	r.mu.Unlock()
@@ -230,12 +278,12 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 		if agentKey == "" {
 			agentKey = "default"
 		}
-		sess = &store.Session{ID: sessionID, Agent: agentKey}
+		sess = &store.Session{ID: sessionID, Agent: agentKey, Parent: opts.ParentSession}
 		if cerr := st.CreateSession(runCtx, sess); cerr != nil {
 			sess, err = st.GetSessionByID(runCtx, sessionID)
 			if err != nil {
 				publisher(Event{Type: "error", Error: "session unavailable"})
-				return err
+				return runResult{status: "error"}, err
 			}
 		}
 	} else {
@@ -245,23 +293,25 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 	ag, err := st.GetAgentByKey(runCtx, agentKey)
 	if err != nil {
 		publisher(Event{Type: "error", Error: "agent not found: " + agentKey})
-		return err
+		return runResult{status: "error"}, err
 	}
 
 	if ag.TxtModel == "" {
 		publisher(Event{Type: "error", Error: "agent has no txt_model"})
-		return fmt.Errorf("agent %q has no txt_model", agentKey)
+		return runResult{status: "error"}, fmt.Errorf("agent %q has no txt_model", agentKey)
 	}
 	prov, model, err := r.resolveTxtModel(runCtx, ag.TxtModel)
 	if err != nil {
 		publisher(Event{Type: "error", Error: err.Error()})
-		return err
+		return runResult{status: "error"}, err
 	}
+	slog.Info("agent.run_model", "session", sessionID, "provider", ag.TxtModel, "chat_model", model)
+	observe.RunStart(sessionID, childRun, rounds, model)
 
 	history, err := st.ListMessages(runCtx, sessionID)
 	if err != nil {
 		publisher(Event{Type: "error", Error: "load history failed"})
-		return err
+		return runResult{status: "error"}, err
 	}
 	history = truncateHistory(history, r.deps.MaxHistoryMessages)
 
@@ -280,11 +330,16 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 	llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: userMessage})
 
 	toolDefs := filterTools(r.deps.Tools.Definitions(), opts)
-
 	firstUser := firstUserMessage(history, userMessage)
-	toolTimeout := time.Duration(r.deps.ToolTimeoutSec) * time.Second
-	if toolTimeout <= 0 {
-		toolTimeout = defaultToolTimeout
+
+	// Deterministic batch routing (once): if the user attached >= threshold files,
+	// the main agent must hand the whole batch to a child — heavy tools are gated
+	// here and a single delegate_task is required. No runtime cost probing.
+	if paths, forced := shouldForceBatchDelegate(userMessage, childRun); forced {
+		denyDocumentExtract(&opts)
+		toolDefs = filterTools(r.deps.Tools.Definitions(), opts)
+		llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: batchDelegateNudge(paths)})
+		slog.Info("agent.batch_delegate_forced", "session", sessionID, "paths", len(paths))
 	}
 
 	var (
@@ -294,11 +349,15 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 		softNudged   bool
 		forceWrapUp  bool
 		wrapReason   string
+		toolsUsed    bool
+		childNudged  bool
+		llmRetries   int
 	)
 
-	for round := 0; round < rounds; round++ {
+	for round := 0; round < rounds; {
 		observe.RoundStart(sessionID, round)
 		roundTools := toolDefs
+		roundT0 := time.Now()
 
 		switch {
 		case forceWrapUp || round == rounds-1:
@@ -306,6 +365,9 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 			nudge := hardBudgetNudge
 			if forceWrapUp && wrapReason == "stall" {
 				nudge = stallNudge
+				res.status = "stall"
+			} else {
+				res.status = "budget"
 			}
 			forceWrapUp = false
 			wrapReason = ""
@@ -313,16 +375,53 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 		case !softNudged && round >= rounds*3/4:
 			softNudged = true
 			llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: softBudgetNudge})
+		case childRun && !childNudged && round >= rounds/2:
+			childNudged = true
+			llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: childWrapUpNudge})
 		}
 
 		req := llmclient.ChatRequest{Model: model, Messages: llmMsgs, Tools: roundTools}
+		ctxRemain := ctxRemaining(runCtx)
+		slog.Info("agent.llm_wait", "session", sessionID, "round", round, "model", model, "ctx_remain", ctxRemain)
+		llmDone := make(chan struct{})
+		go r.llmWaitHeartbeat(runCtx, llmDone, sessionID, round, model, roundT0)
 		resp, err := r.streamRound(runCtx, prov, req, publisher)
+		close(llmDone)
+		llmMS := time.Since(roundT0).Milliseconds()
 		if err != nil {
+			slog.Warn("agent.llm_error", "session", sessionID, "round", round, "model", model, "ms", llmMS, "error", err.Error())
+			// Transient stall/network error: retry the same round once.
+			if runCtx.Err() == nil && llmRetries < maxLLMRetries {
+				llmRetries++
+				slog.Info("agent.llm_retry", "session", sessionID, "round", round, "attempt", llmRetries, "error", err.Error())
+				continue
+			}
+			// Terminal. If we produced tool work, exit cleanly with a summary
+			// (emit done) instead of dropping results — sub-agent exits normally.
+			if toolsUsed {
+				summary := buildLLMErrorSummary(err)
+				if _, aerr := st.AppendMessage(persistCtx, sessionID, store.Message{
+					ID: support.NewID(), Role: "assistant", Content: summary,
+				}); aerr != nil {
+					slog.Error("persist llm-error wrap-up", "error", aerr)
+				}
+				publisher(Event{Type: "delta", Content: summary})
+				publisher(Event{Type: "done"})
+				slog.Info("agent.run_end", "session", sessionID, "reason", "llm_error_wrapup", "round", round, "child", childRun, "error", err.Error())
+				res.status = "error"
+				res.summary = summary
+				return res, nil
+			}
 			publisher(Event{Type: "error", Error: err.Error()})
-			return err
+			res.status = "error"
+			return res, err
 		}
+		llmRetries = 0
+		slog.Info("agent.llm_done", "session", sessionID, "round", round, "model", model, "ms", llmMS, "had_tools", len(resp.ToolCalls) > 0)
 
 		if len(resp.ToolCalls) > 0 && len(roundTools) > 0 {
+			toolsUsed = true
+			res.rounds = round + 1
 			observe.RoundEnd(sessionID, round, true)
 			key := toolCallKey(resp.ToolCalls)
 			if key == lastKey {
@@ -330,6 +429,8 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 				if repeat >= 3 {
 					forceWrapUp = true
 					wrapReason = "stall"
+					observe.Stall(sessionID, "repeat_tool_calls", round)
+					round++
 					continue
 				}
 			} else {
@@ -349,69 +450,38 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 			}
 			llmMsgs = append(llmMsgs, toLLM(assistantMsg))
 
-			for _, tc := range resp.ToolCalls {
-				publisher(Event{Type: "tool_call", ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments})
-				var result string
-				var execErr error
-				t0 := time.Now()
-				observe.ToolStart(sessionID, tc.Name)
-				if err := runCtx.Err(); err != nil {
-					execErr = fmt.Errorf("cancelled: %w", err)
-				} else if !st.ToolEnabled(runCtx, tc.Name) {
-					execErr = fmt.Errorf("tool %q is disabled", tc.Name)
-				} else {
-					timeout := toolTimeout
-					if tc.Name == "clarify" {
-						timeout = 15 * time.Minute
-					}
-					tctx, tcancel := context.WithTimeout(runCtx, timeout)
-					result, execErr = r.deps.Tools.Execute(tool.WithRunContext(tctx, tool.RunContext{
-						SessionID: sessionID,
-						Agent:     agentKey,
-					}), tc.Name, tc.Arguments)
-					tcancel()
-				}
-				observe.ToolEnd(sessionID, tc.Name, time.Since(t0), execErr)
-				isErr := execErr != nil
-				if isErr {
-					result = formatToolError(result, execErr)
+			outcomes := r.executeToolCalls(runCtx, persistCtx, sessionID, agentKey, resp.ToolCalls, publisher)
+			res.toolCalls += len(outcomes)
+			for _, o := range outcomes {
+				if o.isErr {
 					consecErrors++
+					res.failures++
 				} else {
 					consecErrors = 0
 				}
-				if result == "" {
-					result = "(no output)"
-				}
-				truncated := truncateToolResult(result)
-				publisher(Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: truncated, IsError: isErr})
-
-				toolMsg := store.Message{
-					ID:         support.NewID(),
-					Role:       "tool",
-					Content:    truncated,
-					ToolCallId: tc.ID,
-					ToolName:   tc.Name,
-				}
-				if _, err := st.AppendMessage(persistCtx, sessionID, toolMsg); err != nil {
-					slog.Error("persist tool message", "error", err)
+				if p := artifactPath(o.tc); p != "" {
+					res.artifacts = appendUnique(res.artifacts, p)
 				}
 				llmMsgs = append(llmMsgs, llmclient.Message{
 					Role:       "tool",
-					Content:    truncated,
-					ToolCallID: tc.ID,
-					ToolName:   tc.Name,
+					Content:    o.result,
+					ToolCallID: o.tc.ID,
+					ToolName:   o.tc.Name,
 				})
 			}
 			if consecErrors >= 3 {
 				forceWrapUp = true
 				wrapReason = "stall"
+				observe.Stall(sessionID, "consecutive_tool_errors", round)
 			}
+			round++
 			continue
 		}
 
+		// Model produced a no-tool reply: this is the final answer / wrap-up.
 		observe.RoundEnd(sessionID, round, false)
 		content := resp.Content
-		if strings.TrimSpace(content) == "" && (forceWrapUp || round == rounds-1) {
+		if strings.TrimSpace(content) == "" && res.status != "done" {
 			content = continueHint
 		}
 		assistantMsg := store.Message{
@@ -435,9 +505,15 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 			}
 		}
 		publisher(Event{Type: "done", Title: title})
-		return nil
+		slog.Info("agent.run_end", "session", sessionID, "reason", "done", "round", round, "max_rounds", rounds, "child", childRun)
+		res.summary = content
+		for _, p := range extractAtPaths(content) {
+			res.artifacts = appendUnique(res.artifacts, p)
+		}
+		return res, nil
 	}
 
+	// Budget exhausted without a natural stop.
 	if _, err := st.AppendMessage(runCtx, sessionID, store.Message{
 		ID: support.NewID(), Role: "assistant", Content: continueHint,
 	}); err != nil {
@@ -445,7 +521,10 @@ func (r *Runner) RunOpts(ctx context.Context, sessionID, agentKey, userMessage s
 	}
 	publisher(Event{Type: "delta", Content: continueHint})
 	publisher(Event{Type: "done"})
-	return nil
+	slog.Info("agent.run_end", "session", sessionID, "reason", "budget", "max_rounds", rounds, "child", childRun)
+	res.status = "budget"
+	res.summary = continueHint
+	return res, nil
 }
 
 func (r *Runner) drainQueue(sessionID string) {
@@ -520,6 +599,28 @@ func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llmclient.Pr
 	return p, model, nil
 }
 
+func (r *Runner) llmWaitHeartbeat(ctx context.Context, done <-chan struct{}, sessionID string, round int, model string, start time.Time) {
+	tick := time.NewTicker(15 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			observe.LLMStillWaiting(sessionID, round, model, time.Since(start), ctxRemaining(ctx))
+		}
+	}
+}
+
+func ctxRemaining(ctx context.Context) string {
+	if dl, ok := ctx.Deadline(); ok {
+		return time.Until(dl).Round(time.Second).String()
+	}
+	return ""
+}
+
 func (r *Runner) streamRound(ctx context.Context, p llmclient.Provider, req llmclient.ChatRequest, onEvent func(Event)) (*llmclient.ChatResponse, error) {
 	return p.ChatStream(ctx, req, func(c llmclient.StreamChunk) {
 		if c.Thinking != "" {
@@ -541,7 +642,12 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 	if r.deps.Workspace != "" {
 		b.WriteString("\n\n## Workspace\nWorkspace root: ")
 		b.WriteString(r.deps.Workspace)
-		b.WriteString(". File tools are restricted to it.")
+		b.WriteString(". File tools are restricted to it.\n")
+		b.WriteString("User messages may cite workspace files as @/relative/path (e.g. @/notes.txt, @/docs/a.md). ")
+		b.WriteString("@/ means the workspace root. Attached uploads appear in a block between [UPLOAD FILES START] and [UPLOAD FILES END] (one @/ path per line). ")
+		b.WriteString("File tools accept both workspace-relative paths and @/… (equivalent). Prefer passing the path as given; do not invent a literal \"@\" directory. ")
+		b.WriteString("When the user attaches or mentions @/…, resolve it to that relative path and use fs_* / document_extract / other file tools on it — do not treat @/ as a URL or package alias. ")
+		b.WriteString("When you refer to workspace files in replies, prefer the same @/ form.")
 	}
 	disabled := map[string]bool{}
 	if r.deps.Skills != nil {
@@ -571,9 +677,16 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 	b.WriteString("\n\n## Task tracking\n")
 	b.WriteString("For multi-step work, maintain a checklist with todo_write / todo_read. Prefer marking items done before claiming the overall goal is finished. ")
 	b.WriteString("When verification matters, run tests via exec (if enabled) before the final answer.")
+	b.WriteString("\n\n## Parallel tools\n")
+	b.WriteString("You may request several independent tool calls in one turn; they run concurrently and all of their real results are returned before your next turn. ")
+	b.WriteString("Do not invent tool output, and never say you will continue later and stop: either keep calling tools for remaining work, or produce the final deliverable (e.g. Excel) with completed results only.")
 	b.WriteString("\n\n## Delegation\n")
-	b.WriteString("Use delegate_task to spawn an isolated sub-agent with its own session and round budget. ")
-	b.WriteString("You receive only a final summary — put large artifacts in workspace files and cite paths in the child goal if the parent will need them.")
+	b.WriteString("Use delegate_task ONCE for a batch of remaining work (own session + round budget). ")
+	b.WriteString("List every remaining @/ path inside goal; the child chooses tools itself — do not pass path/tools args, and do not one-file-per-delegate. ")
+	b.WriteString("You receive one structured result (status/summary/artifacts/metrics) — large artifacts stay in workspace files cited in the child goal.\n")
+	b.WriteString("When many files or a table/Excel deliverable is obvious, delegate early. ")
+	b.WriteString("When ≥3 @/ files are attached for a table, document_extract is disabled on the main agent by the runtime: do not ask which columns — pick sensible defaults and hand the whole batch to one delegate_task. ")
+	b.WriteString("Never pretend you will continue later without calling tools.")
 	b.WriteString("\n\n## Clarify\n")
 	b.WriteString("When you need a user choice, confirmation, or missing info before continuing, call clarify. ")
 	b.WriteString("Do not invent answers; wait for the tool result. Prefer short options when choices are discrete.")
@@ -633,11 +746,17 @@ func toolCallKey(tcs []llmclient.ToolCall) string {
 }
 
 func truncateToolResult(s string) string {
+	s = support.SanitizeUTF8(s)
 	const max = 4000
 	if len(s) <= max {
 		return s
 	}
-	return s[:max] + "\n...[truncated]"
+	// Truncate on rune boundary so Postgres UTF8 columns stay valid.
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "\n...[truncated]"
 }
 
 // formatToolError keeps command/tool output (stdout/stderr) when execution fails.
@@ -736,8 +855,21 @@ func titleFromMessage(msg string) string {
 	return msg
 }
 
-// RunChild implements tool.ChildRunner for delegate_task.
-func (r *Runner) RunChild(ctx context.Context, opts tool.ChildRunOpts, onDelta func(string)) error {
+// buildLLMErrorSummary produces an honest wrap-up when the model call fails
+// after tool work already ran. It does not claim success (the deliverable may be
+// missing); completed tool results remain persisted in the session.
+func buildLLMErrorSummary(cause error) string {
+	msg := "未能完成本次任务：调用模型时出错"
+	if cause != nil {
+		msg += "（" + cause.Error() + "）"
+	}
+	msg += "。已完成的工具结果已保存在会话中；如需继续整理，请让我继续（continue）。"
+	return msg
+}
+
+// RunChild implements tool.ChildRunner for delegate_task. It returns a structured
+// result so the parent gets status/artifacts/metrics (context stays isolated).
+func (r *Runner) RunChild(ctx context.Context, opts tool.ChildRunOpts, onDelta func(string)) (tool.ChildResult, error) {
 	allow := map[string]bool(nil)
 	if opts.AllowTools != nil {
 		allow = make(map[string]bool, len(opts.AllowTools))
@@ -745,15 +877,75 @@ func (r *Runner) RunChild(ctx context.Context, opts tool.ChildRunOpts, onDelta f
 			allow[n] = true
 		}
 	}
-	return r.RunOpts(ctx, opts.SessionID, opts.AgentKey, opts.UserMessage, func(ev Event) {
+	res, err := r.run(ctx, opts.SessionID, opts.AgentKey, opts.UserMessage, func(ev Event) {
 		if ev.Type == "delta" && onDelta != nil && ev.Content != "" {
 			onDelta(ev.Content)
 		}
+		if opts.OnProgress == nil {
+			return
+		}
+		switch ev.Type {
+		case "tool_call":
+			if ev.Name != "" {
+				opts.OnProgress(tool.ToolProgress{Child: opts.SessionID, Content: ev.Name})
+			}
+		case "delta":
+			if s := strings.TrimSpace(ev.Content); s != "" {
+				opts.OnProgress(tool.ToolProgress{Child: opts.SessionID, Content: progressSnippet(s)})
+			}
+		}
 	}, RunOpts{
-		MaxRounds:  opts.MaxRounds,
-		AllowTools: allow,
-		DenyTools:  map[string]bool{"delegate_task": true, "clarify": true},
+		MaxRounds:     opts.MaxRounds,
+		MaxWallClock:  opts.MaxWallClock,
+		AllowTools:    allow,
+		DenyTools:     map[string]bool{"delegate_task": true, "clarify": true},
+		ParentSession: opts.ParentSessionID,
 	})
+	cr := tool.ChildResult{
+		Status:    res.status,
+		Summary:   res.summary,
+		Artifacts: res.artifacts,
+		Metrics: tool.ChildMetrics{
+			Rounds:    res.rounds,
+			ToolCalls: res.toolCalls,
+			Failures:  res.failures,
+		},
+	}
+	if err != nil {
+		cr.Err = err.Error()
+		if cr.Status == "" || cr.Status == "done" {
+			cr.Status = "error"
+		}
+	}
+	return cr, err
+}
+
+// progressSnippet collapses a streamed text chunk into a short single-line hint
+// suitable for the parent UI's live progress label.
+func progressSnippet(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	const max = 120
+	if r := []rune(s); len(r) > max {
+		s = string(r[:max]) + "…"
+	}
+	return s
+}
+
+// LastAssistantContent returns the latest non-empty assistant message in a session.
+func (r *Runner) LastAssistantContent(ctx context.Context, sessionID string) string {
+	if r.deps.Store == nil || sessionID == "" {
+		return ""
+	}
+	msgs, err := r.deps.Store.ListMessages(ctx, sessionID)
+	if err != nil {
+		return ""
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "assistant" && strings.TrimSpace(msgs[i].Content) != "" {
+			return msgs[i].Content
+		}
+	}
+	return ""
 }
 
 // SetProvider injects a cached LLM provider (tests / overrides).

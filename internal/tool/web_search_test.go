@@ -108,7 +108,7 @@ func TestSearchSearXNG(t *testing.T) {
 		t.Fatalf("got[0] = %+v", got[0])
 	}
 
-	tool := &webSearchTool{opts: WebOptions{SearchProvider: "searxng", SearchBaseURL: srv.URL}}
+	tool := &webSearchTool{opts: &WebOptions{SearchProvider: "searxng", SearchBaseURL: srv.URL}}
 	out, err := tool.Execute(context.Background(), map[string]any{"query": "swiflow", "limit": float64(1)})
 	if err != nil {
 		t.Fatal(err)

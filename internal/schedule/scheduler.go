@@ -92,6 +92,9 @@ func (s *Scheduler) runJob(jobID string) {
 	}
 	sessionID := support.NewID()
 	slog.Info("cron job running", "job", job.Name, "session", sessionID)
+	// Record the trigger time up front so last_run_at reflects when the job
+	// fired, independent of how long the run (incl. retries/backoff) takes.
+	_ = s.st.SetCronJobLastRun(ctx, job.ID, time.Now().UTC().Format(time.RFC3339))
 	err = s.runner.Run(ctx, sessionID, job.Agent, job.Message, func(ev agent.Event) {
 		if ev.Type == "error" {
 			slog.Error("cron job error", "job", job.Name, "error", ev.Error)
@@ -100,7 +103,6 @@ func (s *Scheduler) runJob(jobID string) {
 	if err != nil {
 		slog.Error("cron job failed", "job", job.Name, "error", err)
 	}
-	_ = s.st.SetCronJobLastRun(ctx, job.ID, time.Now().UTC().Format(time.RFC3339))
 }
 
 // ScheduleRun starts a one-shot delayed agent run in sessionID after the given delay.

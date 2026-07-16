@@ -77,16 +77,3 @@ func TestMCPHTTPValidationAndCRUD(t *testing.T) {
 		t.Fatalf("db still has %d servers", len(servers))
 	}
 }
-
-func TestMCPHTTPUnauthorized(t *testing.T) {
-	e := newAPIEnv(t)
-	req, _ := http.NewRequest(http.MethodGet, e.server.URL+"/api/mcp/servers", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status %d", resp.StatusCode)
-	}
-}

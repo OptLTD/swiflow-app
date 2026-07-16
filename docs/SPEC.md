@@ -461,6 +461,11 @@ You are Swiflow agent <agent.key>.
 
 ## Workspace
 Workspace root: <abs path>. File tools are restricted to it.
+User messages may cite files as @/relative/path (@/ = workspace root). UI uploads append a block:
+[UPLOAD FILES START]
+@/path
+[UPLOAD FILES END]
+Resolve with fs_*. The chat UI strips this block from the visible bubble and shows path chips instead.
 
 ## Skills
 <skill.Summary(discovered - disabled); omitted entirely if empty>
@@ -642,13 +647,14 @@ patterns (`^[a-zA-Z0-9_-]+$`); dots are not permitted by OpenAI-compatible APIs.
   `clarify`.
 
 ### `delegate_task`
-- Description: "Spawn an isolated sub-agent; returns final summary only."
-- Parameters: `goal` (required), `context` (optional), `max_rounds` (default 8, max 16),
-  `tools` (optional string array whitelist; `delegate_task` always excluded).
+- Description: Spawn **one** sub-agent for a **batch** of remaining work; returns final summary only.
+- Parameters: `goal` (required — list every remaining `@/` path and deliverable inline),
+  `context` (optional), `max_rounds` (default 16, max 24). No `path` / `tools` args;
+  the child gets the full toolkit (minus nesting denies) and chooses tools itself.
 - Behavior: child `sessionKey` `sub-{parent}-{id}`; child cannot nest
-  `delegate_task`; parent cancel cancels child; counts toward `max_concurrent_runs`.
-  v1 does **not** expose a tool to read the child session transcript (UI may open
-  the child session tab read-only via existing chat tabs).
+  `delegate_task` or `clarify`; parent cancel cancels child; counts toward `max_concurrent_runs`.
+  Parent runs `delegate_task` **synchronously** (not soft-async) with a long tool deadline
+  so the child can finish its round budget.
 
 **Panic recovery:** `Registry.Execute` wraps every tool call in a recover; a
 panic becomes a tool-error result (`"error: panic: <msg>"`), not a run crash.

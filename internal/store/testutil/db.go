@@ -13,16 +13,11 @@ import (
 	"github.com/OptLTD/swiflow/internal/store/sqlite"
 )
 
-const (
-	TestEncryptionKey = "test-encryption-key-16"
-	TestAuthToken     = "test-token"
-)
-
 // OpenStore opens a migrated SQLite store in a temp directory.
 func OpenStore(t *testing.T) *sqlite.Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
-	st, err := sqlite.Open(path, TestEncryptionKey)
+	st, err := sqlite.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,8 +38,6 @@ func TestConfig(t *testing.T) config.Config {
 	return config.Config{
 		Host:          "127.0.0.1",
 		Port:          8000,
-		AuthToken:     TestAuthToken,
-		EncryptionKey: TestEncryptionKey,
 		WorkspaceDir:  t.TempDir(),
 		UserSkillsDir: "",
 	}

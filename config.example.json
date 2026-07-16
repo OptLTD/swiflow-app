@@ -4,20 +4,16 @@
   "db_driver": "sqlite",
   "db_path": "./data/swiflow.db",
   "db_dsn": "",
-  "auth_token": "change-me",
-  "encryption_key": "change-me-at-least-16-chars",
   "workspace_dir": "./data/workspace",
-  "user_skills_dir": "./data/user-skills",
   "allowed_origins": ["http://localhost:5173"],
   "max_history_msgs": 100,
   "max_concurrent_runs": 0,
   "tool_timeout_sec": 120,
   "tools": {
-    "exec_enabled": false,
-    "browser_enabled": false,
+    "exec_enabled": true,
+    "browser_enabled": true,
     "browser_headless": true,
-    "search_provider": "duckduckgo",
-    "search_api_key": "",
-    "search_base_url": ""
+    "document_enabled": true,
+    "document_timeout": 120
   }
 }

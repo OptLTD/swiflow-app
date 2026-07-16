@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OptLTD/swiflow/internal/httputil"
+	"github.com/OptLTD/swiflow/library/httputil"
 )
 
 // WebOptions configures optional web tools (search backends).
@@ -29,7 +29,7 @@ type searchResult struct {
 }
 
 type webSearchTool struct {
-	opts WebOptions
+	opts *WebOptions
 }
 
 func (t *webSearchTool) Name() string { return "web_search" }
@@ -61,9 +61,13 @@ func (t *webSearchTool) Execute(ctx context.Context, args map[string]any) (strin
 		limit = 10
 	}
 
-	provider := strings.ToLower(strings.TrimSpace(t.opts.SearchProvider))
+	opts := t.opts
+	if opts == nil {
+		opts = &WebOptions{}
+	}
+	provider := strings.ToLower(strings.TrimSpace(opts.SearchProvider))
 	if provider == "" {
-		return "", fmt.Errorf("web search is not configured (set tools.web_search_provider, e.g. duckduckgo)")
+		return "", fmt.Errorf("web search is not configured (set search provider in Settings → System)")
 	}
 
 	var (
@@ -74,9 +78,9 @@ func (t *webSearchTool) Execute(ctx context.Context, args map[string]any) (strin
 	case "duckduckgo", "ddg":
 		results, err = searchDuckDuckGo(ctx, query, limit)
 	case "brave":
-		results, err = searchBrave(ctx, t.opts.SearchAPIKey, query, limit)
+		results, err = searchBrave(ctx, opts.SearchAPIKey, query, limit)
 	case "searxng", "searx":
-		results, err = searchSearXNG(ctx, t.opts.SearchBaseURL, query, limit)
+		results, err = searchSearXNG(ctx, opts.SearchBaseURL, query, limit)
 	default:
 		return "", fmt.Errorf("unknown search_provider %q (supported: duckduckgo, brave, searxng)", provider)
 	}

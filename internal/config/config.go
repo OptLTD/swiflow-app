@@ -20,8 +20,6 @@ type Config struct {
 	// DBDSN is the Postgres connection string (when DBDriver=postgres),
 	// e.g. postgres://user:pass@localhost:5432/swiflow?sslmode=disable.
 	DBDSN          string   `json:"db_dsn"`
-	AuthToken      string   `json:"auth_token"`
-	EncryptionKey  string   `json:"encryption_key"`
 	WorkspaceDir   string   `json:"workspace_dir"`
 	InitSkillsDir  string   `json:"init_skills_dir"`
 	UserSkillsDir  string   `json:"user_skills_dir"`
@@ -32,7 +30,6 @@ type Config struct {
 	// ToolTimeoutSec wraps each tool Execute; 0 = 120s default.
 	ToolTimeoutSec int         `json:"tool_timeout_sec"`
 	Tools          ToolsConfig `json:"tools"`
-	SkipAuth       bool        `json:"skip_auth"`
 }
 
 // ToolsConfig controls optional tools.
@@ -44,7 +41,7 @@ type ToolsConfig struct {
 	DocumentBaseURL string `json:"document_base_url"`
 	DocumentAPIKey  string `json:"document_api_key"`
 	DocumentModel   string `json:"document_model"`
-	DocumentTimeout int    `json:"document_timeout_sec"`
+	DocumentTimeout int    `json:"document_timeout"`
 	// web search
 	SearchProvider string `json:"search_provider"` // duckduckgo|brave|searxng; empty = disabled
 	SearchBaseURL  string `json:"search_base_url"` // searxng base URL
@@ -55,16 +52,16 @@ type ToolsConfig struct {
 func Default() Config {
 	return Config{
 		Host: "127.0.0.1", Port: 8000,
-		DBDriver:       "sqlite",
-		DBPath:         "./data/swiflow.db",
+		DBDriver: "sqlite", DBPath: "./data/swiflow.db",
 		InitSkillsDir:  "", // empty = embedded builtins; set for local dev override
 		UserSkillsDir:  "./data/user-skills",
 		WorkspaceDir:   "./data/workspace",
 		MaxHistoryMsgs: 100,
 		Tools: ToolsConfig{
 			BrowserHeadless: true,
-			DocumentModel:   "gpt-4o-mini",
+			DocumentEnabled: true,
 			DocumentTimeout: 120,
+			SearchProvider:  "duckduckgo",
 		},
 	}
 }
@@ -83,12 +80,6 @@ func Load(path string) (Config, error) {
 		}
 	}
 	applyEnv(&cfg)
-	if cfg.AuthToken == "" {
-		return cfg, fmt.Errorf("auth_token is required (config or SWIFLOW_AUTH_TOKEN)")
-	}
-	if cfg.EncryptionKey == "" || len(cfg.EncryptionKey) < 16 {
-		return cfg, fmt.Errorf("encryption_key is required and must be at least 16 chars")
-	}
 	return cfg, nil
 }
 
@@ -109,12 +100,6 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("SWIFLOW_DB_DSN"); v != "" {
 		cfg.DBDSN = v
-	}
-	if v := os.Getenv("SWIFLOW_AUTH_TOKEN"); v != "" {
-		cfg.AuthToken = v
-	}
-	if v := os.Getenv("SWIFLOW_ENCRYPTION_KEY"); v != "" {
-		cfg.EncryptionKey = v
 	}
 	if v := os.Getenv("SWIFLOW_WORKSPACE"); v != "" {
 		cfg.WorkspaceDir = v
@@ -143,7 +128,7 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("SWIFLOW_DOCUMENT_MODEL"); v != "" {
 		cfg.Tools.DocumentModel = v
 	}
-	if v := os.Getenv("SWIFLOW_DOCUMENT_TIMEOUT_SEC"); v != "" {
+	if v := os.Getenv("SWIFLOW_DOCUMENT_TIMEOUT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Tools.DocumentTimeout = n
 		}

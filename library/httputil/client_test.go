@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/OptLTD/swiflow/internal/httputil"
+	"github.com/OptLTD/swiflow/library/httputil"
 )
 
 func TestProxyFallsBackToEnv(t *testing.T) {

@@ -1,4 +1,4 @@
-// API client for the Swiflow backend. Auth token is stored in localStorage.
+// API client for the Swiflow backend.
 import { desktopDownloadWorkspaceFile } from './lib/desktopWorkspace'
 import { isDesktop } from './lib/desktop'
 import type {
@@ -17,25 +17,11 @@ import type {
   WorkspaceEntry,
 } from './types'
 
-const TOKEN_KEY = 'swiflow_token'
-
-export function getToken(): string {
-  return localStorage.getItem(TOKEN_KEY) || ''
-}
-export function setToken(t: string) {
-  localStorage.setItem(TOKEN_KEY, t)
-}
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY)
-}
-
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = getToken()
   const res = await fetch('/api' + path, {
     method,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(30_000),
@@ -70,6 +56,10 @@ export const api = {
   abortSession: (key: string) => req<{ aborted: boolean }>('POST', `/sessions/${key}/abort`),
   listTools: () => req<{ tools: ToolInfo[]; exec_enabled: boolean; browser_enabled: boolean }>('GET', '/tools'),
   setTool: (name: string, enabled: boolean) => req<{ status: string }>('PUT', `/tools/${name}`, { enabled }),
+  getSearchSettings: () =>
+    req<{ provider: string; base_url: string; api_key_set: boolean }>('GET', '/settings/search'),
+  putSearchSettings: (body: { provider?: string; api_key?: string; base_url?: string }) =>
+    req<{ status: string; provider: string; base_url: string; api_key_set: boolean }>('PUT', '/settings/search', body),
   listSkills: () => req<{ skills: SkillInfo[] }>('GET', '/skills'),
   setSkill: (slug: string, enabled: boolean) => req<{ status: string }>('PUT', `/skills/${slug}`, { enabled }),
   reloadSkills: () => req<{ status: string }>('POST', '/skills/reload'),
@@ -135,10 +125,8 @@ async function uploadWorkspaceFiles(
   for (const file of files) {
     fd.append('files', file, file.name)
   }
-  const token = getToken()
   const res = await fetch('/api/workspace/upload', {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: fd,
   })
   const text = await res.text()
@@ -162,9 +150,7 @@ export async function chat(
   agentKey: string,
   onEvent: (ev: ChatEvent) => void,
 ): Promise<{ queued?: boolean; position?: number }> {
-  const token = getToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (token) headers.Authorization = `Bearer ${token}`
   const res = await fetch(`/api/sessions/${encodeURIComponent(sessionKey)}/chat`, {
     method: 'POST',
     headers,
@@ -220,9 +206,7 @@ async function streamSSE(
   init: RequestInit,
   onEvent: (ev: ChatEvent) => void,
 ): Promise<void> {
-  const token = getToken()
   const headers: Record<string, string> = {}
-  if (token) headers.Authorization = `Bearer ${token}`
   if (init.body) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, {
     ...init,

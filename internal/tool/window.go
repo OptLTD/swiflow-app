@@ -77,7 +77,8 @@ func (t *windowOpenTool) Execute(ctx context.Context, args map[string]any) (stri
 	if path == "" {
 		return "", fmt.Errorf("path required")
 	}
-	full, err := support.SandboxPath(t.base.ws.Base, path)
+	rel := support.NormalizeWorkspaceRel(path)
+	full, err := support.SandboxPath(t.base.ws.Base, rel)
 	if err != nil {
 		return "", err
 	}
@@ -86,9 +87,9 @@ func (t *windowOpenTool) Execute(ctx context.Context, args map[string]any) (stri
 		return "", err
 	}
 	if fi.IsDir() {
-		return "", fmt.Errorf("%s is a directory", path)
+		return "", fmt.Errorf("%s is a directory", rel)
 	}
-	return t.base.call(ctx, t.Name(), map[string]any{"path": path})
+	return t.base.call(ctx, t.Name(), map[string]any{"path": rel})
 }
 
 // RegisterWindow registers window_* UI tools. bridge may be nil (tools still register but fail at execute).

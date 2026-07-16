@@ -7,7 +7,7 @@ SSE streaming. See `docs/SPEC.md` for the full development specification.
 ## Quick start
 
 ```bash
-cp config.example.json config.json   # then edit auth_token / encryption_key
+cp config.example.json config.json   # edit db / listen / tools as needed
 make dev      # API :8000 + UI http://localhost:5173
 ```
 

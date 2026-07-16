@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS agent_session (
     tid        VARCHAR(64) NOT NULL DEFAULT 'default',
     agent      VARCHAR(64) NOT NULL,
     title      VARCHAR(128),
+    parent     VARCHAR(36) NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

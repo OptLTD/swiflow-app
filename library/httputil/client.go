@@ -37,7 +37,7 @@ func Transport() *http.Transport {
 			MaxIdleConns:          32,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   8 * time.Second,
-			ResponseHeaderTimeout: 12 * time.Second,
+			ResponseHeaderTimeout: 90 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
 	})
@@ -54,7 +54,7 @@ func DirectTransport() *http.Transport {
 			MaxIdleConns:          32,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   8 * time.Second,
-			ResponseHeaderTimeout: 12 * time.Second,
+			ResponseHeaderTimeout: 90 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
 	})

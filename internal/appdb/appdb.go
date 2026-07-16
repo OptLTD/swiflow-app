@@ -16,19 +16,16 @@ import (
 
 // Open opens a Store based on cfg.DBDriver (sqlite|postgres).
 func Open(cfg config.Config) (*sqlstore.Store, error) {
-	driver := strings.ToLower(strings.TrimSpace(cfg.DBDriver))
-	if driver == "" {
-		driver = sqlstore.DialectSQLite
-	}
-	switch driver {
-	case sqlstore.DialectSQLite, "sqlite3":
-		return sqlite.Open(cfg.DBPath, cfg.EncryptionKey)
+	driver := strings.TrimSpace(cfg.DBDriver)
+	switch strings.ToLower(driver) {
+	case sqlstore.DialectSQLite, "sqlite3", "":
+		return sqlite.Open(cfg.DBPath)
 	case sqlstore.DialectPostgres, "postgresql", "pgx":
 		dsn := strings.TrimSpace(cfg.DBDSN)
 		if dsn == "" {
 			return nil, fmt.Errorf("db_dsn is required when db_driver=%s", driver)
 		}
-		return pg.Open(dsn, cfg.EncryptionKey)
+		return pg.Open(dsn)
 	default:
 		return nil, fmt.Errorf("unsupported db_driver %q (want sqlite or postgres)", cfg.DBDriver)
 	}

@@ -105,20 +105,18 @@ async function save() {
       </div>
       <div class="shrink-0 flex items-center gap-2">
         <button
-          type="button"
+          type="button" title="Provider 配置"
           class="h-8 px-3 flex items-center gap-1.5 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-sm text-neutral-700"
-          title="Provider 配置"
           @click="providerOpen = true"
         >
           <LocalSvgIcon name="provider" :size="15" />
-          Provider
+          模型设置
         </button>
         <button
-          type="button"
+          @click="save" type="button"
           class="h-8 px-3 bg-neutral-800 text-white rounded text-sm disabled:opacity-50"
           :disabled="saving || !defaultAgent"
-          @click="save"
-        >{{ saving ? 'Saving…' : 'Save' }}</button>
+        >{{ saving ? '保存中…' : '保存' }}</button>
       </div>
     </div>
 

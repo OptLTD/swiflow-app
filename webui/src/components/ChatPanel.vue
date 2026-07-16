@@ -6,11 +6,17 @@ import { useChatStore } from '../stores/chat'
 import { useLayoutStore } from '../stores/layout'
 import { DEFAULT_AGENT_KEY } from '../constants/defaults'
 import { renderMarkdown } from '../lib/markdown'
+import LocalSvgIcon from '../components/LocalSvgIcon.vue'
+import UploadFileBar from '../components/UploadFileBar.vue'
 import ToolCallBlock from '../components/ToolCallBlock.vue'
 import ThinkingBlock from '../components/ThinkingBlock.vue'
-import LocalSvgIcon from '../components/LocalSvgIcon.vue'
-import { handleUiRequest, submitClarifyAnswer, cancelClarify } from '../lib/windowBridge'
+import SubagentDrawer from '../components/SubagentDrawer.vue'
+import { cancelClarify } from '../lib/windowBridge'
 import { useClarifyStore } from '../stores/clarify'
+import { handleUiRequest } from '../lib/windowBridge'
+import { submitClarifyAnswer } from '../lib/windowBridge'
+import { composeMessageWithAttachments } from '../lib/workspacePath'
+import { displayMessageBody, fromAtPath } from '../lib/workspacePath'
 import type { ChatEvent, Message, Session } from '../types'
 
 const props = withDefaults(
@@ -52,6 +58,31 @@ async function dismissClarify() {
   await cancelClarify(key)
 }
 
+const pendingAttachments = computed(() => {
+  const key = currentKey.value
+  return key ? chatStore.pendingBySession[key] || [] : []
+})
+
+function removePending(atPath: string) {
+  const key = currentKey.value
+  if (!key) return
+  chatStore.removePending(key, atPath)
+}
+
+function openAttached(atPath: string) {
+  const rel = fromAtPath(atPath)
+  if (rel) layout.openFile(rel)
+}
+
+function messageDisplayBody(content: string) {
+  return displayMessageBody(content)
+}
+
+function shortFileLabel(at: string): string {
+  const name = fromAtPath(at).split('/').pop() || at
+  return name.length > 22 ? name.slice(0, 10) + '…' + name.slice(-8) : name
+}
+
 const isTabMode = computed(() => !!props.sessionKey)
 const localTitle = ref('')
 
@@ -82,11 +113,20 @@ interface Msg {
   arguments?: Record<string, unknown>
   isError?: boolean
   streaming?: boolean
+  progress?: string
+  childSession?: string
+  startedAt?: number
+  endedAt?: number
 }
 
 const sessions = ref<Session[]>([])
 const currentKey = computed(() => (isTabMode.value ? props.sessionKey || '' : chatStore.currentKey))
 const showHistory = ref(false)
+const subagentKey = ref<string | null>(null)
+
+function openSubagent(key: string) {
+  if (key) subagentKey.value = key
+}
 const messages = ref<Msg[]>([])
 const input = ref('')
 const streaming = ref(false)
@@ -196,12 +236,20 @@ function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Ms
       arguments: ev.arguments,
       content: '',
       isError: false,
+      startedAt: Date.now(),
     })
+  } else if (ev.type === 'tool_progress') {
+    const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
+    if (t) {
+      if (ev.child) t.childSession = ev.child
+      if (ev.content) t.progress = ev.content
+    }
   } else if (ev.type === 'tool_result') {
     const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
     if (t) {
       t.content = ev.result || ''
       t.isError = !!ev.is_error || looksLikeToolError(ev.result)
+      t.endedAt = Date.now()
     }
   } else if (ev.type === 'error') {
     error.value = ev.error || 'error'
@@ -395,15 +443,22 @@ function newSession() {
 }
 
 async function send() {
-  if (!input.value.trim()) return
+  const pending = currentKey.value
+    ? [...(chatStore.pendingBySession[currentKey.value] || [])]
+    : []
+  if (!input.value.trim() && !pending.length) return
   if (!currentKey.value) {
     if (isTabMode.value) return
     newSession()
   }
   const key = currentKey.value
   if (!key) return
-  const text = input.value
+  const text = composeMessageWithAttachments(
+    input.value,
+    pending.map((p) => p.atPath),
+  )
   input.value = ''
+  chatStore.clearPending(key)
   const wasStreaming = streaming.value
   messages.value.push({ role: 'user', content: text })
   error.value = ''
@@ -576,7 +631,13 @@ function gapClass(m: Msg, i: number): string {
         <template v-else>
           <div v-for="(m, i) in messages" :key="i" :class="gapClass(m, i)">
             <div v-if="m.role === 'user'" class="flex justify-end">
-              <div class="bg-neutral-800 text-white text-[15px] leading-relaxed rounded-lg px-3 py-2 max-w-[80%] whitespace-pre-wrap">{{ m.content }}</div>
+              <div class="max-w-[80%] flex flex-col items-end gap-1.5">
+                <UploadFileBar :content="m.content" @open="openAttached" />
+                <div
+                  v-if="messageDisplayBody(m.content)"
+                  class="bg-neutral-800 text-white text-[15px] leading-relaxed rounded-lg px-3 py-2 whitespace-pre-wrap"
+                >{{ messageDisplayBody(m.content) }}</div>
+              </div>
             </div>
             <div v-else-if="m.role === 'assistant'">
               <ThinkingBlock v-if="m.thinking" :content="m.thinking" />
@@ -591,7 +652,11 @@ function gapClass(m: Msg, i: number): string {
                 :args="m.arguments"
                 :content="m.content"
                 :is-error="m.isError"
-                @open-session="(key, title) => layout.openChatTab(key, title || 'Subagent')"
+                :progress="m.progress"
+                :child-session="m.childSession"
+                :started-at="m.startedAt"
+                :ended-at="m.endedAt"
+                @view-child="(key) => openSubagent(key)"
               />
             </div>
           </div>
@@ -648,6 +713,38 @@ function gapClass(m: Msg, i: number): string {
           ? 'border border-neutral-200 rounded-xl p-3'
           : 'border-t border-neutral-200 p-3'"
       >
+        <div
+          v-if="pendingAttachments.length"
+          class="flex items-center gap-1.5 mb-2 pb-2 border-b border-neutral-100 min-w-0 overflow-hidden"
+        >
+          <span
+            v-for="f in pendingAttachments.slice(0, 2)"
+            :key="f.atPath"
+            class="inline-flex items-center gap-1 min-w-0 max-w-[42%] pl-2 pr-1 py-0.5 rounded-md text-xs bg-neutral-100 text-neutral-700"
+            :title="f.atPath"
+          >
+            <button
+              type="button"
+              class="font-mono truncate hover:underline text-left min-w-0"
+              @click="openAttached(f.atPath)"
+            >{{ shortFileLabel(f.atPath) }}</button>
+            <button
+              type="button"
+              class="shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 text-neutral-500"
+              title="Remove"
+              @click="removePending(f.atPath)"
+            >×</button>
+          </span>
+          <span
+            v-if="pendingAttachments.length > 2"
+            class="shrink-0 text-xs text-neutral-500 tabular-nums"
+            :title="pendingAttachments.map(f => f.atPath).join('\n')"
+          >+{{ pendingAttachments.length - 2 }} · {{ pendingAttachments.length }} files</span>
+          <span
+            v-else-if="pendingAttachments.length > 1"
+            class="shrink-0 text-xs text-neutral-500 tabular-nums"
+          >{{ pendingAttachments.length }} files</span>
+        </div>
         <textarea
           v-model="input"
           @keydown.enter.exact.prevent="send"
@@ -658,7 +755,7 @@ function gapClass(m: Msg, i: number): string {
         <button
           type="button"
           class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
-          :disabled="!input.trim()"
+          :disabled="!input.trim() && !pendingAttachments.length"
           :title="streaming ? 'Queue message' : 'Send'"
           @click="send"
         >
@@ -666,5 +763,7 @@ function gapClass(m: Msg, i: number): string {
         </button>
       </div>
     </div>
+
+    <SubagentDrawer v-if="subagentKey" :session-key="subagentKey" @close="subagentKey = null" />
   </div>
 </template>

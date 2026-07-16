@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OptLTD/swiflow/library/httputil"
 	"github.com/OptLTD/swiflow/library/document"
 )
 
@@ -47,7 +48,7 @@ func NewOpenAICompatProvider(cfg OpenAICompatConfig) *OpenAICompatProvider {
 		baseURL: baseURL,
 		apiKey:  cfg.APIKey,
 		model:   model,
-		client:  &http.Client{Timeout: timeout},
+		client:  httputil.Client(timeout),
 	}
 }
 
@@ -85,8 +86,10 @@ func (p *OpenAICompatProvider) Extract(ctx context.Context, req document.Provide
 		return nil, err
 	}
 	defer resp.Body.Close()
+	// Guard against a server that sends headers then stalls the body.
+	respBody := httputil.NewIdleReadCloser(resp.Body, ocrIdleTimeout)
 	if resp.StatusCode >= 400 {
-		b, _ := io.ReadAll(resp.Body)
+		b, _ := io.ReadAll(respBody)
 		return nil, fmt.Errorf("document provider http %d: %s", resp.StatusCode, string(b))
 	}
 	var out struct {
@@ -96,7 +99,7 @@ func (p *OpenAICompatProvider) Extract(ctx context.Context, req document.Provide
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(respBody).Decode(&out); err != nil {
 		return nil, err
 	}
 	if len(out.Choices) == 0 {
@@ -106,22 +109,72 @@ func (p *OpenAICompatProvider) Extract(ctx context.Context, req document.Provide
 	if content == "" {
 		return nil, fmt.Errorf("document provider returned empty content")
 	}
-	var result document.Result
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
+	return parseExtractJSON(content)
+}
+
+func parseExtractJSON(content string) (*document.Result, error) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(content), &raw); err != nil {
 		return nil, fmt.Errorf("document provider returned invalid json: %w", err)
+	}
+	var result document.Result
+	_ = json.Unmarshal([]byte(content), &result)
+	if result.Fields == nil {
+		result.Fields = map[string]any{}
+	}
+
+	// Promote common alternate shapes models return when no schema was given.
+	if len(result.Fields) == 0 {
+		if nested, ok := raw["fields"].(map[string]any); ok && len(nested) > 0 {
+			result.Fields = nested
+		}
+	}
+	for _, key := range []string{"text", "raw_text", "content", "ocr", "transcription", "全文"} {
+		if result.RawText != "" {
+			break
+		}
+		if s, ok := asNonEmptyString(raw[key]); ok {
+			result.RawText = s
+		}
+	}
+	if result.RawText == "" {
+		if s, ok := asNonEmptyString(result.Fields["text"]); ok {
+			result.RawText = s
+		} else if s, ok := asNonEmptyString(result.Fields["全文"]); ok {
+			result.RawText = s
+		}
+	}
+	if len(result.Fields) == 0 && result.RawText != "" {
+		result.Fields["text"] = result.RawText
+	}
+	if result.DocType == "" {
+		if s, ok := asNonEmptyString(raw["doc_type"]); ok {
+			result.DocType = s
+		} else if s, ok := asNonEmptyString(raw["type"]); ok {
+			result.DocType = s
+		}
 	}
 	return &result, nil
 }
 
+func asNonEmptyString(v any) (string, bool) {
+	s, ok := v.(string)
+	s = strings.TrimSpace(s)
+	return s, ok && s != ""
+}
+
 func systemPrompt() string {
 	return strings.Join([]string{
-		"You extract structured data from documents.",
+		"You extract structured data from documents and images (OCR).",
 		"Return one JSON object only.",
 		"Use this shape:",
-		`{"doc_type":"...","fields":{},"confidence":{},"evidence":{},"meta":{}}`,
-		"confidence must map field names to numbers between 0 and 1.",
-		"evidence must map field names to short source snippets.",
-		"If a field is missing, omit it or set it to null.",
+		`{"doc_type":"...","fields":{...},"confidence":{},"evidence":{},"meta":{}}`,
+		"Always fill fields with every readable labeled value from the document (use the printed labels as keys when possible, e.g. 车牌号, 毛重, 净重).",
+		"Also put a full plain-text transcription of all visible text into fields[\"text\"].",
+		"confidence maps field names to numbers between 0 and 1.",
+		"evidence maps field names to short source snippets.",
+		"Never return an empty fields object when text is visible — at minimum include fields.text.",
+		"If a specific requested field is missing, omit it or set it to null.",
 	}, "\n")
 }
 
@@ -143,6 +196,8 @@ func buildInstruction(req document.ProviderRequest) string {
 		b.WriteString("Task: ")
 		b.WriteString(req.Prompt)
 		b.WriteString("\n")
+	} else {
+		b.WriteString("Task: Read all visible text and fill fields with every labeled value; include fields.text as the full transcription.\n")
 	}
 	if len(req.Fields) > 0 {
 		b.WriteString("Preferred fields: ")

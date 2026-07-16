@@ -2,8 +2,8 @@ import { defineStore } from 'pinia'
 import { api } from '../api'
 import { onDesktopWorkspaceUploaded, patchDesktopNativeDrag } from '../lib/desktopUpload'
 import { isDesktop } from '../lib/desktop'
-import { useAuthStore } from './auth'
 import { useLayoutStore } from './layout'
+import { useChatStore } from './chat'
 import { useToastStore } from './toast'
 
 function hasFiles(e: DragEvent) {
@@ -18,6 +18,27 @@ function collectFiles(dt: DataTransfer | null): File[] {
     if (file.name && !file.name.startsWith('.')) out.push(file)
   }
   return out
+}
+
+/** Attach uploaded workspace files to the active chat pending bar when chat is in context. */
+function maybeAttachToChat(uploaded: { name: string; path: string }[]) {
+  if (!uploaded.length) return
+  const layout = useLayoutStore()
+  if (!layout.showChatSidebar && !layout.isChatTabActive) return
+
+  const chat = useChatStore()
+  let sessionKey = ''
+  if (layout.isChatTabActive && layout.activeTab.path) {
+    sessionKey = layout.activeTab.path
+  } else if (layout.showChatSidebar) {
+    sessionKey = chat.currentKey
+    if (!sessionKey) {
+      sessionKey = 'sess-' + Math.random().toString(36).slice(2, 10)
+      chat.setSession(sessionKey, '')
+    }
+  }
+  if (!sessionKey) return
+  chat.addPending(sessionKey, uploaded)
 }
 
 export const useUploadStore = defineStore('upload', {
@@ -61,6 +82,7 @@ export const useUploadStore = defineStore('upload', {
         const preview = names.length > 48 ? `${names.slice(0, 48)}…` : names
         toast.success(`已上传 ${data.uploaded.length} 个文件到 ${loc}${preview ? `：${preview}` : ''}`)
         this.refreshSeq += 1
+        maybeAttachToChat(data.uploaded || [])
       })
     },
     onDragEnter(e: DragEvent) {
@@ -89,12 +111,6 @@ export const useUploadStore = defineStore('upload', {
         return
       }
 
-      const auth = useAuthStore()
-      if (!auth.isAuthed) {
-        useToastStore().error('请先登录后再上传文件')
-        return
-      }
-
       const files = collectFiles(e.dataTransfer)
       if (!files.length) return
       await this.uploadFiles(files)
@@ -112,6 +128,7 @@ export const useUploadStore = defineStore('upload', {
         const preview = names.length > 48 ? `${names.slice(0, 48)}…` : names
         toast.success(`已上传 ${r.uploaded.length} 个文件到 ${loc}${preview ? `：${preview}` : ''}`)
         this.refreshSeq += 1
+        maybeAttachToChat(r.uploaded)
       } catch (err: unknown) {
         toast.error(err instanceof Error ? err.message : '上传失败')
       } finally {

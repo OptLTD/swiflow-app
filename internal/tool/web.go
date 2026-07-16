@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OptLTD/swiflow/internal/httputil"
+	"github.com/OptLTD/swiflow/library/httputil"
 	"github.com/OptLTD/swiflow/library/support"
 )
 
@@ -77,8 +77,11 @@ func stripHTML(s string) string {
 	return wsRe.ReplaceAllString(s, " ")
 }
 
-// RegisterWeb registers the web tools.
-func RegisterWeb(r *Registry, opts WebOptions) {
+// RegisterWeb registers the web tools. opts may be shared and updated at runtime.
+func RegisterWeb(r *Registry, opts *WebOptions) {
+	if opts == nil {
+		opts = &WebOptions{}
+	}
 	r.Register(&webFetchTool{})
 	r.Register(&webSearchTool{opts: opts})
 }

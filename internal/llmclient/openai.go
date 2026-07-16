@@ -7,15 +7,67 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
-	"github.com/OptLTD/swiflow/internal/httputil"
+	"github.com/OptLTD/swiflow/library/httputil"
 )
+
+// streamIdleTimeout aborts a streaming response whose body stalls (no SSE data)
+// for this long. Guards against providers that return 200 then hang mid-stream,
+// which otherwise blocks the whole agent run until the outer ctx deadline.
+// Package var so tests can shorten it.
+var streamIdleTimeout = 60 * time.Second
+
+// llmMaxRetries / llmRetryBaseDelay control exponential backoff for transient
+// failures (429, 5xx, stalls, network). Package vars so tests can tune them.
+var (
+	llmMaxRetries     = 2
+	llmRetryBaseDelay = 500 * time.Millisecond
+)
+
+// APIError carries the HTTP status of a non-2xx provider response so callers can
+// classify it (429/5xx transient vs 400/401/403 fatal). Modeled loosely on
+// go-openai's status-based error handling — without adopting the library.
+type APIError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("provider http %d: %s", e.StatusCode, e.Body)
+}
+
+// retryableLLMError reports whether err is worth retrying with backoff.
+func retryableLLMError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ae *APIError
+	if errors.As(err, &ae) {
+		return ae.StatusCode == 429 || ae.StatusCode >= 500
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, s := range []string{
+		"stalled", "timeout", "reset by peer", "connection refused",
+		"i/o timeout", "eof", "network is unreachable", "client.timeout",
+	} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
+}
 
 // OpenAIProvider talks to any OpenAI-compatible /chat/completions endpoint.
 type OpenAIProvider struct {
@@ -54,8 +106,44 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 }
 
 // ChatStream calls the completions endpoint, streaming chunks to onChunk when
-// non-nil, and returns the aggregated response.
+// non-nil, and returns the aggregated response. Transient failures (429, 5xx,
+// stalls, network) are retried with exponential backoff, but only while nothing
+// has been streamed yet (so a retry never double-emits partial output).
 func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
+	delay := llmRetryBaseDelay
+	var lastResp *ChatResponse
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		emitted := false
+		hook := onChunk
+		if onChunk != nil {
+			hook = func(c StreamChunk) {
+				if c.Content != "" || c.Thinking != "" {
+					emitted = true
+				}
+				onChunk(c)
+			}
+		}
+		resp, err := p.chatOnce(ctx, req, hook)
+		if err == nil {
+			return resp, nil
+		}
+		lastResp, lastErr = resp, err
+		if attempt >= llmMaxRetries || ctx.Err() != nil || emitted || !retryableLLMError(err) {
+			return lastResp, lastErr
+		}
+		slog.Warn("llm.retry", "provider", p.name, "attempt", attempt+1, "delay", delay.String(), "error", err.Error())
+		select {
+		case <-ctx.Done():
+			return lastResp, lastErr
+		case <-time.After(delay):
+		}
+		delay *= 2
+	}
+}
+
+// chatOnce performs a single request/parse without retry.
+func (p *OpenAIProvider) chatOnce(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
 	model := req.Model
 	if model == "" {
 		model = p.defaultModel
@@ -84,13 +172,75 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("provider http %d: %s", resp.StatusCode, string(b))
+		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(b)}
 	}
 
 	if onChunk == nil {
 		return parseNonStream(resp.Body)
 	}
-	return parseStream(resp.Body, onChunk)
+	return streamWithIdleGuard(resp.Body, onChunk, streamIdleTimeout)
+}
+
+// idleResetReader signals activity every time the underlying stream yields bytes,
+// so a watchdog can distinguish a slow-but-live stream from a fully stalled one.
+type idleResetReader struct {
+	r     io.Reader
+	reset func()
+}
+
+func (ir *idleResetReader) Read(p []byte) (int, error) {
+	n, err := ir.r.Read(p)
+	if n > 0 && ir.reset != nil {
+		ir.reset()
+	}
+	return n, err
+}
+
+// streamWithIdleGuard parses an SSE stream but aborts if no data arrives for
+// idle. On idle expiry it closes the body (unblocking the scanner) and returns a
+// clear error so the caller can wrap up instead of hanging until ctx deadline.
+func streamWithIdleGuard(body io.ReadCloser, onChunk func(StreamChunk), idle time.Duration) (*ChatResponse, error) {
+	if idle <= 0 {
+		return parseStream(body, onChunk)
+	}
+	resetCh := make(chan struct{}, 1)
+	reset := func() {
+		select {
+		case resetCh <- struct{}{}:
+		default:
+		}
+	}
+	watchDone := make(chan struct{})
+	var stalled atomic.Bool
+	go func() {
+		t := time.NewTimer(idle)
+		defer t.Stop()
+		for {
+			select {
+			case <-watchDone:
+				return
+			case <-resetCh:
+				if !t.Stop() {
+					select {
+					case <-t.C:
+					default:
+					}
+				}
+				t.Reset(idle)
+			case <-t.C:
+				stalled.Store(true)
+				_ = body.Close()
+				return
+			}
+		}
+	}()
+
+	out, err := parseStream(&idleResetReader{r: body, reset: reset}, onChunk)
+	close(watchDone)
+	if stalled.Load() {
+		return out, fmt.Errorf("llm stream stalled: no data for %s", idle)
+	}
+	return out, err
 }
 
 func buildMessages(msgs []Message) []map[string]any {

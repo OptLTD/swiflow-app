@@ -50,6 +50,9 @@ func applyCanonicalSchema(ctx context.Context, db *sql.DB) error {
 	if err := addColumnIfMissing(ctx, db, "agent_config", "img_model", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := addColumnIfMissing(ctx, db, "agent_session", "parent", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 
 	// Migrate agent_config.provider/model → txt_model + llm_provider.model.
 	hasProvider, err := columnExists(ctx, db, "agent_config", "provider")

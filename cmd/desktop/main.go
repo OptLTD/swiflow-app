@@ -4,8 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,7 +21,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
-	"github.com/OptLTD/swiflow/internal/httputil"
+	"github.com/OptLTD/swiflow/library/httputil"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/schedule"
@@ -50,14 +48,15 @@ func main() {
 		os.Exit(1)
 	}
 	cfg = resolveDesktopPaths(cfg, filepath.Dir(cfgPath))
+	// Document extract uses the vision/default provider from Settings; keep enabled on desktop.
+	cfg.Tools.DocumentEnabled = true
 
 	// File logs under workspace so Settings / Explore can open them.
 	if _, err := observe.SetupFileLog(cfg.WorkspaceDir, slog.LevelInfo); err != nil {
 		slog.Warn("file log setup", "error", err)
 	}
 
-	// 2. Start Swiflow backend (skip auth in desktop mode). MCP sync is deferred.
-	cfg.SkipAuth = true
+	// 2. Start Swiflow backend. MCP sync is deferred.
 	shutdown := startSwiflowBackend(ctx, cfg)
 	defer shutdown()
 	slog.Info("desktop backend ready", "elapsed", time.Since(start).Round(time.Millisecond))
@@ -134,6 +133,7 @@ func appDataDir() (string, error) {
 
 // ensureDesktopConfig finds an existing config or writes a default under Application Support.
 // Launch order: SWIFLOW_CONFIG → ./config.json → ../config.json → AppSupport/config.json
+// Data paths are always under AppSupport/data/{workspace,user-skills,swiflow.db}.
 func ensureDesktopConfig() (string, error) {
 	if p := os.Getenv("SWIFLOW_CONFIG"); p != "" {
 		return p, nil
@@ -150,11 +150,11 @@ func ensureDesktopConfig() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "data", "workspace"), 0o755); err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "data", "user-skills"), 0o755); err != nil {
-		return "", err
+	dataDir := filepath.Join(dir, "data")
+	for _, sub := range []string{"workspace", "user-skills"} {
+		if err := os.MkdirAll(filepath.Join(dataDir, sub), 0o755); err != nil {
+			return "", err
+		}
 	}
 
 	cfgPath := filepath.Join(dir, "config.json")
@@ -162,28 +162,17 @@ func ensureDesktopConfig() (string, error) {
 		return cfgPath, nil
 	}
 
-	token, err := randomHex(16)
-	if err != nil {
-		return "", err
-	}
-	encKey, err := randomHex(16)
-	if err != nil {
-		return "", err
-	}
 	cfg := map[string]any{
-		"host": "127.0.0.1", "port": 18765,
-		"db_path": filepath.Join(dir, "data", "swiflow.db"),
-
-		"encryption_key": encKey, "auth_token": token,
-		"workspace_dir":    filepath.Join(dir, "data", "workspace"),
-		"user_skills_dir":  filepath.Join(dir, "data", "user-skills"),
+		"db_path": filepath.Join(dataDir, "swiflow.db"),
+		"host":    "127.0.0.1", "port": 18765,
+		"workspace_dir":    filepath.Join(dataDir, "workspace"),
+		"user_skills_dir":  filepath.Join(dataDir, "user-skills"),
 		"allowed_origins":  []string{"*"},
 		"max_history_msgs": 100, "tools": map[string]any{
-			"exec_enabled":         true,
-			"browser_enabled":      true,
-			"browser_headless":     true,
-			"document_model":       "gpt-4o-mini",
-			"document_timeout_sec": 120,
+			"exec_enabled":     true,
+			"browser_enabled":  true,
+			"browser_headless": true,
+			"document_enabled": true,
 		},
 	}
 	raw, err := json.MarshalIndent(cfg, "", "  ")
@@ -197,14 +186,6 @@ func ensureDesktopConfig() (string, error) {
 	return cfgPath, nil
 }
 
-func randomHex(n int) (string, error) {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
 // resolveDesktopPaths turns relative data paths into absolute paths under the config directory.
 func resolveDesktopPaths(cfg config.Config, baseDir string) config.Config {
 	abs := func(p string) string {
@@ -213,6 +194,7 @@ func resolveDesktopPaths(cfg config.Config, baseDir string) config.Config {
 		}
 		return filepath.Join(baseDir, p)
 	}
+	// Prefer rule-based layout under AppSupport when paths are still defaults/relative.
 	cfg.DBPath = abs(cfg.DBPath)
 	cfg.WorkspaceDir = abs(cfg.WorkspaceDir)
 	cfg.UserSkillsDir = abs(cfg.UserSkillsDir)
@@ -245,19 +227,28 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 
 	toolsReg := tool.NewRegistry()
 	tool.RegisterFS(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
-	tool.RegisterWeb(toolsReg, tool.WebOptions{
+	webOpts := &tool.WebOptions{
 		SearchProvider: cfg.Tools.SearchProvider,
 		SearchAPIKey:   cfg.Tools.SearchAPIKey,
 		SearchBaseURL:  cfg.Tools.SearchBaseURL,
-	})
+	}
+	if webOpts.SearchProvider == "" {
+		webOpts.SearchProvider = "duckduckgo"
+	}
+	server.LoadSearchSettings(ctx, st, webOpts)
+	tool.RegisterWeb(toolsReg, webOpts)
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
-	tool.RegisterDocument(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, tool.DocumentOptions{
+	docTimeout := time.Duration(cfg.Tools.DocumentTimeout) * time.Second
+	if docTimeout <= 0 {
+		docTimeout = 120 * time.Second
+	}
+	tool.RegisterDocument(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, st, tool.DocumentOptions{
 		Enabled:   cfg.Tools.DocumentEnabled,
 		BaseURL:   cfg.Tools.DocumentBaseURL,
 		APIKey:    cfg.Tools.DocumentAPIKey,
 		Model:     cfg.Tools.DocumentModel,
-		Timeout:   time.Duration(cfg.Tools.DocumentTimeout) * time.Second,
+		Timeout:   docTimeout,
 		Workspace: cfg.WorkspaceDir,
 	})
 
@@ -300,6 +291,9 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		Publish:            events,
 		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
 		ToolTimeoutSec:     cfg.ToolTimeoutSec,
+		ToolTimeouts: map[string]time.Duration{
+			tool.ToolDocumentExtract: docTimeout + 30*time.Second,
+		},
 	})
 
 	cronSched := schedule.New(st, runner, events)
@@ -312,7 +306,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		slog.Warn("cron start", "error", err)
 	}
 
-	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge)
+	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts)
 	httpServer := &http.Server{
 		Addr: cfg.Addr(), Handler: srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,

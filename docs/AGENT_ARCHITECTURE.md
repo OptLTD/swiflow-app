@@ -117,7 +117,8 @@ Exhaustion fallback: emit a short `continueHint` + `done`.
 Built by `buildSystem`:
 
 - `You are Swiflow agent <key>.` + optional `system_extra`
-- `## Workspace` (if configured)
+- `## Workspace` (if configured) — absolute root + `@/` alias (`@/` = workspace root;
+  user attachments / mentions map to relative paths for `fs_*`)
 - `## Skills` — only if `Catalog.Summary` is non-empty (no “No skills available.”
   placeholder)
 - `## When to stop` — goal-first guidance

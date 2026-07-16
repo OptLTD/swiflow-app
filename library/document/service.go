@@ -76,9 +76,6 @@ func (s *Service) Extract(ctx context.Context, req Request) (*Result, error) {
 		return nil, fmt.Errorf("empty document result")
 	}
 	out.InputType = inputType
-	if req.IncludeRawText {
-		out.RawText = providerReq.Text
-	}
 	if out.Fields == nil {
 		out.Fields = map[string]any{}
 	}
@@ -90,6 +87,17 @@ func (s *Service) Extract(ctx context.Context, req Request) (*Result, error) {
 	}
 	if out.Meta == nil {
 		out.Meta = map[string]any{}
+	}
+	// For txt/pdf, source text is local; for images, RawText comes from the model when present.
+	if req.IncludeRawText {
+		if out.RawText == "" && providerReq.Text != "" {
+			out.RawText = providerReq.Text
+		}
+		if out.RawText == "" {
+			if s, ok := out.Fields["text"].(string); ok && strings.TrimSpace(s) != "" {
+				out.RawText = strings.TrimSpace(s)
+			}
+		}
 	}
 	return out, nil
 }

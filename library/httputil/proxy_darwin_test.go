@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OptLTD/swiflow/internal/httputil"
+	"github.com/OptLTD/swiflow/library/httputil"
 )
 
 func TestDarwinSystemProxy(t *testing.T) {

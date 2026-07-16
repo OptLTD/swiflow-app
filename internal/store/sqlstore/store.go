@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/OptLTD/swiflow/internal/store"
-	"github.com/OptLTD/swiflow/library/support"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -24,13 +23,12 @@ const (
 // Store is a sqlx-backed store.Store.
 type Store struct {
 	db     *sqlx.DB
-	key    []byte
 	now    string
 	driver string
 }
 
 // OpenSQLite opens (creating if needed) the SQLite database at path.
-func OpenSQLite(path string, encryptionKey string) (*Store, error) {
+func OpenSQLite(path string) (*Store, error) {
 	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 	db, err := sqlx.Connect("sqlite", dsn)
 	if err != nil {
@@ -38,22 +36,20 @@ func OpenSQLite(path string, encryptionKey string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(8)
 	return &Store{
-		db: db, key: support.DeriveKey(encryptionKey),
-		now: nowSQLite, driver: DialectSQLite,
+		db: db, now: nowSQLite, driver: DialectSQLite,
 	}, nil
 }
 
 // OpenPostgres opens a Postgres database using a pgx DSN
 // (e.g. postgres://user:pass@localhost:5432/swiflow?sslmode=disable).
-func OpenPostgres(dsn string, encryptionKey string) (*Store, error) {
+func OpenPostgres(dsn string) (*Store, error) {
 	db, err := sqlx.Connect("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres: %w", err)
 	}
 	db.SetMaxOpenConns(16)
 	return &Store{
-		db: db, key: support.DeriveKey(encryptionKey),
-		now: nowPostgres, driver: DialectPostgres,
+		db: db, now: nowPostgres, driver: DialectPostgres,
 	}, nil
 }
 
@@ -102,14 +98,10 @@ func quotePGTypeColumn(q string) string {
 // --- Providers ---
 
 func (s *Store) CreateProvider(ctx context.Context, p *store.Provider) error {
-	enc, err := support.Encrypt(s.key, []byte(p.ApiKey))
-	if err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, s.sql(`
+	_, err := s.db.ExecContext(ctx, s.sql(`
 		INSERT INTO llm_provider (id, name, display, api_base, api_key, model, enabled)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`), p.ID, p.Name, p.Display, p.ApiBase, enc, p.Model, s.boolArg(p.Enabled))
+	`), p.ID, p.Name, p.Display, p.ApiBase, []byte(p.ApiKey), p.Model, s.boolArg(p.Enabled))
 	return err
 }
 
@@ -134,17 +126,13 @@ func (s *Store) GetProviderByName(ctx context.Context, name string) (*store.Prov
 	return &p, nil
 }
 
-// DecryptAPIKey returns the plaintext API key for a provider by name.
-func (s *Store) DecryptAPIKey(ctx context.Context, name string) (string, error) {
-	var enc []byte
-	if err := s.db.GetContext(ctx, &enc, s.sql(`SELECT api_key FROM llm_provider WHERE name = ?`), name); err != nil {
+// ProviderAPIKey returns the API key for a provider by name.
+func (s *Store) ProviderAPIKey(ctx context.Context, name string) (string, error) {
+	var blob []byte
+	if err := s.db.GetContext(ctx, &blob, s.sql(`SELECT api_key FROM llm_provider WHERE name = ?`), name); err != nil {
 		return "", err
 	}
-	pt, err := support.Decrypt(s.key, enc)
-	if err != nil {
-		return "", err
-	}
-	return string(pt), nil
+	return string(blob), nil
 }
 
 func (s *Store) GetProviderByID(ctx context.Context, id string) (*store.Provider, error) {
@@ -156,7 +144,7 @@ func (s *Store) GetProviderByID(ctx context.Context, id string) (*store.Provider
 	return &p, nil
 }
 
-// ProviderCreds returns the api_base, plaintext api_key, and model for an enabled provider.
+// ProviderCreds returns the api_base, api_key, and model for an enabled provider.
 func (s *Store) ProviderCreds(ctx context.Context, name string) (apiBase, apiKey, model string, err error) {
 	var r providerRow
 	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM llm_provider WHERE name = ? AND enabled = 1`), name); err != nil {
@@ -168,11 +156,7 @@ func (s *Store) ProviderCreds(ctx context.Context, name string) (apiBase, apiKey
 		}
 		return "", "", "", err
 	}
-	pt, err := support.Decrypt(s.key, r.ApiKeyBlob)
-	if err != nil {
-		return "", "", "", err
-	}
-	return r.ApiBase, string(pt), r.Model, nil
+	return r.ApiBase, string(r.ApiKeyBlob), r.Model, nil
 }
 
 func (s *Store) UpdateProvider(ctx context.Context, id string, fields map[string]any) error {
@@ -191,12 +175,8 @@ func (s *Store) UpdateProvider(ctx context.Context, id string, fields map[string
 			if !ok {
 				return fmt.Errorf("api_key must be a string")
 			}
-			enc, err := support.Encrypt(s.key, []byte(keyStr))
-			if err != nil {
-				return err
-			}
 			sets = append(sets, "api_key = ?")
-			args = append(args, enc)
+			args = append(args, []byte(keyStr))
 		case "enabled":
 			b, ok := v.(bool)
 			if !ok {
@@ -286,8 +266,8 @@ func (s *Store) UpdateAgent(ctx context.Context, id string, fields map[string]an
 
 func (s *Store) CreateSession(ctx context.Context, sess *store.Session) error {
 	_, err := s.db.ExecContext(ctx, s.sql(`
-		INSERT INTO agent_session (id, agent, title) VALUES (?, ?, ?)
-	`), sess.ID, sess.Agent, sess.Title)
+		INSERT INTO agent_session (id, agent, title, parent) VALUES (?, ?, ?, ?)
+	`), sess.ID, sess.Agent, sess.Title, sess.Parent)
 	return err
 }
 
@@ -393,6 +373,25 @@ func (s *Store) AppendMessage(ctx context.Context, sessionID string, msg store.M
 	return msg, nil
 }
 
+// UpdateToolMessageByCallID updates the content of a tool-role message identified by tool_call_id.
+func (s *Store) UpdateToolMessageByCallID(ctx context.Context, sessionID, toolCallID, content string) error {
+	if sessionID == "" || toolCallID == "" {
+		return fmt.Errorf("sessionID and toolCallID required")
+	}
+	res, err := s.db.ExecContext(ctx, s.sql(`
+		UPDATE agent_message SET content = ? WHERE sid = ? AND tool_call_id = ? AND role = 'tool'
+	`), content, sessionID, toolCallID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("tool message not found: %s", toolCallID)
+	}
+	_, _ = s.db.ExecContext(ctx, s.sql(`UPDATE agent_session SET updated_at = datetime('now') WHERE id = ?`), sessionID)
+	return nil
+}
+
 func (s *Store) ListMessages(ctx context.Context, sessionID string) ([]store.Message, error) {
 	var rows []messageRow
 	if err := s.db.SelectContext(ctx, &rows, s.sql(`
@@ -481,6 +480,26 @@ func (s *Store) SetSkillEnabled(ctx context.Context, slug string, enabled bool) 
 	return err
 }
 
+func (s *Store) GetSysSetting(ctx context.Context, key string) (string, bool, error) {
+	var val string
+	err := s.db.GetContext(ctx, &val, s.sql(`SELECT value FROM sys_settings WHERE key = ?`), key)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return val, true, nil
+}
+
+func (s *Store) SetSysSetting(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx, s.sql(`
+		INSERT INTO sys_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+	`), key, value)
+	return err
+}
+
 type providerRow struct {
 	ID         string `db:"id"`
 	Tid        string `db:"tid"`
@@ -534,13 +553,14 @@ type sessionRow struct {
 	Tid       string `db:"tid"`
 	Agent     string `db:"agent"`
 	Title     string `db:"title"`
+	Parent    string `db:"parent"`
 	CreatedAt dbTime `db:"created_at"`
 	UpdatedAt dbTime `db:"updated_at"`
 }
 
 func (r sessionRow) toSession() store.Session {
 	return store.Session{
-		ID: r.ID, Tid: r.Tid, Agent: r.Agent, Title: r.Title,
+		ID: r.ID, Tid: r.Tid, Agent: r.Agent, Title: r.Title, Parent: r.Parent,
 		CreatedAt: r.CreatedAt.String(), UpdatedAt: r.UpdatedAt.String(),
 	}
 }
