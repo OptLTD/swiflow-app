@@ -94,6 +94,7 @@ func openRuntime(ctx context.Context, cfg config.Config) (*runtimeBundle, error)
 		ToolTimeouts: map[string]time.Duration{
 			tool.ToolDocumentExtract: docTimeout + 30*time.Second,
 		},
+		DisableThinking: cfg.DisableThinking,
 	})
 	tool.RegisterDelegate(toolsReg, runner)
 

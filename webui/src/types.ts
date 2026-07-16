@@ -38,6 +38,7 @@ export interface Message {
   tool_call_id?: string
   tool_name?: string
   seq?: number
+  created_at?: string
 }
 
 export interface ToolInfo {
@@ -118,6 +119,7 @@ export interface ChatEvent {
   title?: string
   position?: number
   child?: string
+  duration_ms?: number
 }
 
 export interface SkillDraft {

@@ -9,6 +9,7 @@
   "max_history_msgs": 100,
   "max_concurrent_runs": 0,
   "tool_timeout_sec": 120,
+  "disable_thinking": true,
   "tools": {
     "exec_enabled": true,
     "browser_enabled": true,

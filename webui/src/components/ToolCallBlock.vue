@@ -10,6 +10,7 @@ const props = defineProps<{
   childSession?: string
   startedAt?: number
   endedAt?: number
+  durationMs?: number
 }>()
 const emit = defineEmits<{ viewChild: [key: string] }>()
 const open = ref(false) // collapsed by default
@@ -36,6 +37,9 @@ function fmtDur(ms: number): string {
 }
 
 const elapsed = computed(() => {
+  // Prefer the server-measured execution time (excludes queue wait); fall back
+  // to the wall-clock between dispatch and result when unavailable (e.g. history).
+  if (props.durationMs != null) return fmtDur(props.durationMs)
   if (!props.startedAt) return ''
   const end = props.endedAt ?? now.value
   return fmtDur(end - props.startedAt)
@@ -172,11 +176,17 @@ function viewChild(e: Event) {
       </span>
     </button>
     <div
-      v-if="name === 'delegate_task' && running && progress"
-      class="px-2 py-1 bg-neutral-50 border-t border-neutral-100 flex items-center gap-1.5 text-neutral-500 truncate"
+      v-if="name === 'delegate_task' && running && (progress || childSession)"
+      class="px-2 py-1 bg-neutral-50 border-t border-neutral-100 flex items-center gap-1.5"
     >
       <span class="swiflow-spin shrink-0"></span>
-      <span class="truncate">{{ progress }}</span>
+      <span class="truncate text-neutral-500 flex-1">{{ progress || '子任务运行中…' }}</span>
+      <button
+        v-if="childSession"
+        type="button"
+        class="shrink-0 text-neutral-700 hover:underline"
+        @click="viewChild"
+      >查看</button>
     </div>
     <div
       v-if="name === 'delegate_task' && !running && !isError && childSession"

@@ -117,6 +117,7 @@ interface Msg {
   childSession?: string
   startedAt?: number
   endedAt?: number
+  durationMs?: number
 }
 
 const sessions = ref<Session[]>([])
@@ -250,6 +251,7 @@ function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Ms
       t.content = ev.result || ''
       t.isError = !!ev.is_error || looksLikeToolError(ev.result)
       t.endedAt = Date.now()
+      if (typeof ev.duration_ms === 'number') t.durationMs = ev.duration_ms
     }
   } else if (ev.type === 'error') {
     error.value = ev.error || 'error'
@@ -279,6 +281,7 @@ function mapStoredMessages(raw: Message[]): Msg[] {
       if (m.content || m.thinking) {
         out.push({ role: 'assistant', content: m.content, thinking: m.thinking })
       }
+      const startedAt = parseTs(m.created_at)
       for (const tc of tcs) {
         const entry: Msg = {
           role: 'tool',
@@ -287,6 +290,7 @@ function mapStoredMessages(raw: Message[]): Msg[] {
           arguments: tc.arguments,
           content: '',
           isError: false,
+          startedAt,
         }
         out.push(entry)
         if (tc.id) toolByID.set(tc.id, entry)
@@ -299,6 +303,7 @@ function mapStoredMessages(raw: Message[]): Msg[] {
       if (existing) {
         existing.content = m.content || ''
         existing.isError = isErr
+        existing.endedAt = parseTs(m.created_at)
         if (m.tool_name) existing.tool_name = m.tool_name
       } else {
         out.push({
@@ -307,6 +312,7 @@ function mapStoredMessages(raw: Message[]): Msg[] {
           tool_name: m.tool_name,
           content: m.content || '',
           isError: isErr,
+          endedAt: parseTs(m.created_at),
         })
       }
       continue
@@ -319,6 +325,12 @@ function mapStoredMessages(raw: Message[]): Msg[] {
 function looksLikeToolError(content: string | undefined): boolean {
   if (!content) return false
   return /^error:/i.test(content.trim())
+}
+
+function parseTs(s?: string): number | undefined {
+  if (!s) return undefined
+  const t = Date.parse(s)
+  return Number.isNaN(t) ? undefined : t
 }
 
 async function selectSession(key: string) {
@@ -656,6 +668,7 @@ function gapClass(m: Msg, i: number): string {
                 :child-session="m.childSession"
                 :started-at="m.startedAt"
                 :ended-at="m.endedAt"
+                :duration-ms="m.durationMs"
                 @view-child="(key) => openSubagent(key)"
               />
             </div>

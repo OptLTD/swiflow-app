@@ -76,7 +76,13 @@ type OpenAIProvider struct {
 	apiKey       string
 	defaultModel string
 	client       *http.Client
+	// disableThinking sends GLM's `thinking:{type:disabled}` to turn off model
+	// reasoning. Only emitted when true so non-GLM providers are unaffected.
+	disableThinking bool
 }
+
+// SetDisableThinking toggles sending the GLM thinking-disabled parameter.
+func (p *OpenAIProvider) SetDisableThinking(v bool) { p.disableThinking = v }
 
 // NewOpenAIProvider constructs a provider. apiBase should not have a trailing
 // slash (it is trimmed).
@@ -156,6 +162,11 @@ func (p *OpenAIProvider) chatOnce(ctx context.Context, req ChatRequest, onChunk 
 	if tools := buildTools(req.Tools); len(tools) > 0 {
 		body["tools"] = tools
 		body["tool_choice"] = "auto"
+	}
+	if p.disableThinking {
+		// GLM (Zhipu) chat-completions accepts a thinking switch; disabling it
+		// removes the long reasoning phase that dominates TTFT.
+		body["thinking"] = map[string]any{"type": "disabled"}
 	}
 	raw, _ := json.Marshal(body)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiBase+"/chat/completions", bytes.NewReader(raw))

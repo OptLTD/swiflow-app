@@ -72,6 +72,9 @@ type Event struct {
 	// parent UI can attach live progress (and later open the child) for a
 	// delegate_task call.
 	Child string `json:"child,omitempty"`
+	// DurationMS is the measured execution time of a tool (tool_result events),
+	// excluding time spent queued behind the concurrency limit.
+	DurationMS int64 `json:"duration_ms,omitempty"`
 }
 
 // EventPublisher fans out events (typically server.SessionHub).
@@ -98,6 +101,8 @@ type RunnerDeps struct {
 	// ToolTimeouts overrides per-tool timeouts (single source of truth), e.g.
 	// {"document_extract": DocumentTimeout}. Falls back to ToolTimeoutSec.
 	ToolTimeouts map[string]time.Duration
+	// DisableThinking turns off model reasoning (GLM thinking:{type:disabled}).
+	DisableThinking bool
 }
 
 type queuedMsg struct {
@@ -589,6 +594,7 @@ func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llmclient.Pr
 	}
 	r.provMu.Unlock()
 	p := llmclient.NewOpenAIProvider(name, apiBase, apiKey, "")
+	p.SetDisableThinking(r.deps.DisableThinking)
 	r.provMu.Lock()
 	if existing, ok := r.provCache[name]; ok {
 		r.provMu.Unlock()

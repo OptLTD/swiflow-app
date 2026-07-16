@@ -17,6 +17,14 @@ interface Row {
   id?: string
   arguments?: Record<string, unknown>
   isError?: boolean
+  startedAt?: number
+  endedAt?: number
+}
+
+function parseTs(s?: string): number | undefined {
+  if (!s) return undefined
+  const t = Date.parse(s)
+  return Number.isNaN(t) ? undefined : t
 }
 
 const rows = ref<Row[]>([])
@@ -39,8 +47,9 @@ function mapMessages(raw: Message[]): Row[] {
   for (const m of raw) {
     if (m.role === 'assistant' && m.tool_calls?.length) {
       if (m.content || m.thinking) out.push({ role: 'assistant', content: m.content, thinking: m.thinking })
+      const startedAt = parseTs(m.created_at)
       for (const tc of m.tool_calls) {
-        const entry: Row = { role: 'tool', id: tc.id, tool_name: tc.name, arguments: tc.arguments, content: '', isError: false }
+        const entry: Row = { role: 'tool', id: tc.id, tool_name: tc.name, arguments: tc.arguments, content: '', isError: false, startedAt }
         out.push(entry)
         if (tc.id) toolByID.set(tc.id, entry)
       }
@@ -52,9 +61,10 @@ function mapMessages(raw: Message[]): Row[] {
       if (existing) {
         existing.content = m.content || ''
         existing.isError = isErr
+        existing.endedAt = parseTs(m.created_at)
         if (m.tool_name) existing.tool_name = m.tool_name
       } else {
-        out.push({ role: 'tool', id: m.tool_call_id, tool_name: m.tool_name, content: m.content || '', isError: isErr })
+        out.push({ role: 'tool', id: m.tool_call_id, tool_name: m.tool_name, content: m.content || '', isError: isErr, endedAt: parseTs(m.created_at) })
       }
       continue
     }
@@ -95,7 +105,14 @@ watch(
           <div class="text-sm font-medium text-neutral-800">子任务过程（只读）</div>
           <div class="text-xs text-neutral-400 font-mono truncate">{{ sessionKey }}</div>
         </div>
-        <button class="text-neutral-400 hover:text-neutral-700 text-lg leading-none px-1" @click="emit('close')">×</button>
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            class="text-xs text-neutral-500 hover:text-neutral-800 hover:underline disabled:opacity-40"
+            :disabled="loading || !sessionKey"
+            @click="sessionKey && load(sessionKey)"
+          >刷新</button>
+          <button class="text-neutral-400 hover:text-neutral-700 text-lg leading-none px-1" @click="emit('close')">×</button>
+        </div>
       </div>
       <div class="flex-1 overflow-y-auto p-3 space-y-3">
         <div v-if="loading" class="text-sm text-neutral-400">加载中…</div>
@@ -118,6 +135,8 @@ watch(
               :args="m.arguments"
               :content="m.content"
               :is-error="m.isError"
+              :started-at="m.startedAt"
+              :ended-at="m.endedAt"
             />
           </div>
         </template>

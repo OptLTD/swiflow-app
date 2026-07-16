@@ -28,8 +28,11 @@ type Config struct {
 	// MaxConcurrentRuns caps in-flight Runner.Run calls globally; 0 = unlimited.
 	MaxConcurrentRuns int `json:"max_concurrent_runs"`
 	// ToolTimeoutSec wraps each tool Execute; 0 = 120s default.
-	ToolTimeoutSec int         `json:"tool_timeout_sec"`
-	Tools          ToolsConfig `json:"tools"`
+	ToolTimeoutSec int `json:"tool_timeout_sec"`
+	// DisableThinking turns off model reasoning/thinking for chat completions
+	// (GLM's `thinking:{type:disabled}`). Cuts latency at the cost of reasoning.
+	DisableThinking bool        `json:"disable_thinking"`
+	Tools           ToolsConfig `json:"tools"`
 }
 
 // ToolsConfig controls optional tools.
@@ -53,10 +56,11 @@ func Default() Config {
 	return Config{
 		Host: "127.0.0.1", Port: 8000,
 		DBDriver: "sqlite", DBPath: "./data/swiflow.db",
-		InitSkillsDir:  "", // empty = embedded builtins; set for local dev override
-		UserSkillsDir:  "./data/user-skills",
-		WorkspaceDir:   "./data/workspace",
-		MaxHistoryMsgs: 100,
+		UserSkillsDir: "./data/user-skills",
+		WorkspaceDir:  "./data/workspace",
+
+		MaxHistoryMsgs:  100,
+		DisableThinking: true,
 		Tools: ToolsConfig{
 			BrowserHeadless: true,
 			DocumentEnabled: true,
@@ -151,6 +155,9 @@ func applyEnv(cfg *Config) {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.ToolTimeoutSec = n
 		}
+	}
+	if v := os.Getenv("SWIFLOW_DISABLE_THINKING"); v != "" {
+		cfg.DisableThinking = v == "1" || v == "true"
 	}
 }
 

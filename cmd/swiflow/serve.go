@@ -153,6 +153,7 @@ func runServe() error {
 		ToolTimeouts: map[string]time.Duration{
 			tool.ToolDocumentExtract: docTimeout + 30*time.Second,
 		},
+		DisableThinking: cfg.DisableThinking,
 	})
 
 	cronSched := schedule.New(st, runner, events)

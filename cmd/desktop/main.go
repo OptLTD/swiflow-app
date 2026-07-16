@@ -21,7 +21,6 @@ import (
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
-	"github.com/OptLTD/swiflow/library/httputil"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/schedule"
@@ -29,6 +28,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/library/browser"
+	"github.com/OptLTD/swiflow/library/httputil"
 	"github.com/OptLTD/swiflow/library/window"
 )
 
@@ -283,17 +283,16 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	events := server.NewSessionHub()
 
 	runner := agent.NewRunner(agent.RunnerDeps{
-		Store:              st,
-		Tools:              toolsReg,
-		Skills:             skillsCat,
-		Workspace:          cfg.WorkspaceDir,
+		Store: st, Tools: toolsReg, Skills: skillsCat,
+		Publish: events, Workspace: cfg.WorkspaceDir,
+
 		MaxHistoryMessages: cfg.MaxHistoryMsgs,
-		Publish:            events,
 		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
 		ToolTimeoutSec:     cfg.ToolTimeoutSec,
 		ToolTimeouts: map[string]time.Duration{
 			tool.ToolDocumentExtract: docTimeout + 30*time.Second,
 		},
+		DisableThinking: cfg.DisableThinking,
 	})
 
 	cronSched := schedule.New(st, runner, events)

@@ -27,6 +27,7 @@ type toolOutcome struct {
 	tc     llmclient.ToolCall
 	result string
 	isErr  bool
+	durMS  int64 // measured execution time (excludes queue wait)
 }
 
 // toolNeedsSerial reports tools that must run alone/sequentially: sub-agent runs
@@ -99,7 +100,7 @@ func (r *Runner) executeToolCalls(
 	}
 
 	for _, o := range outcomes {
-		publisher(Event{Type: "tool_result", ID: o.tc.ID, Name: o.tc.Name, Result: o.result, IsError: o.isErr})
+		publisher(Event{Type: "tool_result", ID: o.tc.ID, Name: o.tc.Name, Result: o.result, IsError: o.isErr, DurationMS: o.durMS})
 		toolMsg := store.Message{
 			ID:         support.NewID(),
 			Role:       "tool",
@@ -120,11 +121,13 @@ func (r *Runner) runToolOne(runCtx context.Context, sessionID, agentKey string, 
 	t0 := time.Now()
 	observe.ToolStart(sessionID, tc.Name)
 	finish := func(result string, execErr error) toolOutcome {
-		observe.ToolEnd(sessionID, tc.Name, time.Since(t0), execErr)
+		dur := time.Since(t0)
+		observe.ToolEnd(sessionID, tc.Name, dur, execErr)
+		durMS := dur.Milliseconds()
 		if execErr != nil {
-			return toolOutcome{tc: tc, result: truncateToolResult(formatToolError(result, execErr)), isErr: true}
+			return toolOutcome{tc: tc, result: truncateToolResult(formatToolError(result, execErr)), isErr: true, durMS: durMS}
 		}
-		return toolOutcome{tc: tc, result: truncateToolResult(result), isErr: false}
+		return toolOutcome{tc: tc, result: truncateToolResult(result), isErr: false, durMS: durMS}
 	}
 
 	if err := runCtx.Err(); err != nil {
