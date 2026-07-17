@@ -108,7 +108,7 @@ async function save() {
 </script>
 
 <template>
-  <div class="p-6 max-w-[640px] mx-auto">
+  <div class="p-6  mx-auto">
     <div class="flex items-start justify-between gap-4 mb-4">
       <div>
         <h1 class="text-xl font-bold mb-1">Agent</h1>
