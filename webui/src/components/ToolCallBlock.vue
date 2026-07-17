@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { api } from '../api'
+import { fromAtPath } from '../lib/workspacePath'
+import { useLayoutStore } from '../stores/layout'
 
 const props = defineProps<{
   name: string
@@ -13,6 +16,7 @@ const props = defineProps<{
   durationMs?: number
 }>()
 const emit = defineEmits<{ viewChild: [key: string] }>()
+const layout = useLayoutStore()
 const open = ref(false) // collapsed by default
 
 // Live clock so the elapsed time keeps ticking while the tool is running.
@@ -67,6 +71,92 @@ const childSession = computed(() => {
   }
 })
 
+/** Workspace-relative file path for file tools (preview in a new app tab). */
+const previewPath = computed(() => {
+  const a = props.args || {}
+  switch (props.name) {
+    case 'fs_read':
+    case 'fs_write':
+    case 'fs_edit':
+    case 'document_extract': {
+      const p = fromAtPath(pick(a, 'path'))
+      return p || ''
+    }
+    case 'python_run':
+    case 'node_run': {
+      const p = fromAtPath(pick(a, 'file'))
+      return p || ''
+    }
+    case 'browser': {
+      if (pick(a, 'action') !== 'screenshot') return ''
+      const name = pick(a, 'filename').trim()
+      if (name) {
+        const base = name.replace(/^.*[/\\]/, '')
+        return fromAtPath(base.toLowerCase().endsWith('.png') ? `browser/${base}` : `browser/${base}.png`)
+      }
+      const m = props.content?.match(/screenshot saved to\s+(\S+)/i)
+      return m ? fromAtPath(m[1]) : ''
+    }
+    default:
+      return ''
+  }
+})
+
+/** External http(s) URL for web tools (open in the system default browser). */
+const visitURL = computed(() => {
+  const a = props.args || {}
+  switch (props.name) {
+    case 'web_fetch': {
+      const u = pick(a, 'url').trim()
+      return /^https?:\/\//i.test(u) ? u : ''
+    }
+    case 'browser': {
+      if (pick(a, 'action') !== 'navigate') return ''
+      const u = pick(a, 'url').trim()
+      return /^https?:\/\//i.test(u) ? u : ''
+    }
+    default:
+      return ''
+  }
+})
+
+/** web_search uses the configured provider's human-facing results page. */
+const canVisit = computed(() => {
+  if (visitURL.value) return true
+  return props.name === 'web_search' && !!pick(props.args, 'query').trim()
+})
+
+function searchProviderURL(provider: string, baseURL: string, query: string): string {
+  const q = encodeURIComponent(query)
+  switch ((provider || '').toLowerCase().trim()) {
+    case 'brave':
+      return `https://search.brave.com/search?q=${q}`
+    case 'searxng':
+    case 'searx': {
+      const base = (baseURL || '').trim().replace(/\/+$/, '')
+      // Human page (no format=json). Fall back to DDG if base URL is unset.
+      return base ? `${base}/search?q=${q}` : `https://duckduckgo.com/?q=${q}`
+    }
+    case 'duckduckgo':
+    case 'ddg':
+    default:
+      return `https://duckduckgo.com/?q=${q}`
+  }
+}
+
+async function resolveVisitURL(): Promise<string> {
+  if (visitURL.value) return visitURL.value
+  if (props.name !== 'web_search') return ''
+  const query = pick(props.args, 'query').trim()
+  if (!query) return ''
+  try {
+    const r = await api.getSearchSettings()
+    return searchProviderURL(r.provider || 'duckduckgo', r.base_url || '', query)
+  } catch {
+    return searchProviderURL('duckduckgo', '', query)
+  }
+}
+
 // Human-readable intent derived from the tool name + arguments, so the header
 // reads like an action rather than a raw function call.
 const intent = computed(() => {
@@ -82,6 +172,8 @@ const intent = computed(() => {
     }
     case 'fs_edit':
       return '编辑文件 ' + trim(pick(a, 'path'), 60)
+    case 'document_extract':
+      return '抽取文档 ' + trim(pick(a, 'path'), 60)
     case 'web_fetch':
       return '抓取网页 ' + trim(pick(a, 'url'), 60)
     case 'web_search':
@@ -147,12 +239,29 @@ const body = computed(() => {
 // Running while we have no final result yet (tool_result not received).
 const running = computed(() => {
   if (props.isError) return false
+  if (props.endedAt != null || props.durationMs != null) return false
   return !props.content
 })
 
 function viewChild(e: Event) {
   e.stopPropagation()
   if (childSession.value) emit('viewChild', childSession.value)
+}
+
+function openPreview(e: Event) {
+  e.stopPropagation()
+  if (previewPath.value) layout.openFile(previewPath.value)
+}
+
+async function openVisit(e: Event) {
+  e.stopPropagation()
+  const u = await resolveVisitURL()
+  if (!u) return
+  try {
+    await api.openURL(u)
+  } catch {
+    window.open(u, '_blank', 'noopener,noreferrer')
+  }
 }
 </script>
 
@@ -167,11 +276,30 @@ function viewChild(e: Event) {
         <span class="truncate">{{ intent }}</span>
         <span class="text-neutral-400 font-mono shrink-0">{{ name }}</span>
       </span>
-      <span class="shrink-0 flex items-center gap-1.5">
+      <span class="shrink-0 flex items-center gap-1.5 leading-none">
         <span v-if="elapsed" class="text-neutral-400 tabular-nums">{{ elapsed }}</span>
-        <span class="flex items-center gap-1" :class="isError ? 'text-red-600' : 'text-green-600'">
-          <template v-if="running"><span class="swiflow-spin"></span><span class="text-neutral-500">running</span></template>
-          <template v-else>{{ isError ? 'error' : 'ok' }}</template>
+        <span
+          v-if="previewPath"
+          role="button"
+          tabindex="0"
+          class="text-neutral-700 hover:underline cursor-pointer"
+          @click="openPreview"
+          @keydown.enter.prevent="openPreview"
+        >查看</span>
+        <span
+          v-if="canVisit"
+          role="button"
+          tabindex="0"
+          class="text-neutral-700 hover:underline cursor-pointer"
+          @click="openVisit"
+          @keydown.enter.prevent="openVisit"
+        >访问</span>
+        <span
+          class="inline-flex items-center gap-1"
+          :class="isError ? 'text-red-600' : running ? 'text-neutral-500' : 'text-green-600'"
+        >
+          <template v-if="running"><span class="swiflow-spin"></span><span>运行中</span></template>
+          <template v-else>{{ isError ? '失败' : '成功' }}</template>
         </span>
       </span>
     </button>

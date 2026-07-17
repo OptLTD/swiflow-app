@@ -10,7 +10,11 @@ import {
 } from '../constants/defaults'
 import { PROVIDER_PRESETS, DEFAULT_PROVIDER_PRESET_ID, defaultProviderPreset, guessPresetId } from '../constants/providerPresets'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{
+  open: boolean
+  /** Which tab to open when the dialog becomes visible. */
+  initialKind?: 'text' | 'vision'
+}>()
 const emit = defineEmits<{ close: []; saved: [model: string] }>()
 
 type Kind = 'text' | 'vision'
@@ -71,9 +75,9 @@ watch(
   async (open) => {
     if (!open) {
       error.value = ''
-      kind.value = 'text'
       return
     }
+    kind.value = props.initialKind === 'vision' ? 'vision' : 'text'
     loading.value = true
     error.value = ''
     try {
@@ -236,7 +240,7 @@ function onBackdrop(e: MouseEvent) {
               ? 'border-neutral-900 text-neutral-900 font-medium'
               : 'border-transparent text-neutral-500 hover:text-neutral-800'"
             @click="kind = 'text'"
-          >文本模型</button>
+          >推理模型</button>
           <button
             type="button"
             class="pb-2 border-b-2 transition-colors"
@@ -258,7 +262,7 @@ function onBackdrop(e: MouseEvent) {
         <div v-if="error" class="text-sm text-red-600">{{ error }}</div>
 
         <p class="text-xs text-neutral-500">
-          <template v-if="kind === 'text'">配置文本对话所用的模型（绑定到 Agent 的 txt_model）。</template>
+          <template v-if="kind === 'text'">配置推理 / 对话所用的模型（绑定到 Agent 的 txt_model）。</template>
           <template v-else>配置视觉 / 多模态所用的模型（绑定到 Agent 的 img_model）。</template>
         </p>
 

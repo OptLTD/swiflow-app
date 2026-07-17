@@ -15,6 +15,7 @@ import (
 
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
+	"github.com/OptLTD/swiflow/internal/harness"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/schedule"
@@ -90,7 +91,7 @@ func runServe() error {
 		webOpts.SearchProvider = "duckduckgo"
 	}
 	server.LoadSearchSettings(context.Background(), st, webOpts)
-	tool.RegisterWeb(toolsReg, webOpts)
+	tool.RegisterWeb(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, webOpts)
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
 	docTimeout := time.Duration(cfg.Tools.DocumentTimeout) * time.Second
@@ -140,6 +141,8 @@ func runServe() error {
 	defer mcpMgr.Close()
 
 	events := server.NewSessionHub()
+	tracker := harness.NewTracker(events, st)
+	defer tracker.Close()
 
 	runner := agent.NewRunner(agent.RunnerDeps{
 		Store:              st,
@@ -147,7 +150,7 @@ func runServe() error {
 		Skills:             skillsCat,
 		Workspace:          cfg.WorkspaceDir,
 		MaxHistoryMessages: cfg.MaxHistoryMsgs,
-		Publish:            events,
+		Publish:            tracker,
 		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
 		ToolTimeoutSec:     cfg.ToolTimeoutSec,
 		ToolTimeouts: map[string]time.Duration{
@@ -156,7 +159,7 @@ func runServe() error {
 		DisableThinking: cfg.DisableThinking,
 	})
 
-	cronSched := schedule.New(st, runner, events)
+	cronSched := schedule.New(st, runner, tracker)
 	tool.RegisterSchedule(toolsReg, st, cronSched)
 	tool.RegisterExperience(toolsReg, st)
 	tool.RegisterTodo(toolsReg, st)
@@ -167,7 +170,7 @@ func runServe() error {
 	}
 	defer cronSched.Stop()
 
-	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts)
+	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts, tracker)
 	httpServer := &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           srv.Handler(),

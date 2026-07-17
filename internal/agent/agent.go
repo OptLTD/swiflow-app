@@ -57,7 +57,7 @@ type object = map[string]any
 
 // Event is one event streamed to the client during a run.
 type Event struct {
-	Type      string `json:"type"` // delta|thinking|tool_call|tool_result|tool_progress|done|error|ui_request|user|queued
+	Type      string `json:"type"` // delta|thinking|tool_call|tool_result|tool_progress|harness_warn|done|error|ui_request|user|queued
 	Content   string `json:"content,omitempty"`
 	Thinking  string `json:"thinking,omitempty"`
 	ID        string `json:"id,omitempty"`

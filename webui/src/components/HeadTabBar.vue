@@ -57,12 +57,14 @@ function activateTab(tab: { id: string; type: string; path?: string; title: stri
         class="px-3 text-sm flex items-center justify-center gap-1.5 shrink-0 border-r border-neutral-200 transition-colors leading-none"
         :class="[
           tab.id === layout.activeTabId ? 'bg-white text-neutral-900' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200',
-          tab.type === 'home' ? 'w-9 px-0' : '',
+          tab.type === 'home' || tab.type === 'explore' ? 'w-9 px-0' : '',
+          tab.type === 'home' && isMacDesktop() ? 'border-l' : '',
         ]"
-        :title="tab.type === 'home' ? 'Home' : tab.title"
+        :title="tab.type === 'home' ? 'Home' : tab.type === 'explore' ? 'Explore' : tab.title"
         @click="activateTab(tab)"
       >
         <LocalSvgIcon v-if="tab.type === 'home'" name="home" :size="18" />
+        <LocalSvgIcon v-else-if="tab.type === 'explore'" name="folder" :size="18" />
         <template v-else>
           <LocalSvgIcon v-if="tab.type === 'chat'" name="chat" :size="14" />
           <span class="truncate max-w-[120px] leading-none">{{ tab.title }}</span>

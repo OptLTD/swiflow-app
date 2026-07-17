@@ -122,6 +122,32 @@ export interface ChatEvent {
   duration_ms?: number
 }
 
+export interface DriftSignal {
+  code: string
+  severity: string
+  message: string
+  at?: string
+}
+
+export interface RunSnapshot {
+  session_id: string
+  parent_id?: string
+  agent?: string
+  status: string
+  goal?: string
+  round: number
+  max_rounds?: number
+  model?: string
+  started_at?: string
+  updated_at?: string
+  current_tool?: string
+  last_action?: string
+  todos?: { id: string; text: string; done: boolean }[]
+  children?: string[]
+  metrics?: { rounds: number; tool_calls: number; failures: number; wall_ms: number }
+  drift?: DriftSignal[]
+}
+
 export interface SkillDraft {
   id: string
   slug: string

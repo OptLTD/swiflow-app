@@ -7,6 +7,7 @@ import type {
   Message,
   Provider,
   RuntimeInfo,
+  RunSnapshot,
   Session,
   SkillInfo,
   SkillDraft,
@@ -54,6 +55,10 @@ export const api = {
   listSessions: () => req<{ sessions: Session[] }>('GET', '/sessions'),
   getSession: (key: string) => req<{ session: Session; messages: Message[] }>('GET', `/sessions/${key}`),
   abortSession: (key: string) => req<{ aborted: boolean }>('POST', `/sessions/${key}/abort`),
+  listRuns: () => req<{ runs: RunSnapshot[] }>('GET', '/runs'),
+  getRun: (id: string) => req<{ run: RunSnapshot; children: RunSnapshot[] }>('GET', `/runs/${id}`),
+  listSessionChildren: (id: string) =>
+    req<{ children: { session?: Session; run?: RunSnapshot }[] }>('GET', `/sessions/${id}/children`),
   listTools: () => req<{ tools: ToolInfo[]; exec_enabled: boolean; browser_enabled: boolean }>('GET', '/tools'),
   setTool: (name: string, enabled: boolean) => req<{ status: string }>('PUT', `/tools/${name}`, { enabled }),
   getSearchSettings: () =>
@@ -83,6 +88,7 @@ export const api = {
     req<{ path: string; content: string; truncated?: boolean }>('GET', `/workspace/read?path=${encodeURIComponent(path)}`),
   downloadWorkspaceFile: (path: string) => downloadWorkspaceFile(path),
   uploadWorkspace: (path: string, files: File[]) => uploadWorkspaceFiles(path, files),
+  openURL: (url: string) => req<{ status: string }>('POST', '/open-url', { url }),
   replyWindow: (id: string, result?: string, error?: string) =>
     req<{ ok: boolean }>('POST', '/window/reply', {
       id,

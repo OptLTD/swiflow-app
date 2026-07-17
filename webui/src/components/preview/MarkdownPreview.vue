@@ -17,7 +17,7 @@ const html = computed(() =>
 <template>
   <div class="h-full min-h-0 bg-white">
     <div v-if="mode === 'preview'" class="h-full overflow-y-auto px-6 py-4">
-      <article class="prose-swiflow w-full" v-html="html" />
+      <article class="prose-swiflow w-full max-w-[960px] mx-auto" v-html="html" />
     </div>
     <div v-else class="h-full overflow-hidden">
       <TextPreview :path="path" :content="content" />

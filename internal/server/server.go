@@ -12,6 +12,7 @@ import (
 	"github.com/OptLTD/swiflow/embed"
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/config"
+	"github.com/OptLTD/swiflow/internal/harness"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/schedule"
 	"github.com/OptLTD/swiflow/internal/skill"
@@ -31,16 +32,18 @@ type Server struct {
 	mcp     *mcpclient.Manager
 	cron    *schedule.Scheduler
 	events  *SessionHub
+	harness *harness.Tracker
 	window  *window.Bridge
 	webOpts *tool.WebOptions
 }
 
 // New constructs a server. webOpts may be nil; search settings API needs a shared pointer to update live.
-func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *SessionHub, win *window.Bridge, webOpts *tool.WebOptions) *Server {
+// tracker may be nil (runs API returns empty).
+func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *SessionHub, win *window.Bridge, webOpts *tool.WebOptions, tracker *harness.Tracker) *Server {
 	if webOpts == nil {
 		webOpts = &tool.WebOptions{}
 	}
-	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, window: win, webOpts: webOpts}
+	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, harness: tracker, window: win, webOpts: webOpts}
 	if win != nil && events != nil {
 		win.SetFallback(func(sessionID string, ev window.Event) {
 			events.Publish(sessionID, agent.Event{
@@ -71,8 +74,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions", s.listSessions)
 	mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
 	mux.HandleFunc("GET /api/sessions/{id}/watch", s.watchSession)
+	mux.HandleFunc("GET /api/sessions/{id}/children", s.listSessionChildren)
 	mux.HandleFunc("POST /api/sessions/{id}/chat", s.chat)
 	mux.HandleFunc("POST /api/sessions/{id}/abort", s.abort)
+
+	mux.HandleFunc("GET /api/runs", s.listRuns)
+	mux.HandleFunc("GET /api/runs/watch", s.watchRuns)
+	mux.HandleFunc("GET /api/runs/{id}", s.getRun)
 
 	mux.HandleFunc("GET /api/tools", s.listTools)
 	mux.HandleFunc("PUT /api/tools/{name}", s.setToolEnabled)
@@ -106,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/workspace/download", s.downloadFile)
 	mux.HandleFunc("POST /api/workspace/download", s.downloadFile)
 	mux.HandleFunc("POST /api/workspace/upload", s.uploadWorkspace)
+	mux.HandleFunc("POST /api/open-url", s.openURL)
 
 	mux.HandleFunc("POST /api/window/reply", s.windowReply)
 

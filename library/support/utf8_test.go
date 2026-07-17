@@ -11,4 +11,8 @@ func TestSanitizeUTF8(t *testing.T) {
 	if got == "a"+invalid+"b" {
 		t.Fatal("invalid bytes should be replaced")
 	}
+	withNUL := "ok" + string([]byte{0}) + "yes"
+	if got := SanitizeUTF8(withNUL); got != "okyes" {
+		t.Fatalf("NUL not stripped: %q", got)
+	}
 }

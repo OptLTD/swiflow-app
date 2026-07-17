@@ -11,6 +11,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
+	"github.com/OptLTD/swiflow/internal/harness"
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store"
@@ -81,12 +82,15 @@ func openRuntime(ctx context.Context, cfg config.Config) (*runtimeBundle, error)
 		}
 	}
 
+	tracker := harness.NewTracker(nil, st)
+
 	runner := agent.NewRunner(agent.RunnerDeps{
 		Store:              st,
 		Tools:              toolsReg,
 		Skills:             skillsCat,
 		Workspace:          cfg.WorkspaceDir,
 		MaxHistoryMessages: cfg.MaxHistoryMsgs,
+		Publish:            tracker,
 		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
 		ToolTimeoutSec:     cfg.ToolTimeoutSec,
 		// Align the document_extract call timeout with the provider timeout
@@ -103,7 +107,10 @@ func openRuntime(ctx context.Context, cfg config.Config) (*runtimeBundle, error)
 		Store:  st,
 		Tools:  toolsReg,
 		Runner: runner,
-		close:  func() { _ = st.Close() },
+		close: func() {
+			tracker.Close()
+			_ = st.Close()
+		},
 	}, nil
 }
 

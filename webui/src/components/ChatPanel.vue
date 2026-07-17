@@ -11,6 +11,7 @@ import UploadFileBar from '../components/UploadFileBar.vue'
 import ToolCallBlock from '../components/ToolCallBlock.vue'
 import ThinkingBlock from '../components/ThinkingBlock.vue'
 import SubagentDrawer from '../components/SubagentDrawer.vue'
+import HarnessPanel from '../components/HarnessPanel.vue'
 import { cancelClarify } from '../lib/windowBridge'
 import { useClarifyStore } from '../stores/clarify'
 import { handleUiRequest } from '../lib/windowBridge'
@@ -124,10 +125,43 @@ const sessions = ref<Session[]>([])
 const currentKey = computed(() => (isTabMode.value ? props.sessionKey || '' : chatStore.currentKey))
 const showHistory = ref(false)
 const subagentKey = ref<string | null>(null)
+const showHarness = ref(false)
+const harnessWarns = ref<{ code: string; message: string; child?: string }[]>([])
 
 function openSubagent(key: string) {
   if (key) subagentKey.value = key
 }
+
+function toolActivityLabel(m: Msg): string {
+  const name = m.tool_name || 'tool'
+  const a = m.arguments || {}
+  const pick = (k: string) => {
+    const v = a[k]
+    return v == null ? '' : String(v)
+  }
+  const trim = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '…' : s)
+  switch (name) {
+    case 'fs_read':
+      return '读取 ' + trim(pick('path'), 40)
+    case 'fs_write':
+      return '写入 ' + trim(pick('path'), 40)
+    case 'fs_edit':
+      return '编辑 ' + trim(pick('path'), 40)
+    case 'document_extract':
+      return '抽取 ' + trim(pick('path'), 40)
+    case 'web_fetch':
+      return '抓取 ' + trim(pick('url'), 40)
+    case 'web_search':
+      return '搜索 ' + trim(pick('query'), 40)
+    case 'browser':
+      return '浏览器 ' + (pick('action') || '')
+    case 'delegate_task':
+      return '委派 ' + trim(pick('goal'), 40)
+    default:
+      return name
+  }
+}
+
 const messages = ref<Msg[]>([])
 const input = ref('')
 const streaming = ref(false)
@@ -140,6 +174,66 @@ let loadedKey = ''
 /** Skip auto-scroll when the user has scrolled up to read history. */
 let stickToBottom = true
 let scrollRaf = 0
+
+/** Live line above the input: current tool / thinking / subagent / idle / harness warn. */
+const statusBar = computed(() => {
+  const latestWarn = harnessWarns.value.length
+    ? harnessWarns.value[harnessWarns.value.length - 1]
+    : null
+
+  if (streaming.value) {
+    for (let i = messages.value.length - 1; i >= 0; i--) {
+      const m = messages.value[i]
+      if (m.role !== 'tool') continue
+      if (m.content || m.isError) continue
+      if (m.tool_name === 'delegate_task') {
+        return {
+          kind: 'sub' as const,
+          text: m.progress || toolActivityLabel(m) || '子任务运行中…',
+          warn: !!latestWarn,
+        }
+      }
+      return {
+        kind: 'tool' as const,
+        text: toolActivityLabel(m),
+        warn: !!latestWarn,
+      }
+    }
+    for (let i = messages.value.length - 1; i >= 0; i--) {
+      const m = messages.value[i]
+      if (m.role !== 'assistant') continue
+      if (m.streaming || (!m.content && m.thinking)) {
+        if (m.thinking && !m.content) {
+          return { kind: 'think' as const, text: '思考中…', warn: !!latestWarn }
+        }
+        if (m.streaming && m.content) {
+          return { kind: 'reply' as const, text: '生成回复中…', warn: !!latestWarn }
+        }
+        return { kind: 'think' as const, text: '思考中…', warn: !!latestWarn }
+      }
+      break
+    }
+    return { kind: 'run' as const, text: '运行中…', warn: !!latestWarn }
+  }
+
+  if (latestWarn) {
+    return {
+      kind: 'warn' as const,
+      text: latestWarn.message || latestWarn.code,
+      warn: true,
+    }
+  }
+  if (error.value) {
+    return { kind: 'error' as const, text: error.value, warn: false }
+  }
+  // Keep the bar after the run so status + harness entry stay visible.
+  const hasTurn = messages.value.some((m) => m.role === 'assistant' || m.role === 'tool')
+  return {
+    kind: 'idle' as const,
+    text: hasTurn ? '已完成' : '就绪',
+    warn: false,
+  }
+})
 
 const headerTitle = computed(() => {
   if (showHistory.value) return 'History'
@@ -253,6 +347,11 @@ function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Ms
       t.endedAt = Date.now()
       if (typeof ev.duration_ms === 'number') t.durationMs = ev.duration_ms
     }
+  } else if (ev.type === 'harness_warn') {
+    const code = ev.name || 'drift'
+    const message = ev.content || code
+    harnessWarns.value.push({ code, message, child: ev.child })
+    if (harnessWarns.value.length > 20) harnessWarns.value.shift()
   } else if (ev.type === 'error') {
     error.value = ev.error || 'error'
   } else if (ev.type === 'done') {
@@ -319,6 +418,15 @@ function mapStoredMessages(raw: Message[]): Msg[] {
     }
     out.push({ role: m.role, content: m.content, thinking: m.thinking })
   }
+  // Orphan tool_calls with no persisted tool result (e.g. binary content rejected
+  // by Postgres) must not look like still-running tools after reload.
+  for (const m of out) {
+    if (m.role === 'tool' && !m.content && m.endedAt == null) {
+      m.content = 'error: 工具结果未保存'
+      m.isError = true
+      m.endedAt = m.startedAt
+    }
+  }
   return out
 }
 
@@ -346,6 +454,7 @@ async function selectSession(key: string) {
   loadedKey = key
   messages.value = []
   error.value = ''
+  harnessWarns.value = []
   try {
     const r = await api.getSession(key)
     messages.value = mapStoredMessages(r.messages || [])
@@ -427,7 +536,13 @@ async function startWatch(key: string) {
     try {
       await watchSession(key, (ev) => {
         // Allow queue-continued runs via hub; drop only mid-stream duplicates except user/done.
-        if (streaming.value && ev.type !== 'user' && ev.type !== 'done' && ev.type !== 'error') return
+        if (
+          streaming.value &&
+          ev.type !== 'user' &&
+          ev.type !== 'done' &&
+          ev.type !== 'error' &&
+          ev.type !== 'harness_warn'
+        ) return
         handleChatEvent(ev, () => null, (_m) => { /* no-op */ })
       }, ac.signal)
     } catch (e: unknown) {
@@ -514,6 +629,12 @@ async function abortRun() {
   } catch {}
 }
 
+async function refreshSession() {
+  const key = currentKey.value
+  if (!key) return
+  await selectSession(key)
+}
+
 function onMessagesScroll() {
   const el = scrollEl.value
   if (!el) return
@@ -572,13 +693,13 @@ function gapClass(m: Msg, i: number): string {
         </div>
         <div class="shrink-0 flex items-center gap-0.5">
           <button
-            v-if="streaming && !showHistory"
+            v-if="!showHistory && currentKey"
             type="button"
             class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-500"
-            title="Abort"
-            @click="abortRun"
+            title="Refresh"
+            @click="refreshSession"
           >
-            <LocalSvgIcon name="stop" :size="13" />
+            <LocalSvgIcon name="refresh" :size="14" />
           </button>
           <button
             v-if="!showHistory && !props.expanded"
@@ -714,17 +835,48 @@ function gapClass(m: Msg, i: number): string {
       </div>
     </div>
 
+    <!-- Run status (above input): live tool / thinking / subagent / harness warn -->
+    <div
+      v-if="!showHistory && statusBar"
+      class="shrink-0 w-full"
+      :class="props.expanded ? 'max-w-[960px] mx-auto' : ''"
+    >
+      <div
+        class="flex items-center gap-2 px-3 py-1.5 text-xs"
+        :class="[
+          props.expanded
+            ? 'mx-[8px] border rounded-tl-lg rounded-tr-lg'
+            : 'border-t',
+          statusBar.warn
+            ? 'border-amber-200 bg-amber-50 text-amber-900'
+            : statusBar.kind === 'error'
+              ? 'border-red-200 bg-red-50 text-red-800'
+              : 'border-neutral-200 bg-neutral-50 text-neutral-600',
+        ]"
+      >
+        <span v-if="streaming" class="swiflow-spin shrink-0"></span>
+        <span class="truncate flex-1 min-w-0" :title="statusBar.text">{{ statusBar.text }}</span>
+        <button
+          type="button"
+          class="shrink-0 text-neutral-700 hover:underline"
+          :class="statusBar.warn ? 'text-amber-800' : ''"
+          title="Runtime harness"
+          @click="showHarness = true"
+        >明细</button>
+      </div>
+    </div>
+
     <!-- Input: same column width as messages (border lives on the column, not full page) -->
     <div
       v-if="!showHistory"
       class="shrink-0 w-full"
-      :class="props.expanded ? 'max-w-[960px] mx-auto px-4 pb-4' : ''"
+      :class="props.expanded ? 'max-w-[960px] mx-auto pb-4' : ''"
     >
       <div
         class="relative"
         :class="props.expanded
           ? 'border border-neutral-200 rounded-xl p-3'
-          : 'border-t border-neutral-200 p-3'"
+          : (statusBar ? 'p-3' : 'border-t border-neutral-200 p-3')"
       >
         <div
           v-if="pendingAttachments.length"
@@ -766,10 +918,20 @@ function gapClass(m: Msg, i: number): string {
           :placeholder="streaming ? 'Message (queued while running)…' : 'Message…'"
         ></textarea>
         <button
+          v-if="streaming"
+          type="button"
+          class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700"
+          title="Abort"
+          @click="abortRun"
+        >
+          <LocalSvgIcon name="stop" :size="14" />
+        </button>
+        <button
+          v-else
           type="button"
           class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
           :disabled="!input.trim() && !pendingAttachments.length"
-          :title="streaming ? 'Queue message' : 'Send'"
+          title="Send"
           @click="send"
         >
           <LocalSvgIcon name="send" :size="16" />
@@ -778,5 +940,10 @@ function gapClass(m: Msg, i: number): string {
     </div>
 
     <SubagentDrawer v-if="subagentKey" :session-key="subagentKey" @close="subagentKey = null" />
+    <HarnessPanel
+      :open="showHarness"
+      :focus-session="currentKey || null"
+      @close="showHarness = false"
+    />
   </div>
 </template>

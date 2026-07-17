@@ -21,6 +21,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
+	"github.com/OptLTD/swiflow/internal/harness"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/schedule"
@@ -236,7 +237,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		webOpts.SearchProvider = "duckduckgo"
 	}
 	server.LoadSearchSettings(ctx, st, webOpts)
-	tool.RegisterWeb(toolsReg, webOpts)
+	tool.RegisterWeb(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, webOpts)
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
 	docTimeout := time.Duration(cfg.Tools.DocumentTimeout) * time.Second
@@ -281,10 +282,11 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	mcpMgr := mcpclient.NewManager(st, toolsReg)
 
 	events := server.NewSessionHub()
+	tracker := harness.NewTracker(events, st)
 
 	runner := agent.NewRunner(agent.RunnerDeps{
 		Store: st, Tools: toolsReg, Skills: skillsCat,
-		Publish: events, Workspace: cfg.WorkspaceDir,
+		Publish: tracker, Workspace: cfg.WorkspaceDir,
 
 		MaxHistoryMessages: cfg.MaxHistoryMsgs,
 		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
@@ -295,7 +297,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		DisableThinking: cfg.DisableThinking,
 	})
 
-	cronSched := schedule.New(st, runner, events)
+	cronSched := schedule.New(st, runner, tracker)
 	tool.RegisterSchedule(toolsReg, st, cronSched)
 	tool.RegisterExperience(toolsReg, st)
 	tool.RegisterTodo(toolsReg, st)
@@ -305,7 +307,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		slog.Warn("cron start", "error", err)
 	}
 
-	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts)
+	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts, tracker)
 	httpServer := &http.Server{
 		Addr: cfg.Addr(), Handler: srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,

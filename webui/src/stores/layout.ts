@@ -9,11 +9,19 @@ export interface Tab {
   closable: boolean
 }
 
-const HOME_TAB: Tab = { 
+const HOME_TAB: Tab = {
   id: 'home',
   type: 'home',
   title: 'Home',
-  closable: false
+  closable: false,
+}
+
+const EXPLORE_TAB: Tab = {
+  id: 'explore',
+  type: 'explore',
+  title: 'Explore',
+  path: '.',
+  closable: false,
 }
 
 function chatTabId(sessionKey: string) {
@@ -22,7 +30,7 @@ function chatTabId(sessionKey: string) {
 
 export const useLayoutStore = defineStore('layout', {
   state: () => ({
-    tabs: [HOME_TAB],
+    tabs: [HOME_TAB, EXPLORE_TAB] as Tab[],
     explorePath: '.',
     activeTabId: 'home',
     chatPanelOpen: false,
@@ -96,16 +104,14 @@ export const useLayoutStore = defineStore('layout', {
       const existing = this.tabs.find((t) => t.id === 'explore')
       if (existing) {
         existing.path = path
+        this.explorePath = path
         this.activeTabId = 'explore'
         return
       }
-      this.openTab({
-        id: 'explore',
-        type: 'explore',
-        title: 'Explore',
-        path,
-        closable: true,
-      })
+      // Fixed tab should already exist; recreate if somehow removed.
+      this.tabs.splice(1, 0, { ...EXPLORE_TAB, path })
+      this.explorePath = path
+      this.activeTabId = 'explore'
     },
 
     openSettings() {

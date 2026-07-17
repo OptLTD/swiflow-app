@@ -70,6 +70,13 @@ function mapMessages(raw: Message[]): Row[] {
     }
     out.push({ role: m.role, content: m.content, thinking: m.thinking })
   }
+  for (const m of out) {
+    if (m.role === 'tool' && !m.content && m.endedAt == null) {
+      m.content = 'error: 工具结果未保存'
+      m.isError = true
+      m.endedAt = m.startedAt
+    }
+  }
   return out
 }
 

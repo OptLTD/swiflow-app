@@ -5,7 +5,7 @@ import { useProvidersStore } from '../stores/providers'
 import { api } from '../api'
 import LocalSvgIcon from '../components/LocalSvgIcon.vue'
 import ProviderDialog from '../components/ProviderDialog.vue'
-import { DEFAULT_AGENT_KEY, DEFAULT_PROVIDER_NAME } from '../constants/defaults'
+import { DEFAULT_AGENT_KEY, DEFAULT_PROVIDER_NAME, DEFAULT_VISION_PROVIDER_NAME } from '../constants/defaults'
 import { PROMPT_STYLE_PRESETS, guessPromptStyleId } from '../constants/promptStyles'
 
 const agentsStore = useAgentsStore()
@@ -13,6 +13,7 @@ const providersStore = useProvidersStore()
 const error = ref('')
 const saving = ref(false)
 const providerOpen = ref(false)
+const providerKind = ref<'text' | 'vision'>('text')
 const activePromptStyle = ref('none')
 const form = ref({
   display: '',
@@ -27,6 +28,10 @@ const defaultProvider = computed(() =>
   providersStore.providers.find((p) => p.name === DEFAULT_PROVIDER_NAME) || null,
 )
 
+const visionProvider = computed(() =>
+  providersStore.providers.find((p) => p.name === DEFAULT_VISION_PROVIDER_NAME) || null,
+)
+
 onMounted(load)
 
 async function load() {
@@ -36,6 +41,11 @@ async function load() {
   } catch (e: any) {
     error.value = e.message
   }
+}
+
+function openProvider(kind: 'text' | 'vision') {
+  providerKind.value = kind
+  providerOpen.value = true
 }
 
 function syncForm() {
@@ -105,12 +115,22 @@ async function save() {
       </div>
       <div class="shrink-0 flex items-center gap-2">
         <button
-          type="button" title="Provider 配置"
+          type="button"
+          title="配置推理 / 对话模型"
           class="h-8 px-3 flex items-center gap-1.5 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-sm text-neutral-700"
-          @click="providerOpen = true"
+          @click="openProvider('text')"
         >
           <LocalSvgIcon name="provider" :size="15" />
-          模型设置
+          推理模型
+        </button>
+        <button
+          type="button"
+          title="配置视觉 / 多模态模型"
+          class="h-8 px-3 flex items-center gap-1.5 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-sm text-neutral-700"
+          @click="openProvider('vision')"
+        >
+          <LocalSvgIcon name="provider" :size="15" />
+          视觉模型
         </button>
         <button
           @click="save" type="button"
@@ -123,13 +143,24 @@ async function save() {
     <div v-if="error" class="text-red-600 mb-2 text-sm">{{ error }}</div>
 
     <div v-if="!defaultProvider" class="text-sm text-neutral-500 border border-neutral-200 rounded p-4 bg-neutral-50 mb-4">
-      尚未配置 Provider，请点击右上角 <strong>Provider</strong> 按钮添加 API 连接。
+      尚未配置推理模型，请点击右上角 <strong>推理模型</strong> 添加 API 连接。
     </div>
 
     <div v-else-if="defaultAgent" class="border border-neutral-200 rounded p-4 bg-white space-y-3">
-      <div v-if="defaultProvider" class="text-xs text-neutral-400 font-mono truncate pb-1 border-b border-neutral-100">
-        {{ defaultProvider.api_base }}
-        <span v-if="defaultProvider.model"> · {{ defaultProvider.model }}</span>
+      <div class="text-xs text-neutral-400 font-mono space-y-0.5 pb-1 border-b border-neutral-100">
+        <div class="truncate">
+          <span class="text-neutral-500">推理</span>
+          · {{ defaultProvider.api_base }}
+          <span v-if="defaultProvider.model"> · {{ defaultProvider.model }}</span>
+        </div>
+        <div class="truncate">
+          <span class="text-neutral-500">视觉</span>
+          <template v-if="visionProvider">
+            · {{ visionProvider.api_base }}
+            <span v-if="visionProvider.model"> · {{ visionProvider.model }}</span>
+          </template>
+          <template v-else> · 未配置</template>
+        </div>
       </div>
 
       <div>
@@ -161,6 +192,11 @@ async function save() {
       </div>
     </div>
 
-    <ProviderDialog :open="providerOpen" @close="providerOpen = false" @saved="onProviderSaved" />
+    <ProviderDialog
+      :open="providerOpen"
+      :initial-kind="providerKind"
+      @close="providerOpen = false"
+      @saved="onProviderSaved"
+    />
   </div>
 </template>
