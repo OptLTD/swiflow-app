@@ -46,7 +46,7 @@ type ToolsConfig struct {
 	DocumentModel   string `json:"document_model"`
 	DocumentTimeout int    `json:"document_timeout"`
 	// web search
-	SearchProvider string `json:"search_provider"` // duckduckgo|brave|searxng; empty = disabled
+	SearchProvider string `json:"search_provider"` // duckduckgo|brave|searxng|bing|google; empty = disabled
 	SearchBaseURL  string `json:"search_base_url"` // searxng base URL
 	SearchAPIKey   string `json:"search_api_key"`  // brave (or similar)
 }

@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,5 +73,39 @@ func TestLooksBinary(t *testing.T) {
 	}
 	if !looksBinary([]byte("a\x00b")) {
 		t.Fatal("nul")
+	}
+}
+
+func TestSetBrowserFetchHeaders(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://example.com/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setBrowserFetchHeaders(req)
+	if !strings.Contains(req.Header.Get("User-Agent"), "Chrome/") {
+		t.Fatalf("UA=%q", req.Header.Get("User-Agent"))
+	}
+	if req.Header.Get("Accept-Language") == "" {
+		t.Fatal("missing Accept-Language")
+	}
+	if req.Header.Get("Accept-Encoding") != "" {
+		t.Fatal("Accept-Encoding must stay empty for Go auto-gzip")
+	}
+}
+
+func TestFetchBlockedStatus(t *testing.T) {
+	if !fetchBlockedStatus(403) || !fetchBlockedStatus(429) {
+		t.Fatal("expected 403/429 blocked")
+	}
+	if fetchBlockedStatus(404) || fetchBlockedStatus(200) {
+		t.Fatal("404/200 should not trigger browser fallback")
+	}
+}
+
+func TestWebFetchBrowserFallbackUnavailable(t *testing.T) {
+	tl := &webFetchTool{ws: WorkspaceRoots{Base: t.TempDir()}, opts: &WebOptions{}}
+	_, err := tl.fetchViaBrowser(t.Context(), "https://example.com/", 1000)
+	if err == nil || !strings.Contains(err.Error(), "browser") {
+		t.Fatalf("want browser unavailable error, got %v", err)
 	}
 }

@@ -5,6 +5,10 @@ export function searchProviderPageURL(provider: string, baseURL: string, query: 
   if (!q) return ''
   const enc = encodeURIComponent(q)
   switch ((provider || '').toLowerCase().trim()) {
+    case 'bing':
+      return `https://cn.bing.com/search?q=${enc}`
+    case 'google':
+      return `https://www.google.com/search?q=${enc}`
     case 'brave':
       return `https://search.brave.com/search?q=${enc}`
     case 'searxng':
@@ -16,7 +20,6 @@ export function searchProviderPageURL(provider: string, baseURL: string, query: 
     case 'ddg':
       return `https://duckduckgo.com/?q=${enc}`
     default:
-      // Unknown / disabled → DuckDuckGo (matches serve default for web_search).
-      return `https://duckduckgo.com/?q=${enc}`
+      return `https://cn.bing.com/search?q=${enc}`
   }
 }

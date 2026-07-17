@@ -143,6 +143,8 @@ type Store interface {
 	GetSessionByID(ctx context.Context, id string) (*Session, error)
 	ListSessions(ctx context.Context) ([]Session, error)
 	UpdateSessionTitle(ctx context.Context, id, title string) error
+	// DeleteSession removes a session, its child (subagent) sessions, and related rows.
+	DeleteSession(ctx context.Context, id string) error
 	AppendMessage(ctx context.Context, sessionID string, msg Message) (Message, error)
 	// UpdateToolMessageByCallID patches a tool message content after soft-async completion.
 	UpdateToolMessageByCallID(ctx context.Context, sessionID, toolCallID, content string) error

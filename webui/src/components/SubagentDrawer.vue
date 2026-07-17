@@ -129,7 +129,7 @@ watch(
           <div v-if="m.role === 'user'" class="flex justify-end">
             <div
               v-if="m.content"
-              class="max-w-[85%] bg-neutral-800 text-white text-sm rounded-lg px-3 py-2 whitespace-pre-wrap"
+              class="max-w-[85%] bg-neutral-100 text-neutral-700 text-sm rounded-lg px-3 py-2 whitespace-pre-wrap"
             >{{ m.content }}</div>
           </div>
           <div v-else-if="m.role === 'assistant'">

@@ -128,3 +128,25 @@ func TestUnwrapDuckDuckGoURL(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestRequireBrowserSearch(t *testing.T) {
+	if err := requireBrowserSearch(nil, "bing"); err == nil {
+		t.Fatal("want error when opts nil")
+	}
+	if err := requireBrowserSearch(&WebOptions{}, "bing"); err == nil {
+		t.Fatal("want error when browser disabled")
+	}
+}
+
+func TestBingSearchRequiresBrowserEnabled(t *testing.T) {
+	reg := NewRegistry()
+	RegisterWeb(reg, WorkspaceRoots{Base: t.TempDir()}, &WebOptions{SearchProvider: "bing"})
+	tl, ok := reg.Get("web_search")
+	if !ok {
+		t.Fatal("missing web_search")
+	}
+	_, err := tl.Execute(t.Context(), map[string]any{"query": "test"})
+	if err == nil || !strings.Contains(err.Error(), "browser") {
+		t.Fatalf("want browser-required error, got %v", err)
+	}
+}

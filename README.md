@@ -32,13 +32,15 @@ make build    # webui + Go binary → ./swiflow
 ./swiflow serve -v
 ```
 
-Docker:
+Docker（镜像内含 Chromium / Python3 / Node，供 browser 与脚本工具使用）:
 
 ```bash
 cp config.example.json config.json   # edit secrets
 make image
 docker compose up
 ```
+
+Chromium 需要足够的 `/dev/shm`（`compose.yml` 已设 `shm_size: 256mb`）。若直接 `docker run`，请加 `--shm-size=256m`。
 
 Built-in skills are embedded in the binary (`embed/init-skills/`). User overrides go in
 `./data/user-skills/` (see `config.example.json`). For local skill development without

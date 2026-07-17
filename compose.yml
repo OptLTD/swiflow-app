@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "8000:8000"
+    # Chromium in-container needs more than Docker's default 64MB /dev/shm
+    shm_size: "256mb"
     volumes:
       - ./config.json:/app/config.json:ro
       - ./data:/app/data

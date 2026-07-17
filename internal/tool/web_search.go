@@ -12,14 +12,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod"
+
+	"github.com/OptLTD/swiflow/library/browser"
 	"github.com/OptLTD/swiflow/library/httputil"
 )
 
 // WebOptions configures optional web tools (search backends).
 type WebOptions struct {
-	SearchProvider string // "", "duckduckgo", "brave", "searxng"
+	SearchProvider string // "", "duckduckgo", "brave", "searxng", "bing", "google"
 	SearchBaseURL  string // searxng instance base URL, e.g. https://searx.example
 	SearchAPIKey   string // brave (and similar) API key
+	// BrowserPool powers bing/google search via a real browser SERP visit.
+	BrowserPool    *browser.Pool
+	BrowserEnabled bool
 }
 
 type searchResult struct {
@@ -34,7 +40,8 @@ type webSearchTool struct {
 
 func (t *webSearchTool) Name() string { return "web_search" }
 func (t *webSearchTool) Description() string {
-	return "Search the web and return titles, URLs, and snippets."
+	return "Search the web and return titles, URLs, and snippets. " +
+		"Providers bing/google open the SERP in the headless browser (requires browser enabled)."
 }
 func (t *webSearchTool) Parameters() map[string]any {
 	return map[string]any{
@@ -81,8 +88,12 @@ func (t *webSearchTool) Execute(ctx context.Context, args map[string]any) (strin
 		results, err = searchBrave(ctx, opts.SearchAPIKey, query, limit)
 	case "searxng", "searx":
 		results, err = searchSearXNG(ctx, opts.SearchBaseURL, query, limit)
+	case "bing":
+		results, err = searchBingBrowser(ctx, opts, query, limit)
+	case "google":
+		results, err = searchGoogleBrowser(ctx, opts, query, limit)
 	default:
-		return "", fmt.Errorf("unknown search_provider %q (supported: duckduckgo, brave, searxng)", provider)
+		return "", fmt.Errorf("unknown search_provider %q (supported: duckduckgo, brave, searxng, bing, google)", provider)
 	}
 	if err != nil {
 		return "", err
@@ -451,4 +462,228 @@ func searchSearXNG(ctx context.Context, baseURL, query string, limit int) ([]sea
 		}
 	}
 	return out, nil
+}
+
+// --- Bing / Google via headless browser SERP ---
+
+const browserSearchTimeout = 60 * time.Second
+
+type serpItem struct {
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet"`
+}
+
+func searchBingBrowser(ctx context.Context, opts *WebOptions, query string, limit int) ([]searchResult, error) {
+	if err := requireBrowserSearch(opts, "bing"); err != nil {
+		return nil, err
+	}
+	// form=QBRE mimics an organic search-box submit. Bare /search?q= often gets
+	// Bing's bot-poisoned SERP (correct title, unrelated result links).
+	// Direct pool (no-proxy-server): system Clash proxy commonly closes Bing.
+	rawURL := "https://cn.bing.com/search?q=" + url.QueryEscape(query) + "&form=QBRE&sp=-1"
+	results, err := searchViaBrowser(ctx, opts, rawURL, "bing", limit)
+	if err == nil && len(results) > 0 {
+		return results, nil
+	}
+	ddg, ddgErr := searchDuckDuckGo(ctx, query, limit)
+	if ddgErr == nil && len(ddg) > 0 {
+		return ddg, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if ddgErr != nil {
+		return nil, fmt.Errorf("bing search failed; duckduckgo fallback: %w", ddgErr)
+	}
+	return results, nil
+}
+
+func searchGoogleBrowser(ctx context.Context, opts *WebOptions, query string, limit int) ([]searchResult, error) {
+	if err := requireBrowserSearch(opts, "google"); err != nil {
+		return nil, err
+	}
+	rawURL := "https://www.google.com/search?q=" + url.QueryEscape(query)
+
+	var (
+		results []searchResult
+		err     error
+	)
+
+	// Prefer env/OS or probed local proxy (Clash etc.) when available — direct
+	// Google is often unreachable in CN. Bing stays on the main direct pool.
+	if proxy := browser.ResolveBrowserProxy(); proxy != "" {
+		pool := browser.NewPoolWithProxy(true, proxy)
+		defer pool.Close()
+		proxyOpts := *opts
+		proxyOpts.BrowserPool = pool
+		results, err = searchViaBrowser(ctx, &proxyOpts, rawURL, "google", limit)
+		if err == nil && len(results) > 0 {
+			return results, nil
+		}
+	} else {
+		results, err = searchViaBrowserTimeout(ctx, opts, rawURL, "google", limit, 20*time.Second)
+		if err == nil && len(results) > 0 {
+			return results, nil
+		}
+	}
+
+	// Google bot-walls / empty SERP → HTTP DuckDuckGo (httputil may use local proxy).
+	ddg, ddgErr := searchDuckDuckGo(ctx, query, limit)
+	if ddgErr == nil && len(ddg) > 0 {
+		return ddg, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("google search failed: %w", err)
+	}
+	if ddgErr != nil {
+		return nil, fmt.Errorf("google search failed; duckduckgo fallback: %w", ddgErr)
+	}
+	return nil, fmt.Errorf("google search returned no results")
+}
+
+func requireBrowserSearch(opts *WebOptions, name string) error {
+	if opts == nil || !opts.BrowserEnabled || opts.BrowserPool == nil {
+		return fmt.Errorf("%s search uses the headless browser; enable tools.browser_enabled (Settings → Tools)", name)
+	}
+	return nil
+}
+
+func searchViaBrowser(ctx context.Context, opts *WebOptions, rawURL, engine string, limit int) ([]searchResult, error) {
+	return searchViaBrowserTimeout(ctx, opts, rawURL, engine, limit, browserSearchTimeout)
+}
+
+func searchViaBrowserTimeout(ctx context.Context, opts *WebOptions, rawURL, engine string, limit int, timeout time.Duration) ([]searchResult, error) {
+	out, err := opts.BrowserPool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+		if _, err := browser.Open(page, rawURL); err != nil {
+			return "", err
+		}
+		if err := waitSERPReady(page, engine); err != nil {
+			return "", err
+		}
+		info, err := page.Info()
+		if err != nil {
+			return "", err
+		}
+		items, err := extractSERP(page, engine, limit)
+		if err != nil {
+			return "", err
+		}
+		if len(items) == 0 {
+			body, _ := browser.PageText(page, 6000)
+			if block, ok := browser.DetectBotBlock(info.Title, info.URL, body); ok {
+				return "", block
+			}
+			return "", fmt.Errorf("%s returned no parseable results (title=%q url=%q)", engine, info.Title, info.URL)
+		}
+		payload, err := json.Marshal(items)
+		if err != nil {
+			return "", err
+		}
+		return string(payload), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var items []serpItem
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		return nil, fmt.Errorf("decode %s results: %w", engine, err)
+	}
+	results := make([]searchResult, 0, len(items))
+	for _, it := range items {
+		if strings.TrimSpace(it.URL) == "" || strings.TrimSpace(it.Title) == "" {
+			continue
+		}
+		results = append(results, searchResult{
+			Title:   strings.TrimSpace(it.Title),
+			URL:     strings.TrimSpace(it.URL),
+			Snippet: strings.TrimSpace(it.Snippet),
+		})
+	}
+	return results, nil
+}
+
+func waitSERPReady(page *rod.Page, engine string) error {
+	var sel string
+	switch engine {
+	case "bing":
+		sel = "#b_results li.b_algo, ol#b_results li.b_algo"
+	case "google":
+		sel = "#search a h3, #rso a h3, div.g a h3"
+	default:
+		return nil
+	}
+	_, err := page.Timeout(15 * time.Second).Element(sel)
+	if err != nil {
+		// Not fatal: extractSERP / bot-block detection still run.
+		return nil
+	}
+	return nil
+}
+
+func extractSERP(page *rod.Page, engine string, limit int) ([]serpItem, error) {
+	if limit < 1 {
+		limit = 5
+	}
+	if limit > 10 {
+		limit = 10
+	}
+	var expr string
+	switch engine {
+	case "bing":
+		expr = `(limit) => {
+  const out = [];
+  const nodes = document.querySelectorAll('#b_results > li.b_algo, ol#b_results li.b_algo');
+  for (const el of nodes) {
+    if (out.length >= limit) break;
+    const a = el.querySelector('h2 a');
+    if (!a || !a.href) continue;
+    const title = (a.innerText || a.textContent || '').trim();
+    if (!title) continue;
+    const sn = el.querySelector('.b_caption p, .b_lineclamp2, .b_algoSlug, .b_caption, .b_snippet');
+    out.push({
+      title,
+      url: a.href,
+      snippet: sn ? (sn.innerText || sn.textContent || '').trim() : '',
+    });
+  }
+  return out;
+}`
+	case "google":
+		expr = `(limit) => {
+  const out = [];
+  const seen = new Set();
+  const nodes = document.querySelectorAll('#search a h3, #rso a h3, div.g a h3');
+  for (const h3 of nodes) {
+    if (out.length >= limit) break;
+    const a = h3.closest('a');
+    if (!a || !a.href) continue;
+    const href = a.href;
+    if (seen.has(href)) continue;
+    if (href.includes('google.') && (href.includes('/search') || href.includes('accounts.google'))) continue;
+    const title = (h3.innerText || h3.textContent || '').trim();
+    if (!title) continue;
+    seen.add(href);
+    let snippet = '';
+    const root = a.closest('div.g, div[data-sokoban-container], div[data-hveid]') || a.parentElement;
+    if (root) {
+      const sn = root.querySelector('div[data-sncf], div[style*="-webkit-line-clamp"], span[class*="st"], div.VwiC3b');
+      if (sn) snippet = (sn.innerText || sn.textContent || '').trim();
+    }
+    out.push({ title, url: href, snippet });
+  }
+  return out;
+}`
+	default:
+		return nil, fmt.Errorf("unknown browser search engine %q", engine)
+	}
+	res, err := page.Eval(expr, limit)
+	if err != nil {
+		return nil, fmt.Errorf("extract %s results: %w", engine, err)
+	}
+	var items []serpItem
+	if err := res.Value.Unmarshal(&items); err != nil {
+		return nil, fmt.Errorf("decode %s extract: %w", engine, err)
+	}
+	return items, nil
 }

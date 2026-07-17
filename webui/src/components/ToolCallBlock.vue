@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '../api'
+import { openExternalURL } from '../lib/openExternal'
+import { searchProviderPageURL } from '../lib/searchURL'
 import { fromAtPath } from '../lib/workspacePath'
 import { useLayoutStore } from '../stores/layout'
 
@@ -126,24 +128,6 @@ const canVisit = computed(() => {
   return props.name === 'web_search' && !!pick(props.args, 'query').trim()
 })
 
-function searchProviderURL(provider: string, baseURL: string, query: string): string {
-  const q = encodeURIComponent(query)
-  switch ((provider || '').toLowerCase().trim()) {
-    case 'brave':
-      return `https://search.brave.com/search?q=${q}`
-    case 'searxng':
-    case 'searx': {
-      const base = (baseURL || '').trim().replace(/\/+$/, '')
-      // Human page (no format=json). Fall back to DDG if base URL is unset.
-      return base ? `${base}/search?q=${q}` : `https://duckduckgo.com/?q=${q}`
-    }
-    case 'duckduckgo':
-    case 'ddg':
-    default:
-      return `https://duckduckgo.com/?q=${q}`
-  }
-}
-
 async function resolveVisitURL(): Promise<string> {
   if (visitURL.value) return visitURL.value
   if (props.name !== 'web_search') return ''
@@ -151,9 +135,9 @@ async function resolveVisitURL(): Promise<string> {
   if (!query) return ''
   try {
     const r = await api.getSearchSettings()
-    return searchProviderURL(r.provider || 'duckduckgo', r.base_url || '', query)
+    return searchProviderPageURL(r.provider || 'bing', r.base_url || '', query)
   } catch {
-    return searchProviderURL('duckduckgo', '', query)
+    return searchProviderPageURL('bing', '', query)
   }
 }
 
@@ -257,11 +241,7 @@ async function openVisit(e: Event) {
   e.stopPropagation()
   const u = await resolveVisitURL()
   if (!u) return
-  try {
-    await api.openURL(u)
-  } catch {
-    window.open(u, '_blank', 'noopener,noreferrer')
-  }
+  await openExternalURL(u)
 }
 </script>
 

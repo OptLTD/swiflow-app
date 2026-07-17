@@ -15,6 +15,7 @@ import (
 type Pool struct {
 	mu       sync.Mutex
 	headless bool
+	proxy    string // optional Chrome --proxy-server value
 	launch   *launcherHolder
 	browser  *rod.Browser
 	page     *rod.Page
@@ -24,9 +25,14 @@ type launcherHolder struct {
 	l *launcher.Launcher
 }
 
-// NewPool creates a browser pool. Call Close on shutdown.
+// NewPool creates a browser pool (direct connection). Call Close on shutdown.
 func NewPool(headless bool) *Pool {
 	return &Pool{headless: headless}
+}
+
+// NewPoolWithProxy creates a browser pool that launches Chrome with proxy.
+func NewPoolWithProxy(headless bool, proxy string) *Pool {
+	return &Pool{headless: headless, proxy: proxy}
 }
 
 // Close shuts down the browser and launcher.
@@ -60,10 +66,10 @@ func (p *Pool) ensureBrowser() error {
 	launchCtx, launchCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer launchCancel()
 
-	l := buildLauncher(p.headless).Context(launchCtx)
+	l := buildLauncher(p.headless, p.proxy).Context(launchCtx)
 	url, err := l.Launch()
 	if err != nil {
-		return fmt.Errorf("launch browser: %w", err)
+		return fmt.Errorf("launch browser: %w (install Google Chrome or Microsoft Edge, or set CHROME_PATH)", err)
 	}
 
 	browser := rod.New().ControlURL(url)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue'
 import { api, chat, watchSession } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
@@ -169,11 +169,14 @@ const error = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
 let watchAbort: AbortController | null = null
 let bootstrapped = false
+/** True only while the POST /chat SSE body is being consumed (not watch). */
+let chatStreamActive = false
 /** Key whose messages are currently loaded in this panel. */
 let loadedKey = ''
 /** Skip auto-scroll when the user has scrolled up to read history. */
 let stickToBottom = true
 let scrollRaf = 0
+let resyncTimer = 0
 
 /** Live line above the input: current tool / thinking / subagent / idle / harness warn. */
 const statusBar = computed(() => {
@@ -270,6 +273,52 @@ async function pickSession(key: string) {
   }
   await selectSession(key)
   showHistory.value = false
+}
+
+/** In-app confirm — window.confirm is unavailable / broken under Wails. */
+const deleteTarget = ref<Session | null>(null)
+const deleting = ref(false)
+
+const deleteTargetLabel = computed(() => {
+  const s = deleteTarget.value
+  if (!s) return ''
+  return (s.title || s.id).trim() || s.id
+})
+
+function askDeleteSession(s: Session) {
+  deleteTarget.value = s
+}
+
+function cancelDeleteSession() {
+  if (deleting.value) return
+  deleteTarget.value = null
+}
+
+async function confirmDeleteSession() {
+  const s = deleteTarget.value
+  if (!s) return
+  deleting.value = true
+  try {
+    await api.deleteSession(s.id)
+    sessions.value = sessions.value.filter((x) => x.id !== s.id)
+    chatStore.clearPending(s.id)
+    layout.closeTab('chat:' + s.id)
+    deleteTarget.value = null
+    if (currentKey.value !== s.id) return
+    watchAbort?.abort()
+    watchAbort = null
+    messages.value = []
+    streaming.value = false
+    error.value = ''
+    chatStore.clearSession()
+    if (sessions.value.length) {
+      await pickSession(sessions.value[0].id)
+    }
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : 'delete failed'
+  } finally {
+    deleting.value = false
+  }
 }
 
 async function loadSessions() {
@@ -370,9 +419,10 @@ function pushAssistant(): Msg {
   return a
 }
 
-function mapStoredMessages(raw: Message[]): Msg[] {
+function mapStoredMessages(raw: Message[], opts?: { runActive?: boolean }): Msg[] {
   const out: Msg[] = []
   const toolByID = new Map<string, Msg>()
+  const runActive = !!opts?.runActive
 
   for (const m of raw) {
     if (m.role === 'assistant' && m.tool_calls?.length) {
@@ -418,16 +468,82 @@ function mapStoredMessages(raw: Message[]): Msg[] {
     }
     out.push({ role: m.role, content: m.content, thinking: m.thinking })
   }
-  // Orphan tool_calls with no persisted tool result (e.g. binary content rejected
-  // by Postgres) must not look like still-running tools after reload.
-  for (const m of out) {
-    if (m.role === 'tool' && !m.content && m.endedAt == null) {
-      m.content = 'error: 工具结果未保存'
-      m.isError = true
-      m.endedAt = m.startedAt
+  // Orphan tool_calls with no persisted tool result must not look like still-running
+  // tools — unless a run is still active (refresh mid-flight).
+  if (!runActive) {
+    for (const m of out) {
+      if (m.role === 'tool' && !m.content && m.endedAt == null) {
+        m.content = 'error: 工具结果未保存'
+        m.isError = true
+        m.endedAt = m.startedAt
+      }
     }
   }
   return out
+}
+
+async function sessionRunActive(sessionKey: string): Promise<boolean> {
+  try {
+    const r = await api.listRuns()
+    return (r.runs || []).some(
+      (run) =>
+        run.session_id === sessionKey &&
+        (run.status === 'running' || run.status === 'queued'),
+    )
+  } catch {
+    return false
+  }
+}
+
+/** Last in-progress assistant bubble (for watch/hub events after chat SSE dies). */
+function watchGetCur(): Msg | null {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const m = messages.value[i]
+    if (m.role === 'assistant' && m.streaming) return m
+  }
+  return null
+}
+
+function watchSetCur(m: Msg | null) {
+  if (m) return
+  for (const msg of messages.value) {
+    if (msg.role === 'assistant' && msg.streaming) msg.streaming = false
+  }
+}
+
+async function reloadMessages(key: string, opts?: { quiet?: boolean }) {
+  try {
+    const runActive = await sessionRunActive(key)
+    const r = await api.getSession(key)
+    if (currentKey.value !== key) return
+    messages.value = mapStoredMessages(r.messages || [], { runActive })
+    streaming.value = runActive
+    chatStreamActive = false
+    const title = r.session?.title || ''
+    if (title) setSessionMeta(key, title)
+  } catch (e: unknown) {
+    if (opts?.quiet) return
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!/not found|404/i.test(msg)) error.value = msg
+  }
+}
+
+function scheduleResync(key: string) {
+  if (resyncTimer) window.clearTimeout(resyncTimer)
+  resyncTimer = window.setTimeout(() => {
+    resyncTimer = 0
+    if (currentKey.value === key) {
+      void reloadMessages(key, { quiet: true })
+    }
+  }, 200)
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState !== 'visible') return
+  const key = currentKey.value
+  if (!key || !auth.isAuthed) return
+  void reloadMessages(key, { quiet: true })
+  if (!watchAbort) startWatch(key)
 }
 
 function looksLikeToolError(content: string | undefined): boolean {
@@ -444,6 +560,8 @@ function parseTs(s?: string): number | undefined {
 async function selectSession(key: string) {
   if (!key) return
   stopWatch()
+  chatStreamActive = false
+  streaming.value = false
   const known = sessions.value.find((s) => s.id === key)
   const fallbackTitle = isTabMode.value
     ? localTitle.value
@@ -456,8 +574,10 @@ async function selectSession(key: string) {
   error.value = ''
   harnessWarns.value = []
   try {
+    const runActive = await sessionRunActive(key)
     const r = await api.getSession(key)
-    messages.value = mapStoredMessages(r.messages || [])
+    messages.value = mapStoredMessages(r.messages || [], { runActive })
+    streaming.value = runActive
     const title = r.session?.title || known?.title || ''
     if (title) setSessionMeta(key, title)
   } catch (e: unknown) {
@@ -497,6 +617,16 @@ async function bootstrap() {
 
 onMounted(() => {
   bootstrap()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('online', onVisibilityChange)
+})
+
+onUnmounted(() => {
+  stopWatch()
+  chatStreamActive = false
+  if (resyncTimer) window.clearTimeout(resyncTimer)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  window.removeEventListener('online', onVisibilityChange)
 })
 
 watch(() => auth.isAuthed, (v) => {
@@ -505,9 +635,11 @@ watch(() => auth.isAuthed, (v) => {
     bootstrap()
   } else {
     stopWatch()
-    messages.value = []
     loadedKey = ''
+    messages.value = []
     bootstrapped = false
+    streaming.value = false
+    chatStreamActive = false
   }
 })
 
@@ -535,21 +667,24 @@ async function startWatch(key: string) {
   while (!ac.signal.aborted && currentKey.value === key) {
     try {
       await watchSession(key, (ev) => {
-        // Allow queue-continued runs via hub; drop only mid-stream duplicates except user/done.
+        // Drop duplicates only while POST /chat SSE is alive — not merely while
+        // streaming UI is true (that flag sticks after a stalled chat stream).
         if (
-          streaming.value &&
+          chatStreamActive &&
           ev.type !== 'user' &&
           ev.type !== 'done' &&
           ev.type !== 'error' &&
           ev.type !== 'harness_warn'
         ) return
-        handleChatEvent(ev, () => null, (_m) => { /* no-op */ })
+        handleChatEvent(ev, watchGetCur, watchSetCur)
       }, ac.signal)
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return
     }
     if (ac.signal.aborted || currentKey.value !== key) return
-    await new Promise((r) => setTimeout(r, 1000))
+    // SSE dropped (stutter / sleep / proxy) — reload history then reconnect.
+    scheduleResync(key)
+    await new Promise((r) => setTimeout(r, 800))
   }
 }
 
@@ -595,7 +730,7 @@ async function send() {
   if (wasStreaming) {
     try {
       await chat(key, text, DEFAULT_AGENT_KEY, (ev) => {
-        handleChatEvent(ev, () => null, () => {})
+        handleChatEvent(ev, watchGetCur, watchSetCur)
       })
     } catch (e: any) {
       error.value = e.message
@@ -605,6 +740,7 @@ async function send() {
 
   let cur: Msg | null = pushAssistant()
   streaming.value = true
+  chatStreamActive = true
   try {
     await chat(key, text, DEFAULT_AGENT_KEY, (ev) => {
       handleChatEvent(ev, () => cur, (m) => { cur = m })
@@ -612,8 +748,16 @@ async function send() {
   } catch (e: any) {
     error.value = e.message
   } finally {
+    chatStreamActive = false
     if (cur) cur.streaming = false
-    streaming.value = false
+    // If hub/queue continues the run, keep UI "running" until done arrives on watch.
+    const stillBusy = await sessionRunActive(key)
+    streaming.value = stillBusy
+    if (!stillBusy) {
+      for (const m of messages.value) {
+        if (m.role === 'assistant' && m.streaming) m.streaming = false
+      }
+    }
     loadSessions()
   }
 }
@@ -632,6 +776,7 @@ async function abortRun() {
 async function refreshSession() {
   const key = currentKey.value
   if (!key) return
+  chatStreamActive = false
   await selectSession(key)
 }
 
@@ -743,16 +888,26 @@ function gapClass(m: Msg, i: number): string {
       <div class="w-full" :class="props.expanded ? 'max-w-[960px] mx-auto' : ''">
         <div v-if="!sessions.length" class="p-6 text-base text-neutral-400 text-center">No sessions yet</div>
         <div v-else class="py-1">
-          <button
+          <div
             v-for="s in sessions"
             :key="s.id"
-            type="button"
-            class="w-full text-left pl-3 pr-4 py-2.5 text-base hover:bg-neutral-50 border-b border-neutral-100 flex items-center gap-2"
+            class="w-full pl-3 pr-1.5 py-1 text-sm hover:bg-neutral-50 border-b border-neutral-100 flex items-center gap-0.5"
             :class="s.id === currentKey ? 'bg-neutral-50 font-medium' : ''"
-            @click="pickSession(s.id)"
           >
-            <span class="truncate flex-1">{{ s.title || s.id }}</span>
-          </button>
+            <button
+              type="button"
+              class="min-w-0 flex-1 text-left truncate leading-5"
+              @click="pickSession(s.id)"
+            >{{ s.title || s.id }}</button>
+            <button
+              type="button"
+              class="shrink-0 w-6 h-6 inline-flex items-center justify-center rounded text-neutral-400 hover:text-red-600 hover:bg-red-50"
+              title="删除会话"
+              @click="askDeleteSession(s)"
+            >
+              <LocalSvgIcon name="trash" :size="13" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -768,7 +923,7 @@ function gapClass(m: Msg, i: number): string {
                 <UploadFileBar :content="m.content" @open="openAttached" />
                 <div
                   v-if="messageDisplayBody(m.content)"
-                  class="bg-neutral-800 text-white text-[15px] leading-relaxed rounded-lg px-3 py-2 whitespace-pre-wrap"
+                  class="bg-neutral-100 text-neutral-700 text-[15px] leading-relaxed rounded-lg px-3 py-2 whitespace-pre-wrap"
                 >{{ messageDisplayBody(m.content) }}</div>
               </div>
             </div>
@@ -924,7 +1079,7 @@ function gapClass(m: Msg, i: number): string {
           title="Abort"
           @click="abortRun"
         >
-          <LocalSvgIcon name="stop" :size="14" />
+          <LocalSvgIcon name="stop" :size="22" />
         </button>
         <button
           v-else
@@ -934,7 +1089,7 @@ function gapClass(m: Msg, i: number): string {
           title="Send"
           @click="send"
         >
-          <LocalSvgIcon name="send" :size="16" />
+          <LocalSvgIcon name="send" :size="22" />
         </button>
       </div>
     </div>
@@ -945,5 +1100,36 @@ function gapClass(m: Msg, i: number): string {
       :focus-session="currentKey || null"
       @close="showHarness = false"
     />
+
+    <!-- Confirm delete (Wails-safe; no window.confirm) -->
+    <div
+      v-if="deleteTarget"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      @click="cancelDeleteSession"
+    >
+      <div
+        class="bg-white rounded-lg shadow-xl w-full max-w-sm p-4 space-y-3"
+        @click.stop
+      >
+        <div class="text-sm font-medium text-neutral-900">删除会话</div>
+        <p class="text-sm text-neutral-600 leading-relaxed">
+          确定删除会话「{{ deleteTargetLabel }}」？删除后不可恢复。
+        </p>
+        <div class="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            class="h-8 px-3 text-sm rounded border border-neutral-200 bg-white hover:bg-neutral-50 disabled:opacity-50"
+            :disabled="deleting"
+            @click="cancelDeleteSession"
+          >取消</button>
+          <button
+            type="button"
+            class="h-8 px-3 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            :disabled="deleting"
+            @click="confirmDeleteSession"
+          >{{ deleting ? '删除中…' : '删除' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

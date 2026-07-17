@@ -51,10 +51,10 @@ func (s *Server) putSearchSettings(w http.ResponseWriter, r *http.Request) {
 	if in.Provider != nil {
 		p := strings.ToLower(strings.TrimSpace(*in.Provider))
 		switch p {
-		case "", "duckduckgo", "ddg", "brave", "searxng", "searx":
+		case "", "duckduckgo", "ddg", "brave", "searxng", "searx", "bing", "google":
 		default:
 			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "unsupported provider (use duckduckgo, brave, searxng, or empty to disable)",
+				"error": "unsupported provider (use duckduckgo, brave, searxng, bing, google, or empty to disable)",
 			})
 			return
 		}

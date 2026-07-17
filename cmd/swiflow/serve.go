@@ -112,6 +112,8 @@ func runServe() error {
 
 	browserPool := browser.NewPool(cfg.Tools.BrowserHeadless)
 	defer browserPool.Close()
+	webOpts.BrowserPool = browserPool
+	webOpts.BrowserEnabled = cfg.Tools.BrowserEnabled
 	tool.RegisterBrowser(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, browserPool, tool.BrowserOptions{
 		Enabled:  cfg.Tools.BrowserEnabled,
 		Headless: cfg.Tools.BrowserHeadless,

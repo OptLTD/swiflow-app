@@ -35,11 +35,20 @@ ManifestDPIAware true
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+; Finish page: checkbox to launch Swiflow immediately after install.
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${INFO_PRODUCTNAME}"
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchSwiflow
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_INSTFILES
 
 !insertmacro MUI_LANGUAGE "English"
+
+Function LaunchSwiflow
+    SetOutPath "$INSTDIR"
+    ExecShell "" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+FunctionEnd
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\..\bin\${INFO_PROJECTNAME}-installer.exe"

@@ -14,18 +14,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod"
+
+	"github.com/OptLTD/swiflow/library/browser"
 	"github.com/OptLTD/swiflow/library/httputil"
 	"github.com/OptLTD/swiflow/library/support"
 	"github.com/OptLTD/swiflow/library/workspace"
 )
 
 type webFetchTool struct {
-	ws WorkspaceRoots
+	ws   WorkspaceRoots
+	opts *WebOptions
 }
 
 func (t *webFetchTool) Name() string { return "web_fetch" }
 func (t *webFetchTool) Description() string {
-	return "Fetch a URL and return its text content. Binary responses (PDF/image/zip) are saved under @/downloads/ — then use document_extract on that path for PDF/image OCR."
+	return "Fetch a URL and return its text content. Uses HTTP first; on anti-bot blocks (403/401/429/…) falls back to the headless browser when enabled. Binary responses (PDF/image/zip) are saved under @/downloads/ — then use document_extract for PDF/image OCR."
 }
 func (t *webFetchTool) Parameters() map[string]any {
 	return map[string]any{
@@ -51,13 +55,23 @@ func (t *webFetchTool) Execute(ctx context.Context, args map[string]any) (string
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Swiflow/1.0)")
+	setBrowserFetchHeaders(req)
 	resp, err := httputil.Do(req, 15*time.Second)
 	if err != nil {
+		if text, berr := t.fetchViaBrowser(ctx, rawURL, maxChars); berr == nil {
+			return "[fetched via browser after HTTP error: " + err.Error() + "]\n" + text, nil
+		}
 		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
+		if fetchBlockedStatus(resp.StatusCode) {
+			if text, berr := t.fetchViaBrowser(ctx, rawURL, maxChars); berr == nil {
+				return fmt.Sprintf("[fetched via browser after http %d]\n%s", resp.StatusCode, text), nil
+			} else if berr != nil && t.canBrowser() {
+				return "", fmt.Errorf("http %d for %s; browser fallback: %w", resp.StatusCode, rawURL, berr)
+			}
+		}
 		return "", fmt.Errorf("http %d for %s", resp.StatusCode, rawURL)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
@@ -73,6 +87,43 @@ func (t *webFetchTool) Execute(ctx context.Context, args map[string]any) (string
 		text = text[:maxChars] + "\n...[truncated]"
 	}
 	return text, nil
+}
+
+func (t *webFetchTool) canBrowser() bool {
+	return t != nil && t.opts != nil && t.opts.BrowserEnabled && t.opts.BrowserPool != nil
+}
+
+func fetchBlockedStatus(code int) bool {
+	switch code {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests,
+		http.StatusServiceUnavailable, http.StatusBadGateway:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *webFetchTool) fetchViaBrowser(ctx context.Context, rawURL string, maxChars int) (string, error) {
+	if !t.canBrowser() {
+		return "", fmt.Errorf("browser fallback unavailable (enable tools.browser_enabled)")
+	}
+	return t.opts.BrowserPool.WithPage(ctx, 45*time.Second, func(page *rod.Page) (string, error) {
+		if _, err := browser.Open(page, rawURL); err != nil {
+			return "", err
+		}
+		info, err := page.Info()
+		if err != nil {
+			return "", err
+		}
+		body, err := browser.PageText(page, maxChars)
+		if err != nil {
+			return "", err
+		}
+		if block, ok := browser.DetectBotBlock(info.Title, info.URL, body); ok {
+			return "", block
+		}
+		return fmt.Sprintf("title: %s\nurl: %s\n\n%s", info.Title, info.URL, body), nil
+	})
 }
 
 func (t *webFetchTool) saveBinaryDownload(rawURL, contentType string, body []byte) (string, error) {
@@ -207,6 +258,30 @@ func looksBinary(b []byte) bool {
 	return false
 }
 
+// browserFetchUA is a current desktop Chrome UA. The old "compatible; Swiflow/1.0"
+// string is treated as a bot by many CDNs and news sites.
+const browserFetchUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+func setBrowserFetchHeaders(req *http.Request) {
+	if req == nil {
+		return
+	}
+	req.Header.Set("User-Agent", browserFetchUA)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7")
+	// Do not set Accept-Encoding: Go's Transport handles gzip transparently only
+	// when this header is left unset by the caller.
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Ch-Ua", `"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Platform", `"macOS"`)
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Cache-Control", "max-age=0")
+}
+
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
 var wsRe = regexp.MustCompile(`\s+`)
 
@@ -221,11 +296,12 @@ func stripHTML(s string) string {
 	return wsRe.ReplaceAllString(s, " ")
 }
 
-// RegisterWeb registers the web tools. opts may be shared and updated at runtime.
+// RegisterWeb registers the web tools. opts may be shared and updated at runtime
+// (BrowserPool / BrowserEnabled are often set after RegisterWeb returns).
 func RegisterWeb(r *Registry, ws WorkspaceRoots, opts *WebOptions) {
 	if opts == nil {
 		opts = &WebOptions{}
 	}
-	r.Register(&webFetchTool{ws: ws})
+	r.Register(&webFetchTool{ws: ws, opts: opts})
 	r.Register(&webSearchTool{opts: opts})
 }

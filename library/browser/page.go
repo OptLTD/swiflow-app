@@ -7,11 +7,14 @@ import (
 )
 
 // WaitLoaded waits for navigation and a short stability window.
+// WaitStable is hard-capped: ad-heavy SERPs (e.g. Bing) never go fully idle and
+// would otherwise burn the whole page context as "context deadline exceeded".
 func WaitLoaded(page *rod.Page) error {
-	if err := page.WaitLoad(); err != nil {
-		return err
+	if err := page.Timeout(20 * time.Second).WaitLoad(); err != nil {
+		// DOM may already be usable after a slow/partial load; keep going.
+		_ = err
 	}
-	_ = page.WaitStable(500 * time.Millisecond)
+	_ = page.Timeout(3 * time.Second).WaitStable(400 * time.Millisecond)
 	return nil
 }
 

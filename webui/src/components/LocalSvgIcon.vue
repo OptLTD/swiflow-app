@@ -14,6 +14,7 @@ withDefaults(
     | 'folder'
     | 'chat-off'
     | 'history'
+    | 'trash'
     | 'refresh'
     | 'copy'
     | 'provider'
@@ -88,6 +89,12 @@ withDefaults(
     </template>
     <template v-else-if="name === 'history'">
       <path d="M3 4.5h10M3 8h7M3 11.5h4" />
+    </template>
+    <template v-else-if="name === 'trash'">
+      <path d="M3.5 4.5h9" />
+      <path d="M6 4.5V3.25h4V4.5" />
+      <path d="M5 4.5l.6 8.25h4.8L11 4.5" />
+      <path d="M7 7v4M9 7v4" />
     </template>
     <template v-else-if="name === 'refresh'">
       <!-- open arc (gap at top-right) + arrowhead -->

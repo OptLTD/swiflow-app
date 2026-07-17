@@ -48,7 +48,7 @@ func Navigate(page *rod.Page, rawURL string) error {
 		if err := WaitLoaded(page); err != nil {
 			return err
 		}
-		_ = page.WaitStable(time.Second)
+		_ = page.Timeout(3 * time.Second).WaitStable(400 * time.Millisecond)
 	}
 	if err := page.Navigate(rawURL); err != nil {
 		return err
@@ -90,7 +90,7 @@ func googleSearch(page *rod.Page, query, rawURL string) error {
 	if err := WaitLoaded(page); err != nil {
 		return err
 	}
-	_ = page.WaitStable(800 * time.Millisecond)
+	_ = page.Timeout(3 * time.Second).WaitStable(400 * time.Millisecond)
 
 	box, err := page.Timeout(10 * time.Second).Element("textarea[name='q'], input[name='q']")
 	if err != nil {

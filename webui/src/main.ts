@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import { isDesktop, isMacDesktop, isWindowsDesktop } from './lib/desktop'
+import { installProseExternalLinks } from './lib/openExternal'
 import { useAuthStore } from './stores/auth'
 import { useUploadStore } from './stores/upload'
 import './style.css'
@@ -17,4 +18,5 @@ const pinia = createPinia()
 app.use(pinia)
 useAuthStore(pinia).probe()
 useUploadStore(pinia).bindDesktopDrop()
+installProseExternalLinks()
 app.mount('#app')

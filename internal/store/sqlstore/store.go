@@ -297,6 +297,43 @@ func (s *Store) UpdateSessionTitle(ctx context.Context, id, title string) error 
 	return err
 }
 
+func (s *Store) DeleteSession(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("session id required")
+	}
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	ids := []string{id}
+	var children []string
+	if err := tx.SelectContext(ctx, &children, s.sqlTx(tx, `SELECT id FROM agent_session WHERE parent = ?`), id); err != nil {
+		return err
+	}
+	ids = append(ids, children...)
+
+	for _, sid := range ids {
+		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `DELETE FROM agent_message WHERE sid = ?`), sid); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `DELETE FROM agent_experience WHERE sid = ?`), sid); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `DELETE FROM agent_todo WHERE sid = ?`), sid); err != nil {
+			return err
+		}
+	}
+	// Children first, then the root.
+	for i := len(ids) - 1; i >= 0; i-- {
+		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `DELETE FROM agent_session WHERE id = ?`), ids[i]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 type messageRow struct {
 	ID         string `db:"id"`
 	Tid        string `db:"tid"`

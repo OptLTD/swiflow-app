@@ -1,0 +1,5 @@
+# Allow postinstall scripts for packages that need native/binary setup.
+# See: https://pnpm.io/settings#allowbuilds
+allowBuilds:
+  esbuild: true
+  vue-demi: true

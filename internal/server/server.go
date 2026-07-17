@@ -18,6 +18,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store"
 	"github.com/OptLTD/swiflow/internal/tool"
+	appversion "github.com/OptLTD/swiflow/internal/version"
 	"github.com/OptLTD/swiflow/library/support"
 	"github.com/OptLTD/swiflow/library/window"
 )
@@ -73,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/sessions", s.listSessions)
 	mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
+	mux.HandleFunc("DELETE /api/sessions/{id}", s.deleteSession)
 	mux.HandleFunc("GET /api/sessions/{id}/watch", s.watchSession)
 	mux.HandleFunc("GET /api/sessions/{id}/children", s.listSessionChildren)
 	mux.HandleFunc("POST /api/sessions/{id}/chat", s.chat)
@@ -238,7 +240,8 @@ func bindJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
+		"status":  "ok",
+		"version": appversion.Version,
 	})
 }
 
@@ -491,6 +494,24 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"session": sess, "messages": msgs})
+}
+
+func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+	if _, err := s.st.GetSessionByID(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		return
+	}
+	_ = s.runner.Abort(id)
+	if err := s.st.DeleteSession(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {

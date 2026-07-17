@@ -56,3 +56,34 @@ func TestListSessionsHidesChildren(t *testing.T) {
 		t.Fatalf("getSession child status=%d body=%s", resp2.StatusCode, data2)
 	}
 }
+
+func TestDeleteSession(t *testing.T) {
+	e := newAPIEnv(t)
+	ctx := context.Background()
+
+	if err := e.st.CreateSession(ctx, &store.Session{ID: "del-root", Agent: "default", Title: "to delete"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.st.CreateSession(ctx, &store.Session{ID: "del-child", Agent: "default", Parent: "del-root"}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, data := e.do("DELETE", "/api/sessions/del-root", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, data)
+	}
+
+	resp2, _ := e.do("GET", "/api/sessions/del-root", nil)
+	if resp2.StatusCode != http.StatusNotFound {
+		t.Fatalf("root still present status=%d", resp2.StatusCode)
+	}
+	resp3, _ := e.do("GET", "/api/sessions/del-child", nil)
+	if resp3.StatusCode != http.StatusNotFound {
+		t.Fatalf("child still present status=%d", resp3.StatusCode)
+	}
+
+	resp4, data4 := e.do("DELETE", "/api/sessions/missing", nil)
+	if resp4.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing delete status=%d body=%s", resp4.StatusCode, data4)
+	}
+}

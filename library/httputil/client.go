@@ -78,6 +78,8 @@ func DirectClient(timeout time.Duration) *http.Client {
 }
 
 // Proxy chooses a proxy for req: environment variables first, then OS settings.
+// It does not auto-pick a local Clash port — that can break direct-reachable
+// sites (e.g. cn.bing.com). Use LocalProxyServer for optional browser retries.
 func Proxy(req *http.Request) (*url.URL, error) {
 	if u, err := http.ProxyFromEnvironment(req); err == nil && u != nil {
 		return u, nil
@@ -92,25 +94,75 @@ func HasProxy() bool {
 	return err == nil && u != nil
 }
 
-// Do sends req with the proxy-aware client. On network/timeout failures, retries
-// once without a proxy (useful when system proxy breaks some reachable sites).
+// ProxyServer returns a Chrome-compatible proxy server string (e.g. "http://127.0.0.1:7890")
+// when a configured proxy answers a short TCP dial. Returns "" when none is set or unreachable.
+func ProxyServer() string {
+	req, _ := http.NewRequest(http.MethodGet, "https://example.com/", nil)
+	u, err := Proxy(req)
+	if err != nil || u == nil || u.Host == "" {
+		return ""
+	}
+	d := net.Dialer{Timeout: 2 * time.Second}
+	conn, err := d.Dial("tcp", u.Host)
+	if err != nil {
+		return ""
+	}
+	_ = conn.Close()
+	return u.String()
+}
+
+// Do sends req with the proxy-aware client. On network/timeout failures it
+// retries direct, then a probed local HTTP proxy (Clash etc.) when available.
 func Do(req *http.Request, timeout time.Duration) (*http.Response, error) {
 	resp, err := Client(timeout).Do(req)
 	if err == nil {
 		return resp, nil
 	}
-	if !HasProxy() || !isRetryable(err) {
+	var errs []error
+	errs = append(errs, err)
+	if !isRetryable(err) {
 		return nil, err
 	}
-	retry, err2 := cloneRequest(req)
-	if err2 != nil {
-		return nil, err
+
+	if HasProxy() {
+		retry, err2 := cloneRequest(req)
+		if err2 != nil {
+			return nil, err
+		}
+		resp2, err2 := DirectClient(timeout).Do(retry)
+		if err2 == nil {
+			return resp2, nil
+		}
+		errs = append(errs, err2)
+		if !isRetryable(err2) {
+			return nil, errors.Join(errs...)
+		}
 	}
-	resp2, err2 := DirectClient(timeout).Do(retry)
-	if err2 != nil {
-		return nil, errors.Join(err, err2)
+
+	if local := LocalProxyServer(); local != "" {
+		if u, perr := url.Parse(local); perr == nil && u.Host != "" {
+			retry, err2 := cloneRequest(req)
+			if err2 != nil {
+				return nil, errors.Join(errs...)
+			}
+			client := &http.Client{
+				Timeout: timeout,
+				Transport: &http.Transport{
+					Proxy:                 http.ProxyURL(u),
+					DialContext:           baseDialer().DialContext,
+					ForceAttemptHTTP2:     true,
+					TLSHandshakeTimeout:   8 * time.Second,
+					ResponseHeaderTimeout: 90 * time.Second,
+				},
+			}
+			resp3, err3 := client.Do(retry)
+			if err3 == nil {
+				return resp3, nil
+			}
+			errs = append(errs, err3)
+		}
 	}
-	return resp2, nil
+	return nil, errors.Join(errs...)
 }
 
 func isRetryable(err error) bool {

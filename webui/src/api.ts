@@ -43,7 +43,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 
 export const api = {
-  health: () => req<{ status: string }>('GET', '/health'),
+  health: () => req<{ status: string; version?: string }>('GET', '/health'),
   getRuntime: () => req<RuntimeInfo>('GET', '/runtime'),
   listAgents: () => req<{ agents: Agent[] }>('GET', '/agents'),
   createAgent: (a: Partial<Agent>) => req<Agent>('POST', '/agents', a),
@@ -54,6 +54,7 @@ export const api = {
   deleteProvider: (id: string) => req<{ status: string }>('DELETE', `/providers/${id}`),
   listSessions: () => req<{ sessions: Session[] }>('GET', '/sessions'),
   getSession: (key: string) => req<{ session: Session; messages: Message[] }>('GET', `/sessions/${key}`),
+  deleteSession: (key: string) => req<{ status: string }>('DELETE', `/sessions/${key}`),
   abortSession: (key: string) => req<{ aborted: boolean }>('POST', `/sessions/${key}/abort`),
   listRuns: () => req<{ runs: RunSnapshot[] }>('GET', '/runs'),
   getRun: (id: string) => req<{ run: RunSnapshot; children: RunSnapshot[] }>('GET', `/runs/${id}`),
