@@ -105,6 +105,22 @@ type MCPServer struct {
 	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
 
+// LightApp is a generated mini-application that can be launched as a local process.
+type LightApp struct {
+	ID          string `json:"id" db:"id"`
+	Tid         string `json:"tid" db:"tid"`
+	Name        string `json:"name" db:"name"`
+	Description string `json:"description" db:"description"`
+	// Runtime is "python" or "static".
+	Runtime    string `json:"runtime" db:"runtime"`
+	EntryPoint string `json:"entry_point" db:"entry_point"`
+	// Status is "stopped", "running", or "error". Persisted lazily; runtime state is authoritative.
+	Status    string `json:"status" db:"status"`
+	Port      int    `json:"port" db:"port"`
+	CreatedAt string `json:"created_at" db:"created_at"`
+	UpdatedAt string `json:"updated_at" db:"updated_at"`
+}
+
 // CronJob is a scheduled agent task (Phase 2).
 type CronJob struct {
 	ID        string `json:"id" db:"id"`
@@ -183,4 +199,14 @@ type Store interface {
 	// Session todos (Phase 3)
 	SaveTodos(ctx context.Context, sessionID string, itemsJSON string) error
 	LoadTodos(ctx context.Context, sessionID string) (string, error)
+
+	// Light apps
+	CreateLightApp(ctx context.Context, a *LightApp) error
+	ListLightApps(ctx context.Context) ([]LightApp, error)
+	GetLightAppByID(ctx context.Context, id string) (*LightApp, error)
+	UpdateLightApp(ctx context.Context, id string, fields map[string]any) error
+	DeleteLightApp(ctx context.Context, id string) error
+	ListLightAppEnv(ctx context.Context) (map[string]string, error)
+	SetLightAppEnv(ctx context.Context, key, value string) error
+	DeleteLightAppEnv(ctx context.Context, key string) error
 }

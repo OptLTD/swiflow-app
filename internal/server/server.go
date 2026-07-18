@@ -13,6 +13,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/config"
 	"github.com/OptLTD/swiflow/internal/harness"
+	"github.com/OptLTD/swiflow/internal/lightapp"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/schedule"
 	"github.com/OptLTD/swiflow/internal/skill"
@@ -25,26 +26,27 @@ import (
 
 // Server is the HTTP API server.
 type Server struct {
-	cfg     config.Config
-	st      store.Store
-	runner  *agent.Runner
-	tools   *tool.Registry
-	skills  *skill.Catalog
-	mcp     *mcpclient.Manager
-	cron    *schedule.Scheduler
-	events  *SessionHub
-	harness *harness.Tracker
-	window  *window.Bridge
-	webOpts *tool.WebOptions
+	cfg      config.Config
+	st       store.Store
+	runner   *agent.Runner
+	tools    *tool.Registry
+	skills   *skill.Catalog
+	mcp      *mcpclient.Manager
+	cron     *schedule.Scheduler
+	events   *SessionHub
+	harness  *harness.Tracker
+	window   *window.Bridge
+	webOpts  *tool.WebOptions
+	lightMgr *lightapp.Manager
 }
 
 // New constructs a server. webOpts may be nil; search settings API needs a shared pointer to update live.
 // tracker may be nil (runs API returns empty).
-func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *SessionHub, win *window.Bridge, webOpts *tool.WebOptions, tracker *harness.Tracker) *Server {
+func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Registry, skills *skill.Catalog, mcp *mcpclient.Manager, cron *schedule.Scheduler, events *SessionHub, win *window.Bridge, webOpts *tool.WebOptions, tracker *harness.Tracker, lightMgr *lightapp.Manager) *Server {
 	if webOpts == nil {
 		webOpts = &tool.WebOptions{}
 	}
-	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, harness: tracker, window: win, webOpts: webOpts}
+	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, harness: tracker, window: win, webOpts: webOpts, lightMgr: lightMgr}
 	if win != nil && events != nil {
 		win.SetFallback(func(sessionID string, ev window.Event) {
 			events.Publish(sessionID, agent.Event{
@@ -119,6 +121,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/open-url", s.openURL)
 
 	mux.HandleFunc("POST /api/window/reply", s.windowReply)
+
+	mux.HandleFunc("GET /api/light-apps", s.listLightApps)
+	mux.HandleFunc("POST /api/light-apps", s.createLightApp)
+	mux.HandleFunc("GET /api/light-apps/{id}", s.getLightApp)
+	mux.HandleFunc("PUT /api/light-apps/{id}", s.updateLightApp)
+	mux.HandleFunc("DELETE /api/light-apps/{id}", s.deleteLightApp)
+	mux.HandleFunc("POST /api/light-apps/{id}/launch", s.launchLightApp)
+	mux.HandleFunc("POST /api/light-apps/{id}/stop", s.stopLightApp)
+	mux.HandleFunc("GET /api/light-apps/env", s.listLightAppEnv)
+	mux.HandleFunc("POST /api/light-apps/env", s.setLightAppEnv)
+	mux.HandleFunc("DELETE /api/light-apps/env/{key}", s.deleteLightAppEnv)
 
 	var h http.Handler = mux
 	h = s.requestLogMiddleware(h)

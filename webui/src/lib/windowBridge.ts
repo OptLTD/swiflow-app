@@ -53,8 +53,15 @@ async function fulfillUiRequest(ev: ChatEvent, sessionKey?: string): Promise<voi
       case 'window_open': {
         const path = typeof ev.arguments?.path === 'string' ? ev.arguments.path : ''
         if (!path) throw new Error('path required')
-        layout.openFile(path)
-        payload = { opened: true, path }
+        // If path is a URL (e.g. from light_app_launch), open externally.
+        if (/^https?:\/\//i.test(path)) {
+          const { openExternalURL } = await import('./openExternal')
+          await openExternalURL(path)
+          payload = { opened: true, url: path }
+        } else {
+          layout.openFile(path)
+          payload = { opened: true, path }
+        }
         break
       }
       default:

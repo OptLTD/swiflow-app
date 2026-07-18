@@ -206,6 +206,16 @@ const intent = computed(() => {
       return `将在 ${pick(a, 'delay_seconds') || '?'} 秒后执行任务: ` + trim(pick(a, 'message'), 50)
     case 'schedule_create':
       return '创建定时任务 ' + trim(pick(a, 'name'), 40) + ' (' + trim(pick(a, 'schedule'), 30) + ')'
+    case 'light_app_create':
+      return '创建 Light App: ' + trim(pick(a, 'name'), 40)
+    case 'light_app_launch':
+      return '启动 Light App: ' + trim(pick(a, 'id'), 40)
+    case 'light_app_write':
+      return '写入文件 ' + trim(pick(a, 'path'), 60)
+    case 'light_app_read':
+      return '读取文件 ' + trim(pick(a, 'path'), 60)
+    case 'light_app_ls':
+      return '列出目录 ' + trim(pick(a, 'path'), 40)
     default:
       return props.name
   }
@@ -226,6 +236,24 @@ const running = computed(() => {
   if (props.endedAt != null || props.durationMs != null) return false
   return !props.content
 })
+
+/** URL returned by light_app_launch — shown as an "打开" action button. */
+const launchURL = computed(() => {
+  if (props.name !== 'light_app_launch' || !props.content || props.isError) return ''
+  try {
+    const j = JSON.parse(props.content)
+    return typeof j.url === 'string' ? j.url : ''
+  } catch {
+    return ''
+  }
+})
+
+async function openLaunch(e: Event) {
+  e.stopPropagation()
+  if (!launchURL.value) return
+  const { openExternalURL } = await import('../lib/openExternal')
+  await openExternalURL(launchURL.value)
+}
 
 function viewChild(e: Event) {
   e.stopPropagation()
@@ -274,6 +302,14 @@ async function openVisit(e: Event) {
           @click="openVisit"
           @keydown.enter.prevent="openVisit"
         >访问</span>
+        <span
+          v-if="launchURL"
+          role="button"
+          tabindex="0"
+          class="text-neutral-700 hover:underline cursor-pointer"
+          @click="openLaunch"
+          @keydown.enter.prevent="openLaunch"
+        >打开</span>
         <span
           class="inline-flex items-center gap-1"
           :class="isError ? 'text-red-600' : running ? 'text-neutral-500' : 'text-green-600'"

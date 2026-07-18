@@ -22,6 +22,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/config"
 	"github.com/OptLTD/swiflow/internal/harness"
+	"github.com/OptLTD/swiflow/internal/lightapp"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/schedule"
@@ -65,11 +66,13 @@ func main() {
 	// 3. Create wails3 application
 	backendURL := fmt.Sprintf("http://%s", cfg.Addr())
 	workspaceSvc := &Workspace{cfg: cfg}
+	lightAppSvc := &LightAppService{}
 	app := application.New(application.Options{
 		Name:        "Swiflow",
 		Description: "Self-hosted AI Agent Runtime",
 		Services: []application.Service{
 			application.NewService(workspaceSvc),
+			application.NewService(lightAppSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler:    mustDesktopFrontendHandler(),
@@ -80,6 +83,7 @@ func main() {
 		},
 	})
 
+	lightAppSvc.app = app
 	app.SetIcon(emb.AppIconPNG)
 
 	// 4. Create main window.
@@ -168,6 +172,7 @@ func ensureDesktopConfig() (string, error) {
 		"host":    "127.0.0.1", "port": 18765,
 		"workspace_dir":    filepath.Join(dataDir, "workspace"),
 		"user_skills_dir":  filepath.Join(dataDir, "user-skills"),
+		"light_apps_dir":   filepath.Join(dataDir, "light-apps"),
 		"allowed_origins":  []string{"*"},
 		"max_history_msgs": 100, "tools": map[string]any{
 			"exec_enabled":     true,
@@ -207,7 +212,7 @@ func resolveDesktopPaths(cfg config.Config, baseDir string) config.Config {
 // MCP sync runs in the background so a hanging MCP server cannot block the first paint.
 func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	start := time.Now()
-	for _, dir := range []string{filepath.Dir(cfg.DBPath), cfg.WorkspaceDir, cfg.UserSkillsDir} {
+	for _, dir := range []string{filepath.Dir(cfg.DBPath), cfg.WorkspaceDir, cfg.UserSkillsDir, cfg.LightAppsDir} {
 		if dir != "" {
 			_ = os.MkdirAll(dir, 0o755)
 		}
@@ -309,7 +314,10 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		slog.Warn("cron start", "error", err)
 	}
 
-	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts, tracker)
+	lightMgr := lightapp.NewManager(cfg.LightAppsDir)
+	tool.RegisterLightAppTools(toolsReg, tool.LightAppRoots{Base: cfg.LightAppsDir}, st, lightMgr)
+
+	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts, tracker, lightMgr)
 	httpServer := &http.Server{
 		Addr: cfg.Addr(), Handler: srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,

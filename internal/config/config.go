@@ -23,6 +23,7 @@ type Config struct {
 	WorkspaceDir   string   `json:"workspace_dir"`
 	InitSkillsDir  string   `json:"init_skills_dir"`
 	UserSkillsDir  string   `json:"user_skills_dir"`
+	LightAppsDir   string   `json:"light_apps_dir"`
 	AllowedOrigins []string `json:"allowed_origins"`
 	MaxHistoryMsgs int      `json:"max_history_msgs"`
 	// MaxConcurrentRuns caps in-flight Runner.Run calls globally; 0 = unlimited.
@@ -58,6 +59,7 @@ func Default() Config {
 		DBDriver: "sqlite", DBPath: "./data/swiflow.db",
 		UserSkillsDir: "./data/user-skills",
 		WorkspaceDir:  "./data/workspace",
+		LightAppsDir:  "./data/light-apps",
 
 		MaxHistoryMsgs:  100,
 		DisableThinking: true,

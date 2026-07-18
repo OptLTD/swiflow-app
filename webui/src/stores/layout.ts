@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 
 export interface Tab {
   id: string
-  type: 'home' | 'file' | 'explore' | 'settings' | 'chat'
+  type: 'home' | 'file' | 'explore' | 'settings' | 'light-apps' | 'chat'
   title: string
   /** File path, explore path, or chat session key. */
   path?: string
@@ -119,6 +119,15 @@ export const useLayoutStore = defineStore('layout', {
         id: 'settings',
         type: 'settings',
         title: 'Settings',
+        closable: true,
+      })
+    },
+
+    openLightApps() {
+      this.openTab({
+        id: 'light-apps',
+        type: 'light-apps',
+        title: 'Light Apps',
         closable: true,
       })
     },

@@ -4,12 +4,15 @@ import { api } from '../api'
 import { useChatStore } from '../stores/chat'
 import { useLayoutStore } from '../stores/layout'
 import { useSetupStore } from '../stores/setup'
+import { useLightAppsStore } from '../stores/lightapps'
+import { openExternalURL } from '../lib/openExternal'
 import LocalSvgIcon from '../components/LocalSvgIcon.vue'
 import type { Session } from '../types'
 
 const layout = useLayoutStore()
 const chatStore = useChatStore()
 const setup = useSetupStore()
+const lightApps = useLightAppsStore()
 const sessions = ref<Session[]>([])
 
 function openChat(id?: string) {
@@ -41,15 +44,39 @@ onMounted(async () => {
       setup.checked = true
     }
   }
-  if (!setup.needsSetup) await loadSessions()
+  if (!setup.needsSetup) {
+    await loadSessions()
+    await lightApps.load()
+  }
 })
 
 watch(
   () => setup.needsSetup,
   (need) => {
-    if (!need && setup.checked) loadSessions()
+    if (!need && setup.checked) {
+      loadSessions()
+      lightApps.load()
+    }
   },
 )
+
+const launching = ref<Record<string, boolean>>({})
+
+async function launchApp(id: string) {
+  launching.value[id] = true
+  try {
+    const r = await api.launchLightApp(id)
+    await lightApps.load()
+    await openExternalURL(r.url)
+  } finally {
+    launching.value[id] = false
+  }
+}
+
+async function openApp(id: string) {
+  const app = lightApps.apps.find((a) => a.id === id)
+  if (app?.port) await openExternalURL(`http://127.0.0.1:${app.port}`)
+}
 </script>
 
 <template>
@@ -89,6 +116,42 @@ watch(
               <div class="text-xs text-neutral-400">Browse workspace</div>
             </div>
           </button>
+        </div>
+
+        <!-- Light Apps -->
+        <div v-if="lightApps.apps.length" class="mb-10">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Light Apps</h2>
+            <button class="text-xs text-neutral-400 hover:text-neutral-700 transition-colors" @click="layout.openLightApps()">Manage</button>
+          </div>
+          <div class="space-y-1">
+            <div
+              v-for="app in lightApps.apps"
+              :key="app.id"
+              class="w-full px-3 py-2 rounded hover:bg-neutral-100 flex items-center justify-between gap-2"
+            >
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="truncate text-sm">{{ app.name }}</span>
+                <span
+                  class="shrink-0 text-xs px-1.5 py-0.5 rounded"
+                  :class="app.status === 'running' ? 'bg-green-50 text-green-700' : 'bg-neutral-100 text-neutral-500'"
+                >{{ app.status }}</span>
+              </div>
+              <div class="shrink-0 flex items-center gap-2">
+                <button
+                  v-if="app.status === 'running'"
+                  class="text-xs px-2.5 py-1 rounded border border-neutral-200 text-neutral-700 hover:bg-neutral-100 transition-colors"
+                  @click="openApp(app.id)"
+                >Open</button>
+                <button
+                  v-else
+                  class="text-xs px-2.5 py-1 rounded border border-neutral-200 text-neutral-700 hover:bg-neutral-100 transition-colors disabled:opacity-50"
+                  :disabled="launching[app.id]"
+                  @click="launchApp(app.id)"
+                >{{ launching[app.id] ? 'Launching…' : 'Launch' }}</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Recent Sessions -->

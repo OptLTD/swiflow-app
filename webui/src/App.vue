@@ -15,6 +15,7 @@ const ChatPanel = defineAsyncComponent(() => import('./components/ChatPanel.vue'
 const FilePreview = defineAsyncComponent(() => import('./views/FilePreview.vue'))
 const ExploreView = defineAsyncComponent(() => import('./views/ExploreView.vue'))
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'))
+const LightAppsView = defineAsyncComponent(() => import('./views/LightAppsView.vue'))
 
 const auth = useAuthStore()
 const layout = useLayoutStore()
@@ -59,6 +60,7 @@ async function onSetupDone() {
           <FilePreview v-else-if="tab.type === 'file'" :path="tab.path || ''" />
           <ExploreView v-else-if="tab.type === 'explore'" :path="tab.path" />
           <SettingsView v-else-if="tab.type === 'settings'" />
+          <LightAppsView v-else-if="tab.type === 'light-apps'" />
         </div>
       </div>
 

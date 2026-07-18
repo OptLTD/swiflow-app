@@ -106,6 +106,18 @@ export interface CronJob {
   last_run_at?: string
 }
 
+export interface LightApp {
+  id: string
+  name: string
+  description?: string
+  runtime: 'python' | 'static'
+  entry_point: string
+  status: 'stopped' | 'running' | 'error'
+  port?: number
+  created_at?: string
+  updated_at?: string
+}
+
 export interface ChatEvent {
   type: string
   content?: string

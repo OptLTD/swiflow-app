@@ -16,6 +16,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/appdb"
 	"github.com/OptLTD/swiflow/internal/harness"
+	"github.com/OptLTD/swiflow/internal/lightapp"
 	"github.com/OptLTD/swiflow/internal/mcpclient"
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/schedule"
@@ -56,7 +57,7 @@ func runServe() error {
 		slog.Warn("file log setup", "error", err)
 	}
 
-	dirs := []string{cfg.WorkspaceDir, cfg.UserSkillsDir}
+	dirs := []string{cfg.WorkspaceDir, cfg.UserSkillsDir, cfg.LightAppsDir}
 	if cfg.DBDriver == "" || cfg.DBDriver == sqlstore.DialectSQLite || cfg.DBDriver == "sqlite3" {
 		dirs = append(dirs, filepath.Dir(cfg.DBPath))
 	}
@@ -172,7 +173,11 @@ func runServe() error {
 	}
 	defer cronSched.Stop()
 
-	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts, tracker)
+	lightMgr := lightapp.NewManager(cfg.LightAppsDir)
+	defer lightMgr.StopAll()
+	tool.RegisterLightAppTools(toolsReg, tool.LightAppRoots{Base: cfg.LightAppsDir}, st, lightMgr)
+
+	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts, tracker, lightMgr)
 	httpServer := &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           srv.Handler(),

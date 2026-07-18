@@ -15,6 +15,7 @@ import type {
   MCPServer,
   MCPCapabilities,
   CronJob,
+  LightApp,
   WorkspaceEntry,
 } from './types'
 
@@ -83,6 +84,14 @@ export const api = {
   updateCronJob: (id: string, j: Record<string, unknown>) => req<{ status: string }>('PUT', `/cron/jobs/${id}`, j),
   deleteCronJob: (id: string) => req<{ status: string }>('DELETE', `/cron/jobs/${id}`),
   reloadCron: () => req<{ status: string }>('POST', '/cron/reload'),
+  listLightApps: () => req<{ apps: LightApp[] }>('GET', '/light-apps'),
+  createLightApp: (a: Partial<LightApp>) => req<LightApp>('POST', '/light-apps', a),
+  deleteLightApp: (id: string) => req<{ status: string }>('DELETE', `/light-apps/${id}`),
+  launchLightApp: (id: string) => req<{ url: string; port: number }>('POST', `/light-apps/${id}/launch`),
+  stopLightApp: (id: string) => req<{ status: string }>('POST', `/light-apps/${id}/stop`),
+  listLightAppEnv: () => req<{ env: Record<string, string> }>('GET', '/light-apps/env'),
+  setLightAppEnv: (key: string, value: string) => req<{ status: string }>('POST', '/light-apps/env', { key, value }),
+  deleteLightAppEnv: (key: string) => req<{ status: string }>('DELETE', `/light-apps/env/${encodeURIComponent(key)}`),
   listWorkspace: (path = '.') =>
     req<{ path: string; entries: WorkspaceEntry[] }>('GET', `/workspace/list?path=${encodeURIComponent(path)}`),
   readWorkspaceFile: (path: string) =>
