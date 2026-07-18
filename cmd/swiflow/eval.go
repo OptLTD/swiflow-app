@@ -41,7 +41,7 @@ func evalAsyncImgExtractCmd() *cobra.Command {
 Default (scripted): drives soft-async OCR overlap + premature-stop re-ask.
 
 --live: real chat model; after ~2 soft-async OCR on main with remaining >3s,
-document_extract is denied and main should call delegate_task for the rest.`,
+content_extract is denied and main should call delegate_task for the rest.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if live {
 				return runEvalLiveDelegate(casesDir, agentKey, time.Duration(timeoutSec)*time.Second)
@@ -128,7 +128,7 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 		case "tool_call":
 			toolOrder = append(toolOrder, ev.Name)
 			fmt.Printf("→ parent tool_call %s\n", ev.Name)
-			if ev.Name == "document_extract" {
+			if ev.Name == "content_extract" {
 				parentExtract++
 				if b, err := json.Marshal(ev.Arguments); err == nil {
 					fmt.Printf("  args: %s\n", trimOneLine(string(b), 240))
@@ -181,11 +181,11 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 			if m.Role == "assistant" && m.ToolName != "" {
 				childTools = append(childTools, m.ToolName)
 			}
-			if m.Role == "tool" && m.ToolName == "document_extract" {
+			if m.Role == "tool" && m.ToolName == "content_extract" {
 				n++
 			}
 		}
-		fmt.Printf("child session %s: document_extract tool msgs=%d tools=%v\n", s.ID, n, childTools)
+		fmt.Printf("child session %s: content_extract tool msgs=%d tools=%v\n", s.ID, n, childTools)
 		childExtract += n
 	}
 
@@ -195,9 +195,9 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 	fmt.Printf("elapsed:              %s\n", elapsed.Round(time.Millisecond))
 	fmt.Printf("parent tool order:    %v\n", toolOrder)
 	fmt.Printf("parent delegate_task: %d\n", parentDelegate)
-	fmt.Printf("parent document_extract: %d\n", parentExtract)
+	fmt.Printf("parent content_extract: %d\n", parentExtract)
 	fmt.Printf("child sessions:       %d\n", childSessions)
-	fmt.Printf("child document_extract msgs: %d\n", childExtract)
+	fmt.Printf("child content_extract msgs: %d\n", childExtract)
 	fmt.Printf("workspace xlsx:       %v\n", xlsx)
 	fmt.Printf("done:                 %v\n", sawDone)
 	fmt.Printf("final:                %s\n", trimOneLine(lastAssistant, 240))
@@ -207,7 +207,7 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 		fails = append(fails, "main agent never called delegate_task after slow async handoff")
 	}
 	if parentExtract > 3 {
-		fails = append(fails, fmt.Sprintf("main document_extract=%d; after handoff should stop stacking (want ≤3)", parentExtract))
+		fails = append(fails, fmt.Sprintf("main content_extract=%d; after handoff should stop stacking (want ≤3)", parentExtract))
 	}
 	if parentDelegate > 0 {
 		delIdx := -1
@@ -218,8 +218,8 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 			}
 		}
 		for i := delIdx + 1; i < len(toolOrder); i++ {
-			if toolOrder[i] == "document_extract" {
-				fails = append(fails, "parent called document_extract after delegate_task")
+			if toolOrder[i] == "content_extract" {
+				fails = append(fails, "parent called content_extract after delegate_task")
 				break
 			}
 		}
@@ -297,12 +297,12 @@ func runEvalAsyncImgExtract(casesDir, agentKey string) error {
 	}
 	defer rt.Close()
 
-	// Confirm vision creds resolve (same path document_extract uses).
+	// Confirm vision creds resolve (same path content_extract uses).
 	if _, _, _, err := rt.Store.ProviderCreds(ctx, "vision"); err != nil {
 		if _, _, _, err2 := rt.Store.ProviderCreds(ctx, "default"); err2 != nil {
 			return fmt.Errorf("no vision/default provider creds in DB (config=%s): vision=%v default=%v", cfgFileOrDefault(), err, err2)
 		}
-		slog.Warn("vision provider missing; document_extract will fall back to default")
+		slog.Warn("vision provider missing; content_extract will fall back to default")
 	}
 
 	files := entries
@@ -314,7 +314,7 @@ func runEvalAsyncImgExtract(casesDir, agentKey string) error {
 			FinishReason: "tool_calls",
 			ToolCalls: []llmclient.ToolCall{{
 				ID:   fmt.Sprintf("ex-%d", i+1),
-				Name: "document_extract",
+				Name: "content_extract",
 				Arguments: map[string]any{
 					"path":   "@/" + name,
 					"prompt": "提取单据关键字段：车号/车牌、净重或装货量、单位、日期。用中文 key。",
@@ -351,12 +351,12 @@ func runEvalAsyncImgExtract(casesDir, agentKey string) error {
 		defer mu.Unlock()
 		switch ev.Type {
 		case "tool_call":
-			if ev.Name == "document_extract" {
+			if ev.Name == "content_extract" {
 				toolStarts = append(toolStarts, time.Now())
-				fmt.Printf("→ tool_call document_extract #%d\n", len(toolStarts))
+				fmt.Printf("→ tool_call content_extract #%d\n", len(toolStarts))
 			}
 		case "tool_result":
-			if ev.Name != "document_extract" {
+			if ev.Name != "content_extract" {
 				return
 			}
 			if ev.Result == agent.SoftAsyncPlaceholder {

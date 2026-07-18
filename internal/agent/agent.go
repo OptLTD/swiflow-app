@@ -99,7 +99,7 @@ type RunnerDeps struct {
 	// ToolTimeoutSec wraps each tool call; 0 = 120s.
 	ToolTimeoutSec int
 	// ToolTimeouts overrides per-tool timeouts (single source of truth), e.g.
-	// {"document_extract": DocumentTimeout}. Falls back to ToolTimeoutSec.
+	// {"content_extract": DocumentTimeout}. Falls back to ToolTimeoutSec.
 	ToolTimeouts map[string]time.Duration
 	// DisableThinking turns off model reasoning (GLM thinking:{type:disabled}).
 	DisableThinking bool
@@ -341,7 +341,7 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 	// the main agent must hand the whole batch to a child — heavy tools are gated
 	// here and a single delegate_task is required. No runtime cost probing.
 	if paths, forced := shouldForceBatchDelegate(userMessage, childRun); forced {
-		denyDocumentExtract(&opts)
+		denyContentExtract(&opts)
 		toolDefs = filterTools(r.deps.Tools.Definitions(), opts)
 		llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: batchDelegateNudge(paths)})
 		slog.Info("agent.batch_delegate_forced", "session", sessionID, "paths", len(paths))
@@ -652,7 +652,7 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 		b.WriteString("User messages may cite workspace files as @/relative/path (e.g. @/notes.txt, @/docs/a.md). ")
 		b.WriteString("@/ means the workspace root. Attached uploads appear in a block between [UPLOAD FILES START] and [UPLOAD FILES END] (one @/ path per line). ")
 		b.WriteString("File tools accept both workspace-relative paths and @/… (equivalent). Prefer passing the path as given; do not invent a literal \"@\" directory. ")
-		b.WriteString("When the user attaches or mentions @/…, resolve it to that relative path and use fs_* / document_extract / other file tools on it — do not treat @/ as a URL or package alias. ")
+		b.WriteString("When the user attaches or mentions @/…, resolve it to that relative path and use fs_* / content_extract / other file tools on it — do not treat @/ as a URL or package alias. ")
 		b.WriteString("When you refer to workspace files in replies, prefer the same @/ form.")
 	}
 	disabled := map[string]bool{}
@@ -691,7 +691,7 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 	b.WriteString("List every remaining @/ path inside goal; the child chooses tools itself — do not pass path/tools args, and do not one-file-per-delegate. ")
 	b.WriteString("You receive one structured result (status/summary/artifacts/metrics) — large artifacts stay in workspace files cited in the child goal.\n")
 	b.WriteString("When many files or a table/Excel deliverable is obvious, delegate early. ")
-	b.WriteString("When ≥3 @/ files are attached for a table, document_extract is disabled on the main agent by the runtime: do not ask which columns — pick sensible defaults and hand the whole batch to one delegate_task. ")
+	b.WriteString("When ≥3 @/ files are attached for a table, content_extract is disabled on the main agent by the runtime: do not ask which columns — pick sensible defaults and hand the whole batch to one delegate_task. ")
 	b.WriteString("Never pretend you will continue later without calling tools.")
 	b.WriteString("\n\n## Clarify\n")
 	b.WriteString("When you need a user choice, confirmation, or missing info before continuing, call clarify. ")

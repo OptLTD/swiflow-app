@@ -118,7 +118,7 @@ func batchDelegateNudge(paths []string) string {
 	var b strings.Builder
 	b.WriteString("[Routing] User attached ")
 	b.WriteString(strconv.Itoa(len(paths)))
-	b.WriteString(" @/ files for a batch (likely a table/Excel). document_extract is DISABLED on the MAIN agent. ")
+	b.WriteString(" @/ files for a batch (likely a table/Excel). content_extract is DISABLED on the MAIN agent. ")
 	b.WriteString("Do NOT ask which columns — use sensible defaults (单据编号、车牌号、装货量、卸货量、日期…). ")
 	b.WriteString("Call delegate_task ONCE now (synchronous full handoff). Put EVERY path below inside the goal text (not a separate path arg), ")
 	b.WriteString("ask the child to write an xlsx under workspace, use max_rounds ≥ 16, and let the child choose tools. Do not one-file-per-delegate:\n")
@@ -134,9 +134,9 @@ func isChildRun(opts RunOpts) bool {
 	return opts.DenyTools["delegate_task"]
 }
 
-func denyDocumentExtract(opts *RunOpts) {
+func denyContentExtract(opts *RunOpts) {
 	if opts.DenyTools == nil {
 		opts.DenyTools = map[string]bool{}
 	}
-	opts.DenyTools[tool.ToolDocumentExtract] = true
+	opts.DenyTools[tool.ToolContentExtract] = true
 }

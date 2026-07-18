@@ -22,8 +22,8 @@ func TestWebFetchSaveBinaryDownload(t *testing.T) {
 	if !strings.Contains(out, "@/downloads/The-Four-Clusters.pdf") {
 		t.Fatalf("want @/downloads path, got: %s", out)
 	}
-	if !strings.Contains(out, "document_extract") {
-		t.Fatalf("want document_extract hint, got: %s", out)
+	if !strings.Contains(out, "content_extract") {
+		t.Fatalf("want content_extract hint, got: %s", out)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "downloads", "The-Four-Clusters.pdf"))
 	if err != nil {

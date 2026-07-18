@@ -708,7 +708,7 @@ func (s *Server) setToolEnabled(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if in.Enabled && tool.IsDocumentTool(name) && !s.cfg.Tools.DocumentEnabled {
+	if in.Enabled && tool.IsContentTool(name) && !s.cfg.Tools.DocumentEnabled {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "document tool requires tools.document_enabled or SWIFLOW_DOCUMENT=true in config",
 		})

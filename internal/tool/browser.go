@@ -3,6 +3,7 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -40,7 +41,7 @@ type browserTool struct {
 
 func (t *browserTool) Name() string { return ToolBrowser }
 func (t *browserTool) Description() string {
-	return "Control a headless browser: navigate, read page text, screenshot, click, type, or evaluate JavaScript."
+	return "Control a headless browser: navigate, read page text, screenshot, click, type, or evaluate JavaScript. Also use to self-test a light app after light_app_launch (open the returned http://127.0.0.1:<port> URL and check SPEC.md acceptance items)."
 }
 func (t *browserTool) Parameters() map[string]any {
 	return map[string]any{
@@ -65,7 +66,7 @@ func (t *browserTool) Parameters() map[string]any {
 			},
 			"expression": map[string]any{
 				"type":        "string",
-				"description": "JavaScript expression for eval (return value is serialized).",
+				"description": "JavaScript for eval: bare expression (e.g. document.title) or arrow function (() => ...). Return value is JSON-serialized. Optional url navigates first.",
 			},
 			"filename": map[string]any{
 				"type":        "string",
@@ -101,7 +102,7 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		if url == "" {
 			return "", fmt.Errorf("url is required for navigate")
 		}
-		if err := support.CheckURL(url); err != nil {
+		if err := support.CheckURLAllowLoopback(url); err != nil {
 			return "", err
 		}
 		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
@@ -222,12 +223,22 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		if expr == "" {
 			return "", fmt.Errorf("expression is required for eval")
 		}
+		expr = wrapBrowserEvalJS(expr)
+		url, _ := args["url"].(string)
 		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+			if url != "" {
+				if err := support.CheckURLAllowLoopback(url); err != nil {
+					return "", err
+				}
+				if _, err := browser.Open(page, url); err != nil {
+					return "", err
+				}
+			}
 			res, err := page.Eval(expr)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("eval js error: %w", err)
 			}
-			return fmt.Sprintf("%v", res.Value), nil
+			return formatBrowserEvalResult(res), nil
 		})
 	default:
 		return "", fmt.Errorf("unknown action %q", action)
@@ -297,6 +308,83 @@ func wrapBrowserTimeout(err error) error {
 		return fmt.Errorf("%w (element missing, hidden, or covered — try a tighter selector, text match, or navigate to the href directly)", err)
 	}
 	return err
+}
+
+// wrapBrowserEvalJS adapts agent-supplied JS for go-rod Page.Eval, which requires
+// a function: it wraps as `return (<js>).apply(this, arguments)`.
+// Bare expressions like `document.title` or `JSON.stringify(...)` must become `() => (...)`.
+func wrapBrowserEvalJS(expr string) string {
+	js := strings.TrimSpace(expr)
+	js = strings.TrimRight(js, ";")
+	if js == "" {
+		return "() => undefined"
+	}
+	if looksLikeJSFunc(js) {
+		return js
+	}
+	return "() => (" + js + ")"
+}
+
+func looksLikeJSFunc(js string) bool {
+	switch {
+	case strings.HasPrefix(js, "()"),
+		strings.HasPrefix(js, "async "),
+		strings.HasPrefix(js, "function"),
+		strings.HasPrefix(js, "(function"):
+		return true
+	}
+	// (a, b) => ...  or  a => ...
+	if i := strings.Index(js, "=>"); i > 0 {
+		head := strings.TrimSpace(js[:i])
+		if head == "" {
+			return false
+		}
+		if head[0] == '(' || isJSIdent(head) {
+			return true
+		}
+	}
+	return false
+}
+
+func isJSIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		ok := r == '_' || r == '$' ||
+			(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(i > 0 && r >= '0' && r <= '9')
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func formatBrowserEvalResult(res *proto.RuntimeRemoteObject) string {
+	if res == nil {
+		return "null"
+	}
+	if res.Value.Nil() {
+		if res.Description != "" {
+			return res.Description
+		}
+		if res.Type != "" {
+			return string(res.Type)
+		}
+		return "null"
+	}
+	raw, err := res.Value.MarshalJSON()
+	if err != nil || len(raw) == 0 {
+		return res.Value.String()
+	}
+	var v any
+	if err := json.Unmarshal(raw, &v); err == nil {
+		if b, err := json.MarshalIndent(v, "", "  "); err == nil {
+			return string(b)
+		}
+	}
+	return string(raw)
 }
 
 // BrowserOptions configures the browser tool.

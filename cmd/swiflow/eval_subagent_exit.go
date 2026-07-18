@@ -146,7 +146,7 @@ func runEvalSubagentExit(casesDir, agentKey string, fileN, maxRounds int, childW
 				lastAssistant = m.Content
 			}
 		}
-		if m.Role == "tool" && m.ToolName == "document_extract" {
+		if m.Role == "tool" && m.ToolName == "content_extract" {
 			extractMsgs++
 		}
 	}
@@ -167,7 +167,7 @@ func runEvalSubagentExit(casesDir, agentKey string, fileN, maxRounds int, childW
 	fmt.Printf("done event:        %v\n", sawDone)
 	fmt.Printf("tool order:        %v\n", toolOrder)
 	fmt.Printf("assistant turns:   %d (LLM rounds ≈ this)\n", assistantTurns)
-	fmt.Printf("document_extract:  %d tool msgs\n", extractMsgs)
+	fmt.Printf("content_extract:  %d tool msgs\n", extractMsgs)
 	fmt.Printf("workspace xlsx:    %v\n", xlsx)
 	fmt.Printf("final summary:     %s\n", trimOneLine(lastAssistant, 240))
 	if childCtx.Err() != nil {
@@ -207,7 +207,7 @@ func runEvalSubagentExit(casesDir, agentKey string, fileN, maxRounds int, childW
 func buildSubagentExitGoal(files []string) string {
 	var b strings.Builder
 	b.WriteString("Batch job: OCR every file below and write one Excel @/subagent-exit-test.xlsx.\n")
-	b.WriteString("Use document_extract per image; sensible columns (单据编号, 车牌, 装货量, 卸货量, 日期).\n")
+	b.WriteString("Use content_extract per image; sensible columns (单据编号, 车牌, 装货量, 卸货量, 日期).\n")
 	b.WriteString("When the xlsx exists, reply with ONLY the @/ path and row count — then stop.\n\n")
 	for _, f := range files {
 		b.WriteString("@/")

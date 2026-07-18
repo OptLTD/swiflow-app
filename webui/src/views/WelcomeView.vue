@@ -5,7 +5,7 @@ import { useChatStore } from '../stores/chat'
 import { useLayoutStore } from '../stores/layout'
 import { useSetupStore } from '../stores/setup'
 import { useLightAppsStore } from '../stores/lightapps'
-import { openExternalURL } from '../lib/openExternal'
+import { openLightApp } from '../lib/openLightApp'
 import LocalSvgIcon from '../components/LocalSvgIcon.vue'
 import type { Session } from '../types'
 
@@ -67,7 +67,8 @@ async function launchApp(id: string) {
   try {
     const r = await api.launchLightApp(id)
     await lightApps.load()
-    await openExternalURL(r.url)
+    const app = lightApps.apps.find((a) => a.id === id)
+    await openLightApp(r.url, app?.name || 'Light App')
   } finally {
     launching.value[id] = false
   }
@@ -75,7 +76,7 @@ async function launchApp(id: string) {
 
 async function openApp(id: string) {
   const app = lightApps.apps.find((a) => a.id === id)
-  if (app?.port) await openExternalURL(`http://127.0.0.1:${app.port}`)
+  if (app?.port) await openLightApp(`http://127.0.0.1:${app.port}`, app.name || 'Light App')
 }
 </script>
 

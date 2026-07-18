@@ -249,7 +249,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	if docTimeout <= 0 {
 		docTimeout = 120 * time.Second
 	}
-	tool.RegisterDocument(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, st, tool.DocumentOptions{
+	tool.RegisterContentExtract(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, st, tool.DocumentOptions{
 		Enabled:   cfg.Tools.DocumentEnabled,
 		BaseURL:   cfg.Tools.DocumentBaseURL,
 		APIKey:    cfg.Tools.DocumentAPIKey,
@@ -299,7 +299,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
 		ToolTimeoutSec:     cfg.ToolTimeoutSec,
 		ToolTimeouts: map[string]time.Duration{
-			tool.ToolDocumentExtract: docTimeout + 30*time.Second,
+			tool.ToolContentExtract: docTimeout + 30*time.Second,
 		},
 		DisableThinking: cfg.DisableThinking,
 	})
@@ -315,7 +315,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	}
 
 	lightMgr := lightapp.NewManager(cfg.LightAppsDir)
-	tool.RegisterLightAppTools(toolsReg, tool.LightAppRoots{Base: cfg.LightAppsDir}, st, lightMgr)
+	tool.RegisterLightAppTools(toolsReg, tool.LightAppRoots{Base: cfg.LightAppsDir}, st, lightMgr, winBridge)
 
 	srv := server.New(cfg, st, runner, toolsReg, skillsCat, mcpMgr, cronSched, events, winBridge, webOpts, tracker, lightMgr)
 	httpServer := &http.Server{

@@ -48,7 +48,7 @@ func TestTrackerGoalAndDelegateChild(t *testing.T) {
 		Arguments: map[string]any{"goal": "extract all images to result.csv", "max_rounds": float64(8)},
 	})
 	tr.Publish("root-1", agent.Event{
-		Type: "tool_progress", ID: "c1", Child: "sub-root-1-abc", Content: "document_extract",
+		Type: "tool_progress", ID: "c1", Child: "sub-root-1-abc", Content: "content_extract",
 	})
 
 	snap, ok := tr.Snapshot("root-1")

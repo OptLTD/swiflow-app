@@ -90,7 +90,7 @@ func looksLikeBatchGoal(goal string) bool {
 	if strings.Contains(goal, "@/") {
 		return true
 	}
-	keys := []string{"汇总", "表格", "excel", "csv", "xlsx", "ocr", "提取", "document_extract", "batch", "多张", "多份"}
+	keys := []string{"汇总", "表格", "excel", "csv", "xlsx", "ocr", "提取", "content_extract", "batch", "多张", "多份"}
 	for _, k := range keys {
 		if strings.Contains(g, strings.ToLower(k)) {
 			return true
@@ -110,7 +110,7 @@ func isExploreOnlyTool(name string) bool {
 
 func isProgressTool(name string) bool {
 	switch name {
-	case "document_extract", "fs_write", "fs_edit", "exec", "python_run", "node_run":
+	case "content_extract", "fs_write", "fs_edit", "exec", "python_run", "node_run":
 		return true
 	default:
 		return false

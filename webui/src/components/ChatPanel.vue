@@ -147,8 +147,8 @@ function toolActivityLabel(m: Msg): string {
       return '写入 ' + trim(pick('path'), 40)
     case 'fs_edit':
       return '编辑 ' + trim(pick('path'), 40)
-    case 'document_extract':
-      return '抽取 ' + trim(pick('path'), 40)
+    case 'content_extract':
+      return '内容抽取 ' + trim(pick('path'), 40)
     case 'web_fetch':
       return '抓取 ' + trim(pick('url'), 40)
     case 'web_search':

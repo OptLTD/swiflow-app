@@ -27,7 +27,7 @@ type execTool struct {
 
 func (t *execTool) Name() string { return ToolExec }
 func (t *execTool) Description() string {
-	return "Run a shell command in the workspace (sh -c). Use python3, node, etc. in the command when needed."
+	return "Run a shell command in the workspace (sh -c). Do NOT use exec to browse or edit data/light-apps — use light_app_list/read/write/ls instead."
 }
 func (t *execTool) Parameters() map[string]any {
 	return map[string]any{

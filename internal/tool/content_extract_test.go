@@ -9,7 +9,7 @@ import (
 )
 
 func TestDocumentToolDisabled(t *testing.T) {
-	tl := &documentExtractTool{allowed: false}
+	tl := &contentExtractTool{allowed: false}
 	_, err := tl.Execute(context.Background(), map[string]any{"path": "a.txt", "prompt": "x"})
 	if err == nil || !strings.Contains(err.Error(), "disabled") {
 		t.Fatalf("err=%v", err)
@@ -22,7 +22,7 @@ func TestDocumentToolRequiresProvider(t *testing.T) {
 	if err := os.WriteFile(path, []byte("demo"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tl := &documentExtractTool{
+	tl := &contentExtractTool{
 		ws:      WorkspaceRoots{Base: dir},
 		allowed: true,
 	}
@@ -33,7 +33,7 @@ func TestDocumentToolRequiresProvider(t *testing.T) {
 }
 
 func TestDocumentToolRequiresPath(t *testing.T) {
-	tl := &documentExtractTool{
+	tl := &contentExtractTool{
 		allowed: true,
 		opt:     DocumentOptions{APIKey: "sk-test"},
 	}

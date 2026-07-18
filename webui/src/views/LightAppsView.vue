@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { api } from '../api'
 import { useLightAppsStore } from '../stores/lightapps'
-import { openExternalURL } from '../lib/openExternal'
+import { openLightApp } from '../lib/openLightApp'
 
 const store = useLightAppsStore()
 const launching = ref<Record<string, boolean>>({})
@@ -47,7 +47,8 @@ async function launch(id: string) {
   try {
     const r = await api.launchLightApp(id)
     await store.load()
-    await openExternalURL(r.url)
+    const app = store.apps.find((a) => a.id === id)
+    await openLightApp(r.url, app?.name || 'Light App')
   } finally {
     launching.value[id] = false
   }
@@ -55,7 +56,7 @@ async function launch(id: string) {
 
 async function open(id: string) {
   const app = store.apps.find((a) => a.id === id)
-  if (app?.port) await openExternalURL(`http://127.0.0.1:${app.port}`)
+  if (app?.port) await openLightApp(`http://127.0.0.1:${app.port}`, app.name || 'Light App')
 }
 
 async function stop(id: string) {
@@ -146,7 +147,7 @@ async function remove(id: string) {
     <div class="space-y-3">
       <div>
         <h3 class="text-sm font-semibold text-neutral-900">Environment Variables</h3>
-        <p class="text-xs text-neutral-400 mt-0.5">Injected into every light app at launch.</p>
+        <p class="text-xs text-neutral-400 mt-0.5">Injected at launch — static: <code class="font-mono">window.swiflow.env('KEY')</code> (throws if missing); Python: <code class="font-mono">os.environ['KEY']</code>. Restart after changing.</p>
       </div>
 
       <div v-if="Object.keys(env).length > 0" class="divide-y divide-neutral-100 border border-neutral-200 rounded-lg overflow-hidden">

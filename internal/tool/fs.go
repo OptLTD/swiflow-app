@@ -17,7 +17,9 @@ type WorkspaceRoots struct{ Base string }
 type readFileTool struct{ ws WorkspaceRoots }
 
 func (t *readFileTool) Name() string        { return "fs_read" }
-func (t *readFileTool) Description() string { return "Read a UTF-8 text file from the workspace." }
+func (t *readFileTool) Description() string {
+	return "Read a UTF-8 text file from the workspace. Not for light apps — use light_app_read instead."
+}
 func (t *readFileTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -48,7 +50,7 @@ type writeFileTool struct{ ws WorkspaceRoots }
 
 func (t *writeFileTool) Name() string { return "fs_write" }
 func (t *writeFileTool) Description() string {
-	return "Write text to a file in the workspace (creates/overwrites)."
+	return "Write text to a workspace file (creates/overwrites). Not for light apps — use light_app_write instead."
 }
 func (t *writeFileTool) Parameters() map[string]any {
 	return map[string]any{
@@ -78,8 +80,10 @@ func (t *writeFileTool) Execute(_ context.Context, args map[string]any) (string,
 
 type listFilesTool struct{ ws WorkspaceRoots }
 
-func (t *listFilesTool) Name() string        { return "fs_list" }
-func (t *listFilesTool) Description() string { return "List entries in a workspace directory." }
+func (t *listFilesTool) Name() string { return "fs_list" }
+func (t *listFilesTool) Description() string {
+	return "List entries in a workspace directory. Not for light apps — use light_app_list / light_app_ls instead."
+}
 func (t *listFilesTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",

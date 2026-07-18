@@ -132,6 +132,17 @@ var blockedHostnames = map[string]bool{
 // CheckURL validates that rawURL is http(s), has a host, and does not resolve
 // to a private/loopback/link-local/CGNAT address or a blocked metadata host.
 func CheckURL(rawURL string) error {
+	return checkURL(rawURL, false)
+}
+
+// CheckURLAllowLoopback is like CheckURL but permits loopback hosts used by
+// local light apps (127.0.0.1, ::1, localhost, *.localhost). Other private
+// ranges remain blocked.
+func CheckURLAllowLoopback(rawURL string) error {
+	return checkURL(rawURL, true)
+}
+
+func checkURL(rawURL string, allowLoopback bool) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
@@ -144,6 +155,11 @@ func CheckURL(rawURL string) error {
 		return fmt.Errorf("missing hostname")
 	}
 	lhost := strings.ToLower(host)
+
+	if allowLoopback && isLoopbackHost(lhost) {
+		return nil
+	}
+
 	if blockedHostnames[lhost] {
 		return fmt.Errorf("blocked hostname: %s", host)
 	}
@@ -165,10 +181,21 @@ func CheckURL(rawURL string) error {
 	for _, a := range addrs {
 		ip := net.ParseIP(a)
 		if ip != nil && isPrivateIP(ip) {
+			if allowLoopback && ip.IsLoopback() {
+				continue
+			}
 			return fmt.Errorf("hostname %s resolves to private IP %s", host, a)
 		}
 	}
 	return nil
+}
+
+func isLoopbackHost(lhost string) bool {
+	if lhost == "localhost" || strings.HasSuffix(lhost, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(lhost)
+	return ip != nil && ip.IsLoopback()
 }
 
 func isPrivateIP(ip net.IP) bool {

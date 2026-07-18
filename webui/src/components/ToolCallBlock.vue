@@ -80,7 +80,7 @@ const previewPath = computed(() => {
     case 'fs_read':
     case 'fs_write':
     case 'fs_edit':
-    case 'document_extract': {
+    case 'content_extract': {
       const p = fromAtPath(pick(a, 'path'))
       return p || ''
     }
@@ -156,8 +156,8 @@ const intent = computed(() => {
     }
     case 'fs_edit':
       return '编辑文件 ' + trim(pick(a, 'path'), 60)
-    case 'document_extract':
-      return '抽取文档 ' + trim(pick(a, 'path'), 60)
+    case 'content_extract':
+      return '内容抽取 ' + trim(pick(a, 'path'), 60)
     case 'web_fetch':
       return '抓取网页 ' + trim(pick(a, 'url'), 60)
     case 'web_search':
@@ -208,6 +208,8 @@ const intent = computed(() => {
       return '创建定时任务 ' + trim(pick(a, 'name'), 40) + ' (' + trim(pick(a, 'schedule'), 30) + ')'
     case 'light_app_create':
       return '创建 Light App: ' + trim(pick(a, 'name'), 40)
+    case 'light_app_list':
+      return '列出 Light Apps'
     case 'light_app_launch':
       return '启动 Light App: ' + trim(pick(a, 'id'), 40)
     case 'light_app_write':
@@ -216,6 +218,8 @@ const intent = computed(() => {
       return '读取文件 ' + trim(pick(a, 'path'), 60)
     case 'light_app_ls':
       return '列出目录 ' + trim(pick(a, 'path'), 40)
+    case 'light_app_open':
+      return '打开 Light App: ' + trim(pick(a, 'url'), 50)
     default:
       return props.name
   }
@@ -251,8 +255,13 @@ const launchURL = computed(() => {
 async function openLaunch(e: Event) {
   e.stopPropagation()
   if (!launchURL.value) return
-  const { openExternalURL } = await import('../lib/openExternal')
-  await openExternalURL(launchURL.value)
+  const { openLightApp } = await import('../lib/openLightApp')
+  let title = 'Light App'
+  try {
+    const j = JSON.parse(props.content || '')
+    if (typeof j.name === 'string' && j.name) title = j.name
+  } catch { /* ignore */ }
+  await openLightApp(launchURL.value, title)
 }
 
 function viewChild(e: Event) {

@@ -49,12 +49,34 @@ func TestSandboxPathAtAlias(t *testing.T) {
 	}
 }
 
-func TestValidateHTTPURL(t *testing.T) {
-	if err := support.ValidateHTTPURL("https://api.openai.com/v1"); err != nil {
+func TestCheckURL(t *testing.T) {
+	if err := support.CheckURL("https://example.com"); err != nil {
 		t.Fatal(err)
 	}
-	if err := support.ValidateHTTPURL("ftp://example.com"); err == nil {
-		t.Fatal("expected scheme error")
+	if err := support.CheckURL("http://127.0.0.1:30000"); err == nil {
+		t.Fatal("expected private IP rejection")
+	}
+	if err := support.CheckURL("http://localhost/"); err == nil {
+		t.Fatal("expected localhost rejection")
+	}
+}
+
+func TestCheckURLAllowLoopback(t *testing.T) {
+	for _, u := range []string{
+		"http://127.0.0.1:30000",
+		"http://localhost:30000",
+		"http://[::1]:30000",
+	} {
+		if err := support.CheckURLAllowLoopback(u); err != nil {
+			t.Fatalf("%s: %v", u, err)
+		}
+	}
+	// Non-loopback private still blocked.
+	if err := support.CheckURLAllowLoopback("http://192.168.1.1/"); err == nil {
+		t.Fatal("expected private LAN rejection")
+	}
+	if err := support.CheckURLAllowLoopback("http://metadata.google.internal/"); err == nil {
+		t.Fatal("expected metadata host rejection")
 	}
 }
 

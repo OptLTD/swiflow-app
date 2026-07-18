@@ -29,7 +29,7 @@ type webFetchTool struct {
 
 func (t *webFetchTool) Name() string { return "web_fetch" }
 func (t *webFetchTool) Description() string {
-	return "Fetch a URL and return its text content. Uses HTTP first; on anti-bot blocks (403/401/429/…) falls back to the headless browser when enabled. Binary responses (PDF/image/zip) are saved under @/downloads/ — then use document_extract for PDF/image OCR."
+	return "Fetch a URL and return its text content. Uses HTTP first; on anti-bot blocks (403/401/429/…) falls back to the headless browser when enabled. Binary responses (PDF/image/zip) are saved under @/downloads/ — then use content_extract for OCR or structured fields."
 }
 func (t *webFetchTool) Parameters() map[string]any {
 	return map[string]any{
@@ -159,9 +159,9 @@ func (t *webFetchTool) saveBinaryDownload(rawURL, contentType string, body []byt
 	msg += "web_fetch only returns text for HTML/plain responses. "
 	switch kind {
 	case "pdf", "image":
-		msg += "Call document_extract with path=" + at + " to extract text/OCR."
+		msg += "Call content_extract with path=" + at + " to OCR or extract fields."
 	default:
-		msg += "For PDF/images call document_extract on " + at + "; otherwise use fs_* / other tools on that path."
+		msg += "For PDF/images/docs call content_extract on " + at + "; otherwise use fs_* / other tools on that path."
 	}
 	return msg, nil
 }

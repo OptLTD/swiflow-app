@@ -34,7 +34,7 @@ func TestBatchDelegateNudge(t *testing.T) {
 		t.Fatalf("nudge=%q", n)
 	}
 	if !strings.Contains(n, "DISABLED on the MAIN agent") {
-		t.Fatal("nudge should say document_extract is disabled on main")
+		t.Fatal("nudge should say content_extract is disabled on main")
 	}
 	if !strings.Contains(n, "3 @/ files") {
 		t.Fatalf("nudge should mention count, got %q", n)

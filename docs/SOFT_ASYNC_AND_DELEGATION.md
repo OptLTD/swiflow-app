@@ -5,7 +5,7 @@
 > - 主循环（单写者）：`internal/agent/agent.go`
 > - 确定性批量路由：`internal/agent/batch_delegate.go`
 > - 委派工具：`internal/tool/delegate.go`
-> - 文档抽取：`internal/tool/document_extract.go`
+> - 内容抽取：`internal/tool/content_extract.go`
 > 验证：`go run ./cmd/swiflow eval subagent-exit -c config.json --files 5 --timeout 180`
 
 > 历史说明：早期版本用「软异步（占位/回填/重问）+ EWMA 成本探测」实现同轮并行与长任务隔离。
@@ -25,7 +25,7 @@
 
 | 朴素做法 | 问题 |
 |----------|------|
-| 主 agent **串行**多次 `document_extract` | 墙钟 ≈ N × 单次 OCR；主上下文塞满长 OCR 文本 |
+| 主 agent **串行**多次 `content_extract` | 墙钟 ≈ N × 单次 OCR；主上下文塞满长 OCR 文本 |
 | 只靠 prompt 叫模型 `delegate_task` | 模型常继续自己抽，不委派 |
 
 ---
@@ -35,7 +35,7 @@
 ```mermaid
 flowchart TD
   Start[User turn] --> Policy{batchPolicy: attachments >= N?}
-  Policy -->|yes| Gate[deny document_extract on main + inject one delegate instruction]
+  Policy -->|yes| Gate[deny content_extract on main + inject one delegate instruction]
   Policy -->|no| Loop
   Gate --> Loop[Run loop - single writer]
   Loop --> LLM[streamRound: idle-timeout + retry/backoff]
@@ -92,7 +92,7 @@ flowchart TD
 - `shouldForceBatchDelegate(userMessage, childRun)`：非子运行且附件数
   `countAttachedAtPaths(userMessage) >= batchDelegateThreshold (=3)` → 命中。
 - 命中后（本 run 内一次）：
-  1. `denyDocumentExtract(&opts)` —— 主端禁用 `document_extract`；
+  1. `denyContentExtract(&opts)` —— 主端禁用 `content_extract`；
   2. 注入 `batchDelegateNudge(paths)` —— 列出全部 `@/` 路径，要求主端**一次** `delegate_task` 全量交给子 agent 写 xlsx。
 - 子运行永不触发（子无法委派）。
 
@@ -101,7 +101,7 @@ flowchart TD
 ## 4. 统一超时/预算（`executor.go` `toolTimeout` + `RunOpts`）
 
 - `Runner.toolTimeout(name)` 是**单一来源**：
-  - `RunnerDeps.ToolTimeouts[name]` 优先（运行时把 `document_extract` 对齐到 `DocumentTimeout + 30s` 余量，让 provider 的 HTTP 超时先报错，而非被 tool ctx 生硬取消）；
+  - `RunnerDeps.ToolTimeouts[name]` 优先（运行时把 `content_extract` 对齐到 `DocumentTimeout + 30s` 余量，让 provider 的 HTTP 超时先报错，而非被 tool ctx 生硬取消）；
   - `clarify` / `delegate_task` 用 15min；
   - 否则回落 `ToolTimeoutSec`（默认 120s）。
   - 消除了旧的 `ToolTimeoutSec(120s)` 与 `DocumentTimeout(180s)` 双超时打架。
@@ -150,7 +150,7 @@ go test -race ./internal/agent/...
 | `internal/agent/agent.go` | 主循环（单写者）、`runResult`、LLM 错误优雅退出、`RunChild` |
 | `internal/agent/batch_delegate.go` | 附件路径解析、确定性 `shouldForceBatchDelegate`、nudge、artifacts 提取 |
 | `internal/tool/delegate.go` | `delegate_task`、`ChildResult`/`ChildMetrics` |
-| `internal/tool/document_extract.go` | OCR / 文档抽取 |
+| `internal/tool/content_extract.go` | OCR / 内容抽取 |
 | `internal/llmclient/openai.go` | SSE 空闲守护、`APIError`、退避重试 |
 | `library/httputil/idle.go` | `NewIdleReadCloser` 正文停滞守护 |
 | `cmd/swiflow/eval_subagent_exit.go` | `subagent-exit` 评测 |

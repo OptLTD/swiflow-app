@@ -5,6 +5,7 @@ package lightapp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -85,14 +87,10 @@ func (m *Manager) RunningPort(id string) int {
 	return 0
 }
 
-// Launch starts an app process. It is idempotent: if already running, returns its URL.
+// Launch starts an app process. If already running, it is stopped and restarted
+// so updated ExtraEnv / files take effect.
 func (m *Manager) Launch(ctx context.Context, id string, cfg LaunchConfig) (url string, port int, err error) {
-	m.mu.Lock()
-	if s, ok := m.running[id]; ok {
-		m.mu.Unlock()
-		return s.URL, s.Port, nil
-	}
-	m.mu.Unlock()
+	m.Stop(id)
 
 	port, err = freePort()
 	if err != nil {
@@ -110,7 +108,7 @@ func (m *Manager) Launch(ctx context.Context, id string, cfg LaunchConfig) (url 
 
 	switch cfg.Runtime {
 	case RuntimeStatic:
-		state.server = serveStatic(appCtx, appDir, port)
+		state.server = serveStatic(appCtx, appDir, port, cfg.ExtraEnv)
 	case RuntimePython:
 		cmd, launchErr := launchPython(appCtx, appDir, entryPoint, port, cfg.ExtraEnv)
 		if launchErr != nil {
@@ -129,7 +127,7 @@ func (m *Manager) Launch(ctx context.Context, id string, cfg LaunchConfig) (url 
 	m.running[id] = state
 	m.mu.Unlock()
 
-	// Watch process exit and auto-clean state.
+	// Watch process exit and auto-clean state (only if still this instance).
 	go func() {
 		if state.cmd != nil {
 			_ = state.cmd.Wait()
@@ -137,7 +135,9 @@ func (m *Manager) Launch(ctx context.Context, id string, cfg LaunchConfig) (url 
 			<-appCtx.Done()
 		}
 		m.mu.Lock()
-		delete(m.running, id)
+		if cur, ok := m.running[id]; ok && cur == state {
+			delete(m.running, id)
+		}
 		m.mu.Unlock()
 		slog.Info("light app stopped", "id", id, "port", port)
 	}()
@@ -150,6 +150,9 @@ func (m *Manager) Launch(ctx context.Context, id string, cfg LaunchConfig) (url 
 func (m *Manager) Stop(id string) bool {
 	m.mu.Lock()
 	state, ok := m.running[id]
+	if ok {
+		delete(m.running, id)
+	}
 	m.mu.Unlock()
 	if !ok {
 		return false
@@ -211,10 +214,25 @@ func launchPython(ctx context.Context, appDir, entryPoint string, port int, extr
 	return cmd, nil
 }
 
-func serveStatic(ctx context.Context, dir string, port int) *http.Server {
+func serveStatic(ctx context.Context, dir string, port int, extraEnv map[string]string) *http.Server {
+	envJS := buildEnvJS(extraEnv)
+	fs := http.FileServer(http.Dir(dir))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/__env.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write([]byte(envJS))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if shouldInjectEnv(r.URL.Path) {
+			serveHTMLWithEnv(w, r, dir, envJS)
+			return
+		}
+		fs.ServeHTTP(w, r)
+	})
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", port),
-		Handler: http.FileServer(http.Dir(dir)),
+		Handler: mux,
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -228,6 +246,80 @@ func serveStatic(ctx context.Context, dir string, port int) *http.Server {
 		_ = srv.Shutdown(shutCtx)
 	}()
 	return srv
+}
+
+// buildEnvJS returns a script that exposes window.swiflow.env(key).
+// Missing or empty keys throw so apps and tests fail loudly.
+func buildEnvJS(extraEnv map[string]string) string {
+	if extraEnv == nil {
+		extraEnv = map[string]string{}
+	}
+	raw, err := json.Marshal(extraEnv)
+	if err != nil {
+		raw = []byte("{}")
+	}
+	return `(function(){
+  var data = ` + string(raw) + `;
+  window.swiflow = {
+    env: function(key) {
+      if (key == null || key === "") {
+        throw new Error("swiflow.env: key required");
+      }
+      if (!Object.prototype.hasOwnProperty.call(data, key)) {
+        throw new Error('swiflow.env: missing "' + key + '" — set it in Light Apps → Environment Variables, then re-launch');
+      }
+      var v = data[key];
+      if (v == null || v === "") {
+        throw new Error('swiflow.env: "' + key + '" is empty — set it in Light Apps → Environment Variables, then re-launch');
+      }
+      return v;
+    }
+  };
+})();
+`
+}
+
+func shouldInjectEnv(path string) bool {
+	if path == "/" || path == "" {
+		return true
+	}
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".html") || strings.HasSuffix(lower, ".htm")
+}
+
+const envMarker = "/*swiflow-env*/"
+
+func injectEnvIntoHTML(html, envJS string) string {
+	if strings.Contains(html, envMarker) {
+		return html
+	}
+	injected := "<script>" + envMarker + "\n" + envJS + "</script>\n"
+	lower := strings.ToLower(html)
+	if i := strings.Index(lower, "<head>"); i >= 0 {
+		insertAt := i + len("<head>")
+		return html[:insertAt] + "\n" + injected + html[insertAt:]
+	}
+	if i := strings.Index(lower, "<body"); i >= 0 {
+		return html[:i] + injected + html[i:]
+	}
+	return injected + html
+}
+
+func serveHTMLWithEnv(w http.ResponseWriter, r *http.Request, dir, envJS string) {
+	rel := strings.TrimPrefix(r.URL.Path, "/")
+	if rel == "" {
+		rel = "index.html"
+	}
+	full := filepath.Join(dir, filepath.FromSlash(rel))
+	data, err := os.ReadFile(full)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	html := injectEnvIntoHTML(string(data), envJS)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(html))
 }
 
 func freePort() (int, error) {

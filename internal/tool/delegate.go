@@ -71,7 +71,7 @@ func (t *delegateTaskTool) Description() string {
 	return "Spawn ONE isolated sub-agent for a BATCH of remaining work (own session + round budget); " +
 		"returns only its final summary. Put EVERY remaining @/ path and the output artifact " +
 		"(e.g. xlsx under workspace) inside goal — never one file per delegate_task, never invent a path/tools parameter. " +
-		"The child picks tools itself (document_extract, fs_*, etc.). Required when many attachments or table/Excel batch work remains."
+		"The child picks tools itself (content_extract, fs_*, etc.). Required when many attachments or table/Excel batch work remains."
 }
 func (t *delegateTaskTool) Parameters() map[string]any {
 	return map[string]any{

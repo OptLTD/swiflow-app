@@ -64,7 +64,7 @@ func openRuntime(ctx context.Context, cfg config.Config) (*runtimeBundle, error)
 	}
 	toolsReg := tool.NewRegistry()
 	tool.RegisterFS(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
-	tool.RegisterDocument(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, st, tool.DocumentOptions{
+	tool.RegisterContentExtract(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, st, tool.DocumentOptions{
 		Enabled:   cfg.Tools.DocumentEnabled,
 		BaseURL:   cfg.Tools.DocumentBaseURL,
 		APIKey:    cfg.Tools.DocumentAPIKey,
@@ -93,10 +93,10 @@ func openRuntime(ctx context.Context, cfg config.Config) (*runtimeBundle, error)
 		Publish:            tracker,
 		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
 		ToolTimeoutSec:     cfg.ToolTimeoutSec,
-		// Align the document_extract call timeout with the provider timeout
+		// Align the content_extract call timeout with the provider timeout
 		// (+margin) so the provider's own HTTP timeout errors first.
 		ToolTimeouts: map[string]time.Duration{
-			tool.ToolDocumentExtract: docTimeout + 30*time.Second,
+			tool.ToolContentExtract: docTimeout + 30*time.Second,
 		},
 		DisableThinking: cfg.DisableThinking,
 	})
