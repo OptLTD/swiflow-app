@@ -43,62 +43,92 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return data as T
 }
 
+function act<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  return req<T>('POST', path, body)
+}
+
 export const api = {
   health: () => req<{ status: string; version?: string }>('GET', '/health'),
   getRuntime: () => req<RuntimeInfo>('GET', '/runtime'),
+  installRuntime: (name: 'uvx-py' | 'js-npx', mode: 'mainland' | 'standard' = 'mainland') =>
+    req<{ status: string; name: string; message?: string; error?: string }>('POST', '/runtime/install', { name, mode }),
   listAgents: () => req<{ agents: Agent[] }>('GET', '/agents'),
   createAgent: (a: Partial<Agent>) => req<Agent>('POST', '/agents', a),
-  updateAgent: (key: string, a: Partial<Agent>) => req<{ status: string }>('PUT', `/agents/${key}`, a),
+  updateAgent: (key: string, a: Partial<Agent>) =>
+    act<{ status: string }>('/agents/act', { act: 'set', id: key, ...a }),
   listProviders: () => req<{ providers: Provider[] }>('GET', '/providers'),
   createProvider: (p: Partial<Provider> & { api_key?: string }) => req<Provider>('POST', '/providers', p),
-  updateProvider: (id: string, p: Record<string, unknown>) => req<{ status: string }>('PUT', `/providers/${id}`, p),
-  deleteProvider: (id: string) => req<{ status: string }>('DELETE', `/providers/${id}`),
+  updateProvider: (id: string, p: Record<string, unknown>) =>
+    act<{ status: string }>('/providers/act', { act: 'set', id, ...p }),
+  deleteProvider: (id: string) => act<{ status: string }>('/providers/act', { act: 'del', id }),
   listSessions: () => req<{ sessions: Session[] }>('GET', '/sessions'),
-  getSession: (key: string) => req<{ session: Session; messages: Message[] }>('GET', `/sessions/${key}`),
-  deleteSession: (key: string) => req<{ status: string }>('DELETE', `/sessions/${key}`),
-  abortSession: (key: string) => req<{ aborted: boolean }>('POST', `/sessions/${key}/abort`),
+  getSession: (key: string) =>
+    act<{ session: Session; messages: Message[] }>('/sessions/act', { act: 'get', id: key }),
+  deleteSession: (key: string) => act<{ status: string }>('/sessions/act', { act: 'del', id: key }),
+  abortSession: (key: string) => act<{ aborted: boolean }>('/sessions/act', { act: 'abort', id: key }),
   listRuns: () => req<{ runs: RunSnapshot[] }>('GET', '/runs'),
-  getRun: (id: string) => req<{ run: RunSnapshot; children: RunSnapshot[] }>('GET', `/runs/${id}`),
+  getRun: (id: string) =>
+    act<{ run: RunSnapshot; children: RunSnapshot[] }>('/runs/act', { act: 'get', id }),
   listSessionChildren: (id: string) =>
-    req<{ children: { session?: Session; run?: RunSnapshot }[] }>('GET', `/sessions/${id}/children`),
+    act<{ children: { session?: Session; run?: RunSnapshot }[] }>('/sessions/act', {
+      act: 'children',
+      id,
+    }),
   listTools: () => req<{ tools: ToolInfo[]; exec_enabled: boolean; browser_enabled: boolean }>('GET', '/tools'),
-  setTool: (name: string, enabled: boolean) => req<{ status: string }>('PUT', `/tools/${name}`, { enabled }),
+  setTool: (name: string, enabled: boolean) =>
+    act<{ status: string }>('/tools/act', { act: 'set', name, enabled }),
   getSearchSettings: () =>
-    req<{ provider: string; base_url: string; api_key_set: boolean }>('GET', '/settings/search'),
+    act<{ provider: string; base_url: string; api_key_set: boolean }>('/settings/act', {
+      act: 'search-get',
+    }),
   putSearchSettings: (body: { provider?: string; api_key?: string; base_url?: string }) =>
-    req<{ status: string; provider: string; base_url: string; api_key_set: boolean }>('PUT', '/settings/search', body),
+    act<{ status: string; provider: string; base_url: string; api_key_set: boolean }>('/settings/act', {
+      act: 'search-set',
+      ...body,
+    }),
   listSkills: () => req<{ skills: SkillInfo[] }>('GET', '/skills'),
-  setSkill: (slug: string, enabled: boolean) => req<{ status: string }>('PUT', `/skills/${slug}`, { enabled }),
-  reloadSkills: () => req<{ status: string }>('POST', '/skills/reload'),
+  setSkill: (slug: string, enabled: boolean) =>
+    act<{ status: string }>('/skills/act', { act: 'set', slug, enabled }),
+  reloadSkills: () => act<{ status: string }>('/skills/act', { act: 'reload' }),
   listSkillDrafts: () => req<{ drafts: SkillDraft[] }>('GET', '/skills/drafts'),
-  acceptSkillDraft: (id: string) => req<{ status: string }>('POST', `/skills/drafts/${id}/accept`),
-  deleteSkillDraft: (id: string) => req<{ status: string }>('DELETE', `/skills/drafts/${id}`),
+  acceptSkillDraft: (id: string) => act<{ status: string }>('/skills/act', { act: 'draft-accept', id }),
+  deleteSkillDraft: (id: string) => act<{ status: string }>('/skills/act', { act: 'draft-del', id }),
   listMCPServers: () => req<{ servers: MCPServer[] }>('GET', '/mcp/servers'),
-  getMCPCapabilities: (id: string) => req<MCPCapabilities>('GET', `/mcp/servers/${id}/capabilities`),
+  getMCPCapabilities: (id: string) =>
+    act<MCPCapabilities>('/mcp/act', { act: 'capabilities', id }),
   createMCPServer: (s: Partial<MCPServer>) => req<MCPServer>('POST', '/mcp/servers', s),
-  updateMCPServer: (id: string, s: Record<string, unknown>) => req<{ status: string }>('PUT', `/mcp/servers/${id}`, s),
-  deleteMCPServer: (id: string) => req<{ status: string }>('DELETE', `/mcp/servers/${id}`),
-  reloadMCP: () => req<{ status: string }>('POST', '/mcp/reload'),
+  updateMCPServer: (id: string, s: Record<string, unknown>) =>
+    act<{ status: string }>('/mcp/act', { act: 'set', id, ...s }),
+  deleteMCPServer: (id: string) => act<{ status: string }>('/mcp/act', { act: 'del', id }),
+  reloadMCP: () => act<{ status: string }>('/mcp/act', { act: 'reload' }),
   listCronJobs: () => req<{ jobs: CronJob[] }>('GET', '/cron/jobs'),
   createCronJob: (j: Partial<CronJob>) => req<CronJob>('POST', '/cron/jobs', j),
-  updateCronJob: (id: string, j: Record<string, unknown>) => req<{ status: string }>('PUT', `/cron/jobs/${id}`, j),
-  deleteCronJob: (id: string) => req<{ status: string }>('DELETE', `/cron/jobs/${id}`),
-  reloadCron: () => req<{ status: string }>('POST', '/cron/reload'),
+  updateCronJob: (id: string, j: Record<string, unknown>) =>
+    act<{ status: string }>('/cron/act', { act: 'set', id, ...j }),
+  deleteCronJob: (id: string) => act<{ status: string }>('/cron/act', { act: 'del', id }),
+  reloadCron: () => act<{ status: string }>('/cron/act', { act: 'reload' }),
   listLightApps: () => req<{ apps: LightApp[] }>('GET', '/light-apps'),
   createLightApp: (a: Partial<LightApp>) => req<LightApp>('POST', '/light-apps', a),
-  deleteLightApp: (id: string) => req<{ status: string }>('DELETE', `/light-apps/${id}`),
-  launchLightApp: (id: string) => req<{ url: string; port: number }>('POST', `/light-apps/${id}/launch`),
-  stopLightApp: (id: string) => req<{ status: string }>('POST', `/light-apps/${id}/stop`),
-  listLightAppEnv: () => req<{ env: Record<string, string> }>('GET', '/light-apps/env'),
-  setLightAppEnv: (key: string, value: string) => req<{ status: string }>('POST', '/light-apps/env', { key, value }),
-  deleteLightAppEnv: (key: string) => req<{ status: string }>('DELETE', `/light-apps/env/${encodeURIComponent(key)}`),
+  deleteLightApp: (id: string) => act<{ status: string }>('/light-apps/act', { act: 'del', id }),
+  launchLightApp: (id: string) =>
+    act<{ url: string; port: number }>('/light-apps/act', { act: 'launch', id }),
+  stopLightApp: (id: string) => act<{ status: string }>('/light-apps/act', { act: 'stop', id }),
+  listLightAppEnv: () => act<{ env: Record<string, string> }>('/light-apps/act', { act: 'env-list' }),
+  setLightAppEnv: (key: string, value: string) =>
+    act<{ status: string }>('/light-apps/act', { act: 'env-set', key, value }),
+  deleteLightAppEnv: (key: string) =>
+    act<{ status: string }>('/light-apps/act', { act: 'env-del', key }),
   listWorkspace: (path = '.') =>
     req<{ path: string; entries: WorkspaceEntry[] }>('GET', `/workspace/list?path=${encodeURIComponent(path)}`),
   readWorkspaceFile: (path: string) =>
     req<{ path: string; content: string; truncated?: boolean }>('GET', `/workspace/read?path=${encodeURIComponent(path)}`),
   downloadWorkspaceFile: (path: string) => downloadWorkspaceFile(path),
   uploadWorkspace: (path: string, files: File[]) => uploadWorkspaceFiles(path, files),
-  openURL: (url: string) => req<{ status: string }>('POST', '/open-url', { url }),
+  openURL: (url: string) => act<{ status: string }>('/system/act', { act: 'open-url', url }),
+  getPaths: () =>
+    req<{ data_dir: string; workspace_dir: string; log_file: string }>('GET', '/paths'),
+  openDataDir: () => act<{ status: string; path: string }>('/system/act', { act: 'open-data' }),
+  openLogFile: () => act<{ status: string; path: string }>('/system/act', { act: 'open-log' }),
   replyWindow: (id: string, result?: string, error?: string) =>
     req<{ ok: boolean }>('POST', '/window/reply', {
       id,
@@ -124,10 +154,9 @@ async function downloadWorkspaceFile(path: string): Promise<ArrayBuffer> {
     const data = await desktopDownloadWorkspaceFile(path)
     if (data) return decodeBase64Payload(data)
   }
-  const data = await req<{ path: string; encoding: string; content: string; size: number }>(
-    'POST',
-    '/workspace/download',
-    { path },
+  const data = await act<{ path: string; encoding: string; content: string; size: number }>(
+    '/workspace/act',
+    { act: 'download', path },
   )
   return decodeBase64Payload(data)
 }
@@ -141,7 +170,7 @@ async function uploadWorkspaceFiles(
   for (const file of files) {
     fd.append('files', file, file.name)
   }
-  const res = await fetch('/api/workspace/upload', {
+  const res = await fetch('/api/workspace/act?act=upload', {
     method: 'POST',
     body: fd,
   })
@@ -167,10 +196,10 @@ export async function chat(
   onEvent: (ev: ChatEvent) => void,
 ): Promise<{ queued?: boolean; position?: number }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionKey)}/chat`, {
+  const res = await fetch('/api/sessions/act', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ message, agent: agentKey }),
+    body: JSON.stringify({ act: 'chat', id: sessionKey, message, agent: agentKey }),
   })
   if (res.status === 202) {
     const data = (await res.json()) as { queued?: boolean; position?: number }
@@ -214,7 +243,15 @@ export async function watchSession(
   onEvent: (ev: ChatEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  await streamSSE(`/api/sessions/${encodeURIComponent(sessionKey)}/watch`, { method: 'GET', signal }, onEvent)
+  await streamSSE(
+    '/api/sessions/act',
+    {
+      method: 'POST',
+      body: JSON.stringify({ act: 'watch', id: sessionKey }),
+      signal,
+    },
+    onEvent,
+  )
 }
 
 async function streamSSE(

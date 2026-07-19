@@ -590,6 +590,15 @@ async function selectSession(key: string) {
   startWatch(key)
   await nextTick()
   scrollBottom(true)
+  await applyPendingPrompt()
+}
+
+async function applyPendingPrompt() {
+  const text = chatStore.consumePendingPrompt()
+  if (!text) return
+  input.value = text
+  await nextTick()
+  await send()
 }
 
 async function restoreLastSession() {

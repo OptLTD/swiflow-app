@@ -51,24 +51,28 @@ func TestMCPHTTPValidationAndCRUD(t *testing.T) {
 		t.Fatalf("list body: %s err %v", body, err)
 	}
 
-	resp, body = e.do(http.MethodGet, "/api/mcp/servers/"+created.ID, nil)
+	resp, body = e.do(http.MethodPost, "/api/mcp/act", map[string]any{
+		"act": "get", "id": created.ID,
+	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("get: %d %s", resp.StatusCode, body)
 	}
 
-	resp, _ = e.do(http.MethodPut, "/api/mcp/servers/"+created.ID, map[string]any{
-		"enabled": true,
+	resp, _ = e.do(http.MethodPost, "/api/mcp/act", map[string]any{
+		"act": "set", "id": created.ID, "enabled": true,
 	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("update: %d", resp.StatusCode)
 	}
 
-	resp, _ = e.do(http.MethodPost, "/api/mcp/reload", nil)
+	resp, _ = e.do(http.MethodPost, "/api/mcp/act", map[string]any{"act": "reload"})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("reload: %d", resp.StatusCode)
 	}
 
-	resp, _ = e.do(http.MethodDelete, "/api/mcp/servers/"+created.ID, nil)
+	resp, _ = e.do(http.MethodPost, "/api/mcp/act", map[string]any{
+		"act": "del", "id": created.ID,
+	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}

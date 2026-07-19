@@ -79,7 +79,7 @@ func (s *Server) createLightApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getLightApp(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	a, err := s.st.GetLightAppByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -95,7 +95,7 @@ func (s *Server) getLightApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateLightApp(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if _, err := s.st.GetLightAppByID(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -119,7 +119,7 @@ func (s *Server) updateLightApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteLightApp(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if _, err := s.st.GetLightAppByID(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -135,7 +135,7 @@ func (s *Server) deleteLightApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) launchLightApp(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	a, err := s.st.GetLightAppByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -164,7 +164,7 @@ func (s *Server) launchLightApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stopLightApp(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if _, err := s.st.GetLightAppByID(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -202,7 +202,7 @@ func (s *Server) setLightAppEnv(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteLightAppEnv(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("key")
+	key := requestKey(r)
 	if err := s.st.DeleteLightAppEnv(r.Context(), key); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

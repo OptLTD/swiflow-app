@@ -135,18 +135,13 @@ func (s *Server) readWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
-	var path string
-	if r.Method == http.MethodPost {
-		var in struct {
-			Path string `json:"path"`
-		}
-		if !bindJSON(w, r, &in) {
-			return
-		}
-		path = strings.TrimSpace(in.Path)
-	} else {
-		path = strings.TrimSpace(r.URL.Query().Get("path"))
+	var in struct {
+		Path string `json:"path"`
 	}
+	if !bindJSON(w, r, &in) {
+		return
+	}
+	path := strings.TrimSpace(in.Path)
 	if path == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
 		return

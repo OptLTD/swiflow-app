@@ -71,7 +71,7 @@ func (s *Server) createMCPServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getMCPServer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	srv, err := s.st.GetMCPServerByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -81,7 +81,7 @@ func (s *Server) getMCPServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateMCPServer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	var in map[string]any
 	if !bindJSON(w, r, &in) {
 		return
@@ -108,7 +108,7 @@ func (s *Server) updateMCPServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteMCPServer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	srv, err := s.st.GetMCPServerByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -135,7 +135,7 @@ func (s *Server) reloadMCP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getMCPServerCapabilities(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if _, err := s.st.GetMCPServerByID(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return

@@ -18,7 +18,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if s.harness == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "harness unavailable"})
 		return
@@ -73,7 +73,7 @@ type sessionChildDTO struct {
 }
 
 func (s *Server) listSessionChildren(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	list, err := s.st.ListSessions(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})

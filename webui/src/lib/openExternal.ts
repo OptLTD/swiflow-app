@@ -7,8 +7,8 @@ export async function openExternalURL(raw: string): Promise<void> {
   if (!/^https?:\/\//i.test(url)) return
 
   // Desktop (Wails): open OS default browser via backend.
-  // Docker / plain web: never call /api/open-url — that would run browser.OpenURL
-  // on the server host. Use the client tab instead.
+  // Docker / plain web: never call /api/system/act open-url — that would run
+  // browser.OpenURL on the server host. Use the client tab instead.
   if (!isDesktop()) {
     window.open(url, '_blank', 'noopener,noreferrer')
     return

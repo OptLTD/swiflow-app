@@ -39,6 +39,11 @@ var FrontendDist embed.FS
 //go:embed icons/appicon.png
 var AppIconPNG []byte
 
+// ScriptsFS holds platform install scripts for Python/UV and Node/npx.
+//
+//go:embed all:scripts
+var ScriptsFS embed.FS
+
 // UpgradesDir returns the embedded upgrades/ directory as an fs.FS.
 func UpgradesDir() (fs.FS, error) {
 	return fs.Sub(upgrades, "upgrades")
@@ -47,4 +52,9 @@ func UpgradesDir() (fs.FS, error) {
 // GetFrontendDist returns the embedded frontend/ directory as an fs.FS.
 func GetFrontendDist() (fs.FS, error) {
 	return fs.Sub(FrontendDist, "frontend")
+}
+
+// GetScript returns an embedded install script by filename (e.g. mac-uvx-py.sh).
+func GetScript(name string) ([]byte, error) {
+	return ScriptsFS.ReadFile("scripts/" + name)
 }

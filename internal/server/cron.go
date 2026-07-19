@@ -55,7 +55,7 @@ func (s *Server) createCronJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateCronJob(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	var in map[string]any
 	if !bindJSON(w, r, &in) {
 		return
@@ -85,7 +85,7 @@ func (s *Server) updateCronJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteCronJob(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if err := s.st.DeleteCronJob(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
 		return

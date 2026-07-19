@@ -33,6 +33,8 @@ export const useChatStore = defineStore('chat', {
     currentTitle: '',
     /** sessionKey → files pending attach on next send */
     pendingBySession: {} as Record<string, PendingAttachment[]>,
+    /** One-shot composer text set by Welcome before opening a chat tab. */
+    pendingPrompt: '',
   }),
   getters: {
     label: (s) => s.currentTitle || s.currentKey || 'New Chat',
@@ -43,6 +45,14 @@ export const useChatStore = defineStore('chat', {
       this.currentKey = key
       this.currentTitle = title
       writeStoredKey(key)
+    },
+    setPendingPrompt(text: string) {
+      this.pendingPrompt = text.trim()
+    },
+    consumePendingPrompt(): string {
+      const text = this.pendingPrompt
+      this.pendingPrompt = ''
+      return text
     },
     clearSession() {
       this.currentKey = ''

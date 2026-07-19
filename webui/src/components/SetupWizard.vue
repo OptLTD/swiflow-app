@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { api } from '../api'
 import { useAgentsStore } from '../stores/agents'
 import { useProvidersStore } from '../stores/providers'
@@ -35,6 +35,9 @@ const activePromptStyle = ref('none')
 const runtime = ref<RuntimeInfo | null>(null)
 const runtimeLoading = ref(false)
 const runtimeError = ref('')
+const installMode = ref<'mainland' | 'standard'>('mainland')
+const installing = ref<Record<string, boolean>>({})
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const steps = [
   { key: 'llm', label: 'LLM' },
@@ -50,6 +53,13 @@ const defaultAgent = computed(() =>
   (agentsStore.agents ?? []).find((a) => a.key === DEFAULT_AGENT_KEY) || null,
 )
 
+const pythonReady = computed(() =>
+  !!(runtime.value?.python3?.found && runtime.value?.uvx?.found),
+)
+const nodeReady = computed(() =>
+  !!(runtime.value?.node?.found && runtime.value?.npx?.found),
+)
+
 watch(step, (s) => {
   error.value = ''
   if (s === 1 && defaultAgent.value) {
@@ -59,7 +69,12 @@ watch(step, (s) => {
     }
     activePromptStyle.value = guessPromptStyleId(agentForm.value.sys_prompt)
   }
-  if (s === 2) loadRuntime()
+  if (s === 2) {
+    void loadRuntime()
+    startPolling()
+  } else {
+    stopPolling()
+  }
 })
 
 function applyPreset(id: string) {
@@ -177,6 +192,13 @@ async function loadRuntime() {
   runtimeError.value = ''
   try {
     runtime.value = await api.getRuntime()
+    // Sync installing flags from server (survives page refresh mid-install).
+    if (runtime.value.installing) {
+      installing.value = { ...installing.value, ...runtime.value.installing }
+    }
+    // Clear local installing when binaries appear.
+    if (pythonReady.value) installing.value['uvx-py'] = false
+    if (nodeReady.value) installing.value['js-npx'] = false
   } catch (e: any) {
     runtimeError.value = e.message
     runtime.value = null
@@ -185,11 +207,42 @@ async function loadRuntime() {
   }
 }
 
-function onInstall(name: string) {
-  toast.error(`${name} 自动安装暂未实现，请自行安装后点「重新检测」`)
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(() => {
+    const busy = installing.value['uvx-py'] || installing.value['js-npx']
+      || runtime.value?.installing?.['uvx-py'] || runtime.value?.installing?.['js-npx']
+    if (busy || step.value === 2) void loadRuntime()
+  }, 3000)
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+async function onInstall(kind: 'uvx-py' | 'js-npx') {
+  installing.value[kind] = true
+  error.value = ''
+  try {
+    await api.installRuntime(kind, installMode.value)
+    toast.success(kind === 'uvx-py'
+      ? '已开始安装 Python / UV，请稍候…'
+      : '已开始安装 Node.js / npx，请稍候…')
+    startPolling()
+    await loadRuntime()
+  } catch (e: any) {
+    installing.value[kind] = false
+    const msg = e?.message || '启动安装失败'
+    error.value = msg
+    toast.error(msg)
+  }
 }
 
 function finish() {
+  stopPolling()
   emit('done')
 }
 
@@ -201,6 +254,10 @@ function statusLabel(b?: RuntimeBinary | null) {
 
 onMounted(() => {
   syncLLMFromProvider()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 
@@ -317,36 +374,95 @@ onMounted(() => {
           <!-- Step 3: Env -->
           <div v-else class="space-y-3">
             <p class="text-sm text-neutral-500">
-              检测本机 Python3 / Node.js。Agent 执行脚本时常需要它们，可稍后再装。
+              检测并安装 Python（含 UV）与 Node.js（含 npx）。MCP / 脚本工具常用；可稍后安装。
             </p>
-            <div v-if="runtimeLoading" class="text-sm text-neutral-500">检测中…</div>
+
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-neutral-500">镜像：</span>
+              <button
+                type="button"
+                class="px-2 py-0.5 rounded border"
+                :class="installMode === 'mainland'
+                  ? 'bg-neutral-800 text-white border-neutral-800'
+                  : 'border-neutral-200 text-neutral-600'"
+                @click="installMode = 'mainland'"
+              >国内</button>
+              <button
+                type="button"
+                class="px-2 py-0.5 rounded border"
+                :class="installMode === 'standard'
+                  ? 'bg-neutral-800 text-white border-neutral-800'
+                  : 'border-neutral-200 text-neutral-600'"
+                @click="installMode = 'standard'"
+              >官方</button>
+            </div>
+
+            <div v-if="runtimeLoading && !runtime" class="text-sm text-neutral-500">检测中…</div>
             <div v-else-if="runtimeError" class="text-sm text-red-600">{{ runtimeError }}</div>
             <div v-else class="space-y-2">
-              <div
-                v-for="item in [
-                  { key: 'python3', label: 'Python3', bin: runtime?.python3 },
-                  { key: 'node', label: 'Node.js', bin: runtime?.node },
-                ]"
-                :key="item.key"
-                class="border border-neutral-200 rounded p-3 flex items-start justify-between gap-3"
-              >
-                <div class="min-w-0">
-                  <div class="font-medium text-sm">{{ item.label }}</div>
-                  <div class="text-xs mt-0.5" :class="item.bin?.found ? 'text-green-700' : 'text-amber-700'">
-                    {{ statusLabel(item.bin) }}
+              <!-- Python + UV -->
+              <div class="border border-neutral-200 rounded p-3 space-y-2">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="font-medium text-sm">Python + UV</div>
+                    <div class="text-xs mt-1 space-y-0.5">
+                      <div :class="runtime?.python3?.found ? 'text-green-700' : 'text-amber-700'">
+                        Python: {{ statusLabel(runtime?.python3) }}
+                      </div>
+                      <div :class="runtime?.uvx?.found ? 'text-green-700' : 'text-amber-700'">
+                        uvx: {{ statusLabel(runtime?.uvx) }}
+                      </div>
+                    </div>
+                    <div v-if="runtime?.python3?.path" class="text-xs text-neutral-400 font-mono truncate mt-0.5">
+                      {{ runtime.python3.path }}
+                    </div>
                   </div>
-                  <div v-if="item.bin?.found && item.bin.path" class="text-xs text-neutral-400 font-mono truncate mt-0.5">
-                    {{ item.bin.path }}
-                  </div>
+                  <button
+                    v-if="!pythonReady"
+                    type="button"
+                    class="shrink-0 px-2.5 py-1 border rounded text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+                    :disabled="!!installing['uvx-py']"
+                    @click="onInstall('uvx-py')"
+                  >{{ installing['uvx-py'] ? '安装中…' : '安装' }}</button>
+                  <span v-else class="shrink-0 text-xs text-green-700 px-1">就绪</span>
                 </div>
-                <button
-                  v-if="!item.bin?.found"
-                  type="button"
-                  class="shrink-0 px-2.5 py-1 border rounded text-xs text-neutral-600 hover:bg-neutral-50"
-                  @click="onInstall(item.label)"
-                >安装</button>
+                <p v-if="installing['uvx-py']" class="text-xs text-neutral-500">
+                  正在后台安装，可能需要几分钟；完成后状态会自动更新。
+                </p>
+              </div>
+
+              <!-- Node + npx -->
+              <div class="border border-neutral-200 rounded p-3 space-y-2">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="font-medium text-sm">Node.js + npx</div>
+                    <div class="text-xs mt-1 space-y-0.5">
+                      <div :class="runtime?.node?.found ? 'text-green-700' : 'text-amber-700'">
+                        Node: {{ statusLabel(runtime?.node) }}
+                      </div>
+                      <div :class="runtime?.npx?.found ? 'text-green-700' : 'text-amber-700'">
+                        npx: {{ statusLabel(runtime?.npx) }}
+                      </div>
+                    </div>
+                    <div v-if="runtime?.node?.path" class="text-xs text-neutral-400 font-mono truncate mt-0.5">
+                      {{ runtime.node.path }}
+                    </div>
+                  </div>
+                  <button
+                    v-if="!nodeReady"
+                    type="button"
+                    class="shrink-0 px-2.5 py-1 border rounded text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+                    :disabled="!!installing['js-npx']"
+                    @click="onInstall('js-npx')"
+                  >{{ installing['js-npx'] ? '安装中…' : '安装' }}</button>
+                  <span v-else class="shrink-0 text-xs text-green-700 px-1">就绪</span>
+                </div>
+                <p v-if="installing['js-npx']" class="text-xs text-neutral-500">
+                  正在后台安装，可能需要几分钟；完成后状态会自动更新。
+                </p>
               </div>
             </div>
+
             <div class="flex justify-between items-center pt-1 gap-2">
               <button type="button" class="px-3 py-1.5 border rounded text-sm" @click="step = 1">上一步</button>
               <div class="flex gap-2">
@@ -369,4 +485,3 @@ onMounted(() => {
     </div>
   </Teleport>
 </template>
-

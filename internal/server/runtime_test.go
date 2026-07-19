@@ -24,6 +24,12 @@ func TestGetRuntime(t *testing.T) {
 			Path    string `json:"path"`
 			Version string `json:"version"`
 		} `json:"node"`
+		Uvx *struct {
+			Found bool `json:"found"`
+		} `json:"uvx"`
+		Npx *struct {
+			Found bool `json:"found"`
+		} `json:"npx"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatal(err)
@@ -37,6 +43,14 @@ func TestGetRuntime(t *testing.T) {
 		if !out.Node.Found || out.Node.Path == "" {
 			t.Fatalf("expected node found: %+v", out.Node)
 		}
+	}
+}
+
+func TestInstallRuntimeValidation(t *testing.T) {
+	e := newAPIEnv(t)
+	resp, body := e.do(http.MethodPost, "/api/runtime/install", map[string]any{"name": "nope"})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status %d %s", resp.StatusCode, body)
 	}
 }
 

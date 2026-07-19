@@ -9,13 +9,14 @@ import (
 )
 
 const (
-	// RelLogFile is the workspace-relative path of the main log file.
+	// RelLogFile is the log file name under the data directory.
 	RelLogFile = "swiflow.log"
 )
 
 var (
-	fileMu   sync.Mutex
-	fileSink *os.File
+	fileMu     sync.Mutex
+	fileSink   *os.File
+	logFileAbs string
 )
 
 // fileConsoleWriter writes to the log file first (required), then best-effort to
@@ -36,16 +37,17 @@ func (w *fileConsoleWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// SetupFileLog appends slog output to workspace/swiflow.log while still attempting
+// SetupFileLog appends slog output to <dataDir>/swiflow.log while still attempting
 // to write to stdout. Safe to call once at process start.
-func SetupFileLog(workspaceDir string, level slog.Level) (string, error) {
-	if workspaceDir == "" {
-		return "", fmt.Errorf("workspace dir required")
+// dataDir is typically the same directory as swiflow.db (e.g. %APPDATA%\Swiflow\data).
+func SetupFileLog(dataDir string, level slog.Level) (string, error) {
+	if dataDir == "" {
+		return "", fmt.Errorf("data dir required")
 	}
-	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return "", err
 	}
-	path := filepath.Join(workspaceDir, RelLogFile)
+	path := filepath.Join(dataDir, RelLogFile)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return "", err
@@ -56,14 +58,22 @@ func SetupFileLog(workspaceDir string, level slog.Level) (string, error) {
 		_ = fileSink.Close()
 	}
 	fileSink = f
+	logFileAbs = path
 	fileMu.Unlock()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(&fileConsoleWriter{file: f}, &slog.HandlerOptions{Level: level})))
-	slog.Info("file logging enabled", "path", RelLogFile)
-	return RelLogFile, nil
+	slog.Info("file logging enabled", "path", path)
+	return path, nil
 }
 
-// LogFileRelPath returns the workspace-relative log path used by SetupFileLog.
+// LogFileRelPath returns the log file basename.
 func LogFileRelPath() string {
 	return RelLogFile
+}
+
+// LogFileAbsPath returns the absolute path set by SetupFileLog, or empty if unset.
+func LogFileAbsPath() string {
+	fileMu.Lock()
+	defer fileMu.Unlock()
+	return logFileAbs
 }

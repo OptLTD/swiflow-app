@@ -184,5 +184,10 @@ export interface RuntimeBinary {
 
 export interface RuntimeInfo {
   python3: RuntimeBinary
+  uv?: RuntimeBinary
+  uvx?: RuntimeBinary
   node: RuntimeBinary
+  npx?: RuntimeBinary
+  os?: string
+  installing?: Record<string, boolean>
 }

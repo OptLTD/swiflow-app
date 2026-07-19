@@ -49,14 +49,14 @@ func TestCronHTTPValidationAndCRUD(t *testing.T) {
 		t.Fatalf("list: %s", body)
 	}
 
-	resp, _ = e.do(http.MethodPut, "/api/cron/jobs/"+created.ID, map[string]any{
-		"enabled": false,
+	resp, _ = e.do(http.MethodPost, "/api/cron/act", map[string]any{
+		"act": "set", "id": created.ID, "enabled": false,
 	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("update: %d", resp.StatusCode)
 	}
 
-	resp, _ = e.do(http.MethodPost, "/api/cron/reload", nil)
+	resp, _ = e.do(http.MethodPost, "/api/cron/act", map[string]any{"act": "reload"})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("reload: %d", resp.StatusCode)
 	}
@@ -66,7 +66,9 @@ func TestCronHTTPValidationAndCRUD(t *testing.T) {
 		t.Fatal("expected disabled in db")
 	}
 
-	resp, _ = e.do(http.MethodDelete, "/api/cron/jobs/"+created.ID, nil)
+	resp, _ = e.do(http.MethodPost, "/api/cron/act", map[string]any{
+		"act": "del", "id": created.ID,
+	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}

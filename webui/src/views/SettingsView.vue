@@ -5,18 +5,18 @@ const CronView = defineAsyncComponent(() => import('./CronView.vue'))
 const ToolsView = defineAsyncComponent(() => import('./ToolsView.vue'))
 const AgentView = defineAsyncComponent(() => import('./AgentView.vue'))
 const SkillsView = defineAsyncComponent(() => import('./SkillsView.vue'))
-const MCPServersView = defineAsyncComponent(() => import('./MCPServersView.vue'))
 const SettingView = defineAsyncComponent(() => import('./SettingView.vue'))
-const AboutView = defineAsyncComponent(() => import('./AboutView.vue'))
+const AboutUsView = defineAsyncComponent(() => import('./AboutView.vue'))
+const MCPServersView = defineAsyncComponent(() => import('./MCPServersView.vue'))
 
 const tabs = [
   { key: 'agents', label: 'Agent' },
   { key: 'skills', label: 'Skills' },
   { key: 'tools', label: 'Tools' },
   { key: 'mcp', label: 'MCP' },
-  { key: 'cron', label: 'Cron' },
+  // { key: 'cron', label: 'Cron' },
   { key: 'setting', label: 'Setting' },
-  { key: 'about', label: 'About us' },
+  { key: 'aboutus', label: 'About us' },
 ] as const
 
 type SubTab = (typeof tabs)[number]['key']
@@ -43,9 +43,9 @@ const activeSubTab = ref<SubTab>('agents')
         <ToolsView v-else-if="activeSubTab === 'tools'" />
         <SkillsView v-else-if="activeSubTab === 'skills'" />
         <MCPServersView v-else-if="activeSubTab === 'mcp'" />
-        <CronView v-else-if="activeSubTab === 'cron'" />
+        <!-- <CronView v-else-if="activeSubTab === 'cron'" /> -->
         <SettingView v-else-if="activeSubTab === 'setting'" />
-        <AboutView v-else-if="activeSubTab === 'about'" />
+        <AboutUsView v-else-if="activeSubTab === 'aboutus'" />
       </div>
     </div>
   </div>

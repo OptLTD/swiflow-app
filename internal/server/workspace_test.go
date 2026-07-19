@@ -28,7 +28,7 @@ func TestWorkspaceUpload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/api/workspace/upload", &body)
+	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/api/workspace/act?act=upload", &body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestWorkspaceUpload(t *testing.T) {
 		t.Fatalf("read body: %s", readData)
 	}
 
-	dlResp, dlData := e.do("POST", "/api/workspace/download", map[string]string{"path": "hello.txt"})
+	dlResp, dlData := e.do("POST", "/api/workspace/act", map[string]string{"act": "download", "path": "hello.txt"})
 	if dlResp.StatusCode != http.StatusOK {
 		t.Fatalf("download status %d: %s", dlResp.StatusCode, dlData)
 	}
@@ -89,7 +89,7 @@ func TestWorkspaceUploadRejectsEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/api/workspace/upload", &body)
+	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/api/workspace/act?act=upload", &body)
 	if err != nil {
 		t.Fatal(err)
 	}

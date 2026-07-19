@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 )
 
@@ -166,4 +167,20 @@ func applyEnv(cfg *Config) {
 // Addr returns host:port.
 func (c Config) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+// DataDir returns the persistent data directory (parent of the SQLite DB when
+// using sqlite), e.g. %APPDATA%\Swiflow\data on Windows desktop. Falls back to
+// the parent of workspace when workspace is …/data/workspace.
+func (c Config) DataDir() string {
+	if c.DBPath != "" && (c.DBDriver == "" || c.DBDriver == "sqlite" || c.DBDriver == "sqlite3") {
+		return filepath.Dir(c.DBPath)
+	}
+	if c.WorkspaceDir != "" && filepath.Base(c.WorkspaceDir) == "workspace" {
+		return filepath.Dir(c.WorkspaceDir)
+	}
+	if c.WorkspaceDir != "" {
+		return c.WorkspaceDir
+	}
+	return "."
 }

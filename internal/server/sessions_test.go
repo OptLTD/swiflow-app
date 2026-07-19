@@ -51,7 +51,9 @@ func TestListSessionsHidesChildren(t *testing.T) {
 	}
 
 	// Child still reachable directly.
-	resp2, data2 := e.do("GET", "/api/sessions/sub-root-1-abcd", nil)
+	resp2, data2 := e.do("POST", "/api/sessions/act", map[string]any{
+		"act": "get", "id": "sub-root-1-abcd",
+	})
 	if resp2.StatusCode != http.StatusOK {
 		t.Fatalf("getSession child status=%d body=%s", resp2.StatusCode, data2)
 	}
@@ -68,21 +70,29 @@ func TestDeleteSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, data := e.do("DELETE", "/api/sessions/del-root", nil)
+	resp, data := e.do("POST", "/api/sessions/act", map[string]any{
+		"act": "del", "id": "del-root",
+	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status=%d body=%s", resp.StatusCode, data)
 	}
 
-	resp2, _ := e.do("GET", "/api/sessions/del-root", nil)
+	resp2, _ := e.do("POST", "/api/sessions/act", map[string]any{
+		"act": "get", "id": "del-root",
+	})
 	if resp2.StatusCode != http.StatusNotFound {
 		t.Fatalf("root still present status=%d", resp2.StatusCode)
 	}
-	resp3, _ := e.do("GET", "/api/sessions/del-child", nil)
+	resp3, _ := e.do("POST", "/api/sessions/act", map[string]any{
+		"act": "get", "id": "del-child",
+	})
 	if resp3.StatusCode != http.StatusNotFound {
 		t.Fatalf("child still present status=%d", resp3.StatusCode)
 	}
 
-	resp4, data4 := e.do("DELETE", "/api/sessions/missing", nil)
+	resp4, data4 := e.do("POST", "/api/sessions/act", map[string]any{
+		"act": "del", "id": "missing",
+	})
 	if resp4.StatusCode != http.StatusNotFound {
 		t.Fatalf("missing delete status=%d body=%s", resp4.StatusCode, data4)
 	}

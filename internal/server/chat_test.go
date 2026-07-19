@@ -10,8 +10,8 @@ import (
 
 func TestChatSupportsSSE(t *testing.T) {
 	e := newAPIEnv(t)
-	body := []byte(`{"message":"hi","agent":"default"}`)
-	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/api/sessions/sse-test/chat", bytes.NewReader(body))
+	body := []byte(`{"act":"chat","id":"sse-test","message":"hi","agent":"default"}`)
+	req, err := http.NewRequest(http.MethodPost, e.server.URL+"/api/sessions/act", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}

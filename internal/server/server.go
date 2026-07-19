@@ -62,76 +62,51 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/runtime", s.getRuntime)
+	mux.HandleFunc("POST /api/runtime/install", s.installRuntime)
 
 	mux.HandleFunc("GET /api/providers", s.listProviders)
 	mux.HandleFunc("POST /api/providers", s.createProvider)
-	mux.HandleFunc("GET /api/providers/{id}", s.getProvider)
-	mux.HandleFunc("PUT /api/providers/{id}", s.updateProvider)
-	mux.HandleFunc("DELETE /api/providers/{id}", s.deleteProvider)
+	mux.HandleFunc("POST /api/providers/act", s.providersAct)
 
 	mux.HandleFunc("GET /api/agents", s.listAgents)
 	mux.HandleFunc("POST /api/agents", s.createAgent)
-	mux.HandleFunc("GET /api/agents/{key}", s.getAgent)
-	mux.HandleFunc("PUT /api/agents/{key}", s.updateAgent)
+	mux.HandleFunc("POST /api/agents/act", s.agentsAct)
 
 	mux.HandleFunc("GET /api/sessions", s.listSessions)
-	mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
-	mux.HandleFunc("DELETE /api/sessions/{id}", s.deleteSession)
-	mux.HandleFunc("GET /api/sessions/{id}/watch", s.watchSession)
-	mux.HandleFunc("GET /api/sessions/{id}/children", s.listSessionChildren)
-	mux.HandleFunc("POST /api/sessions/{id}/chat", s.chat)
-	mux.HandleFunc("POST /api/sessions/{id}/abort", s.abort)
+	mux.HandleFunc("POST /api/sessions/act", s.sessionsAct)
 
 	mux.HandleFunc("GET /api/runs", s.listRuns)
-	mux.HandleFunc("GET /api/runs/watch", s.watchRuns)
-	mux.HandleFunc("GET /api/runs/{id}", s.getRun)
+	mux.HandleFunc("POST /api/runs/act", s.runsAct)
 
 	mux.HandleFunc("GET /api/tools", s.listTools)
-	mux.HandleFunc("PUT /api/tools/{name}", s.setToolEnabled)
+	mux.HandleFunc("POST /api/tools/act", s.toolsAct)
 
-	mux.HandleFunc("GET /api/settings/search", s.getSearchSettings)
-	mux.HandleFunc("PUT /api/settings/search", s.putSearchSettings)
+	mux.HandleFunc("POST /api/settings/act", s.settingsAct)
 
 	mux.HandleFunc("GET /api/skills", s.listSkills)
-	mux.HandleFunc("PUT /api/skills/{slug}", s.setSkillEnabled)
-	mux.HandleFunc("POST /api/skills/reload", s.reloadSkills)
 	mux.HandleFunc("GET /api/skills/drafts", s.listSkillDrafts)
-	mux.HandleFunc("POST /api/skills/drafts/{id}/accept", s.acceptSkillDraft)
-	mux.HandleFunc("DELETE /api/skills/drafts/{id}", s.deleteSkillDraft)
+	mux.HandleFunc("POST /api/skills/act", s.skillsAct)
 
-	mux.HandleFunc("POST /api/mcp/reload", s.reloadMCP)
 	mux.HandleFunc("GET /api/mcp/servers", s.listMCPServers)
 	mux.HandleFunc("POST /api/mcp/servers", s.createMCPServer)
-	mux.HandleFunc("GET /api/mcp/servers/{id}", s.getMCPServer)
-	mux.HandleFunc("GET /api/mcp/servers/{id}/capabilities", s.getMCPServerCapabilities)
-	mux.HandleFunc("PUT /api/mcp/servers/{id}", s.updateMCPServer)
-	mux.HandleFunc("DELETE /api/mcp/servers/{id}", s.deleteMCPServer)
+	mux.HandleFunc("POST /api/mcp/act", s.mcpAct)
 
 	mux.HandleFunc("GET /api/cron/jobs", s.listCronJobs)
 	mux.HandleFunc("POST /api/cron/jobs", s.createCronJob)
-	mux.HandleFunc("POST /api/cron/reload", s.reloadCron)
-	mux.HandleFunc("PUT /api/cron/jobs/{id}", s.updateCronJob)
-	mux.HandleFunc("DELETE /api/cron/jobs/{id}", s.deleteCronJob)
+	mux.HandleFunc("POST /api/cron/act", s.cronAct)
 
 	mux.HandleFunc("GET /api/workspace/list", s.listWorkspace)
 	mux.HandleFunc("GET /api/workspace/read", s.readWorkspaceFile)
-	mux.HandleFunc("GET /api/workspace/download", s.downloadFile)
-	mux.HandleFunc("POST /api/workspace/download", s.downloadFile)
-	mux.HandleFunc("POST /api/workspace/upload", s.uploadWorkspace)
-	mux.HandleFunc("POST /api/open-url", s.openURL)
+	mux.HandleFunc("POST /api/workspace/act", s.workspaceAct)
+
+	mux.HandleFunc("GET /api/paths", s.getPaths)
+	mux.HandleFunc("POST /api/system/act", s.systemAct)
 
 	mux.HandleFunc("POST /api/window/reply", s.windowReply)
 
 	mux.HandleFunc("GET /api/light-apps", s.listLightApps)
 	mux.HandleFunc("POST /api/light-apps", s.createLightApp)
-	mux.HandleFunc("GET /api/light-apps/{id}", s.getLightApp)
-	mux.HandleFunc("PUT /api/light-apps/{id}", s.updateLightApp)
-	mux.HandleFunc("DELETE /api/light-apps/{id}", s.deleteLightApp)
-	mux.HandleFunc("POST /api/light-apps/{id}/launch", s.launchLightApp)
-	mux.HandleFunc("POST /api/light-apps/{id}/stop", s.stopLightApp)
-	mux.HandleFunc("GET /api/light-apps/env", s.listLightAppEnv)
-	mux.HandleFunc("POST /api/light-apps/env", s.setLightAppEnv)
-	mux.HandleFunc("DELETE /api/light-apps/env/{key}", s.deleteLightAppEnv)
+	mux.HandleFunc("POST /api/light-apps/act", s.lightAppsAct)
 
 	var h http.Handler = mux
 	h = s.requestLogMiddleware(h)
@@ -150,7 +125,7 @@ func (s *Server) requestLogMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-Id", rid)
 		rw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
-		if !strings.HasPrefix(r.URL.Path, "/api/sessions/") || !strings.HasSuffix(r.URL.Path, "/chat") {
+		if r.URL.Path != "/api/sessions/act" {
 			slog.Info("http",
 				"request_id", rid,
 				"method", r.Method,
@@ -318,7 +293,7 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getProvider(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	p, err := s.st.GetProviderByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -328,7 +303,7 @@ func (s *Server) getProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateProvider(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	var in map[string]any
 	if !bindJSON(w, r, &in) {
 		return
@@ -349,7 +324,7 @@ func (s *Server) updateProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteProvider(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if err := s.st.DeleteProvider(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
 		return
@@ -414,7 +389,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("key")
+	key := requestID(r)
 	a, err := s.st.GetAgentByKey(r.Context(), key)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
@@ -424,7 +399,7 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("key")
+	key := requestID(r)
 	a, err := s.st.GetAgentByKey(r.Context(), key)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
@@ -495,7 +470,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	sess, err := s.st.GetSessionByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
@@ -510,7 +485,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
 		return
@@ -528,7 +503,7 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	var in struct {
 		Message string `json:"message"`
 		Agent   string `json:"agent"`
@@ -622,7 +597,7 @@ func (s *Server) windowReply(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if s.events == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "session watch unavailable"})
 		return
@@ -664,7 +639,7 @@ func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) abort(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	ok := s.runner.Abort(id)
 	writeJSON(w, http.StatusOK, map[string]bool{"aborted": ok})
 }
@@ -689,7 +664,7 @@ func (s *Server) listTools(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) setToolEnabled(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name := requestName(r)
 	var in struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -745,7 +720,7 @@ func (s *Server) listSkills(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setSkillEnabled(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
+	slug := requestSlug(r)
 	var in struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -778,7 +753,7 @@ func (s *Server) listSkillDrafts(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) acceptSkillDraft(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
 		return
@@ -791,7 +766,7 @@ func (s *Server) acceptSkillDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteSkillDraft(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	id := requestID(r)
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
 		return

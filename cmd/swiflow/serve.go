@@ -52,7 +52,7 @@ func runServe() error {
 	if verbose {
 		level = slog.LevelDebug
 	}
-	if _, err := observe.SetupFileLog(cfg.WorkspaceDir, level); err != nil {
+	if _, err := observe.SetupFileLog(cfg.DataDir(), level); err != nil {
 		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 		slog.Warn("file log setup", "error", err)
 	}

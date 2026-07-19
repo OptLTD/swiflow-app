@@ -53,8 +53,8 @@ func main() {
 	// Document extract uses the vision/default provider from Settings; keep enabled on desktop.
 	cfg.Tools.DocumentEnabled = true
 
-	// File logs under workspace so Settings / Explore can open them.
-	if _, err := observe.SetupFileLog(cfg.WorkspaceDir, slog.LevelInfo); err != nil {
+	// File logs under data dir (same folder as swiflow.db).
+	if _, err := observe.SetupFileLog(cfg.DataDir(), slog.LevelInfo); err != nil {
 		slog.Warn("file log setup", "error", err)
 	}
 

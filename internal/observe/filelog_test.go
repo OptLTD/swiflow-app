@@ -10,16 +10,20 @@ import (
 
 func TestSetupFileLog(t *testing.T) {
 	dir := t.TempDir()
-	ws := filepath.Join(dir, "workspace")
-	rel, err := SetupFileLog(ws, slog.LevelInfo)
+	data := filepath.Join(dir, "data")
+	abs, err := SetupFileLog(data, slog.LevelInfo)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rel != RelLogFile {
-		t.Fatalf("rel path = %q", rel)
+	want := filepath.Join(data, RelLogFile)
+	if abs != want {
+		t.Fatalf("abs path = %q, want %q", abs, want)
+	}
+	if LogFileAbsPath() != want {
+		t.Fatalf("LogFileAbsPath = %q", LogFileAbsPath())
 	}
 	slog.Info("hello from test")
-	raw, err := os.ReadFile(filepath.Join(ws, RelLogFile))
+	raw, err := os.ReadFile(want)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,12 +49,12 @@ func TestSetupFileLogIgnoresBrokenStdout(t *testing.T) {
 	defer func() { os.Stdout = old }()
 
 	dir := t.TempDir()
-	ws := filepath.Join(dir, "workspace")
-	if _, err := SetupFileLog(ws, slog.LevelInfo); err != nil {
+	data := filepath.Join(dir, "data")
+	if _, err := SetupFileLog(data, slog.LevelInfo); err != nil {
 		t.Fatal(err)
 	}
 	slog.Info("still written with broken stdout")
-	raw, err := os.ReadFile(filepath.Join(ws, RelLogFile))
+	raw, err := os.ReadFile(filepath.Join(data, RelLogFile))
 	if err != nil {
 		t.Fatal(err)
 	}
