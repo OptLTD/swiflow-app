@@ -2,6 +2,7 @@
 
 | Document | Role |
 |----------|------|
+| [GETTING_STARTED.md](GETTING_STARTED.md) | Quick start, build, Docker, Skills config. |
 | [SPEC.md](SPEC.md) | Product / API / schema **contracts** and phased roadmap. Historical clean-room development basis; keep behavioral claims aligned with code. |
 | [AGENT_ARCHITECTURE.md](AGENT_ARCHITECTURE.md) | **As-implemented** agent runtime: wiring, run loop, concurrency, SSE, tools, gaps, evolution. Prefer this when reading Go sources. |
 | [AGENT_WORKFLOW_PATTERNS.md](AGENT_WORKFLOW_PATTERNS.md) | **Learning guide**: Subagent / queue / clarify / observe / skill drafts — **landed** except deepen-read and queue durability. |
