@@ -65,11 +65,15 @@ windows:
 	$(MAKE) windows-exe ARCH=amd64
 	$(MAKE) windows-exe ARCH=arm64
 	wails3 generate webview2bootstrapper -dir build/windows/nsis
-	# Relative paths from build/windows/nsis — absolute D:/ paths break NSIS File on Windows CI.
+	# NSIS File on Windows fails with D:/ abs paths and ../../../ relative paths
+	# (especially under Git Bash). Stage binaries next to project.nsi.
+	cp bin/$(APP_NAME)-amd64.exe build/windows/nsis/$(APP_NAME)-amd64.exe
+	cp bin/$(APP_NAME)-arm64.exe build/windows/nsis/$(APP_NAME)-arm64.exe
 	cd build/windows/nsis && makensis \
-		-DARG_WAILS_AMD64_BINARY=../../../bin/$(APP_NAME)-amd64.exe \
-		-DARG_WAILS_ARM64_BINARY=../../../bin/$(APP_NAME)-arm64.exe \
+		-DARG_WAILS_AMD64_BINARY=$(APP_NAME)-amd64.exe \
+		-DARG_WAILS_ARM64_BINARY=$(APP_NAME)-arm64.exe \
 		project.nsi
+	rm -f build/windows/nsis/$(APP_NAME)-amd64.exe build/windows/nsis/$(APP_NAME)-arm64.exe
 	@test -f bin/$(APP_NAME)-installer.exe || { echo "error: missing bin/$(APP_NAME)-installer.exe"; exit 1; }
 	@echo "Installer: bin/$(APP_NAME)-installer.exe"
 

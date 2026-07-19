@@ -6,9 +6,10 @@ Unicode true
 ##   make windows
 ## Or manually:
 ##   makensis \
-##     -DARG_WAILS_AMD64_BINARY=../../../bin/Swiflow-amd64.exe \
-##     -DARG_WAILS_ARM64_BINARY=../../../bin/Swiflow-arm64.exe \
+##     -DARG_WAILS_AMD64_BINARY=Swiflow-amd64.exe \
+##     -DARG_WAILS_ARM64_BINARY=Swiflow-arm64.exe \
 ##     project.nsi
+## (Makefile stages the exes into this directory before invoking makensis.)
 ####
 
 !include "wails_tools.nsh"
