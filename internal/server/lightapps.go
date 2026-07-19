@@ -13,7 +13,7 @@ import (
 func (s *Server) listLightApps(w http.ResponseWriter, r *http.Request) {
 	apps, err := s.st.ListLightApps(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		writeErr(w, http.StatusInternalServerError, ErrListFailed)
 		return
 	}
 	// Overlay live runtime status from the manager.
@@ -39,14 +39,14 @@ func (s *Server) createLightApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name required"})
+		writeErr(w, http.StatusBadRequest, ErrNameRequired)
 		return
 	}
 	if in.Runtime == "" {
 		in.Runtime = "python"
 	}
 	if in.Runtime != "python" && in.Runtime != "static" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "runtime must be python or static"})
+		writeErr(w, http.StatusBadRequest, ErrInvalidLightAppRuntime)
 		return
 	}
 	if in.EntryPoint == "" {
@@ -59,7 +59,7 @@ func (s *Server) createLightApp(w http.ResponseWriter, r *http.Request) {
 	id := support.NewID()
 	if s.lightMgr != nil {
 		if err := s.lightMgr.EnsureDir(id); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "create app dir failed"})
+			writeErr(w, http.StatusInternalServerError, ErrCreateAppDirFailed)
 			return
 		}
 	}
@@ -72,7 +72,7 @@ func (s *Server) createLightApp(w http.ResponseWriter, r *http.Request) {
 		Status:      "stopped",
 	}
 	if err := s.st.CreateLightApp(r.Context(), a); err != nil {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "create failed"})
+		writeErr(w, http.StatusConflict, ErrCreateFailed)
 		return
 	}
 	writeJSON(w, http.StatusCreated, a)
@@ -82,7 +82,7 @@ func (s *Server) getLightApp(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	a, err := s.st.GetLightAppByID(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	if s.lightMgr != nil {
@@ -97,7 +97,7 @@ func (s *Server) getLightApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) updateLightApp(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if _, err := s.st.GetLightAppByID(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	var in map[string]any
@@ -112,7 +112,7 @@ func (s *Server) updateLightApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := s.st.UpdateLightApp(r.Context(), id, fields); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		writeErr(w, http.StatusInternalServerError, ErrUpdateFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -121,14 +121,14 @@ func (s *Server) updateLightApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteLightApp(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if _, err := s.st.GetLightAppByID(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	if s.lightMgr != nil {
 		s.lightMgr.Stop(id)
 	}
 	if err := s.st.DeleteLightApp(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		writeErr(w, http.StatusInternalServerError, ErrDeleteFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -138,11 +138,11 @@ func (s *Server) launchLightApp(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	a, err := s.st.GetLightAppByID(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	if s.lightMgr == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "light app manager unavailable"})
+		writeErr(w, http.StatusServiceUnavailable, ErrLightAppManagerUnavailable)
 		return
 	}
 	entryPoint := a.EntryPoint
@@ -156,7 +156,7 @@ func (s *Server) launchLightApp(w http.ResponseWriter, r *http.Request) {
 		ExtraEnv:   extraEnv,
 	})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	_ = s.st.UpdateLightApp(r.Context(), id, map[string]any{"status": "running", "port": port})
@@ -166,7 +166,7 @@ func (s *Server) launchLightApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) stopLightApp(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if _, err := s.st.GetLightAppByID(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	if s.lightMgr != nil {
@@ -179,7 +179,7 @@ func (s *Server) stopLightApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listLightAppEnv(w http.ResponseWriter, r *http.Request) {
 	env, err := s.st.ListLightAppEnv(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"env": env})
@@ -190,12 +190,16 @@ func (s *Server) setLightAppEnv(w http.ResponseWriter, r *http.Request) {
 		Key   string `json:"key"`
 		Value string `json:"value"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Key == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "key and value required"})
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, ErrInvalidJSON)
+		return
+	}
+	if body.Key == "" {
+		writeErr(w, http.StatusBadRequest, ErrKeyAndValueRequired)
 		return
 	}
 	if err := s.st.SetLightAppEnv(r.Context(), body.Key, body.Value); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -204,7 +208,7 @@ func (s *Server) setLightAppEnv(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteLightAppEnv(w http.ResponseWriter, r *http.Request) {
 	key := requestKey(r)
 	if err := s.st.DeleteLightAppEnv(r.Context(), key); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

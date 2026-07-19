@@ -22,7 +22,7 @@ func TestChatSupportsSSE(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == http.StatusInternalServerError && bytes.Contains(data, []byte("streaming unsupported")) {
+	if resp.StatusCode == http.StatusInternalServerError && bytes.Contains(data, []byte("streaming_unsupported")) {
 		t.Fatalf("chat handler lost http.Flusher through middleware: %s", data)
 	}
 	ct := resp.Header.Get("Content-Type")

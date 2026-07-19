@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import { useLightAppsStore } from '../stores/lightapps'
 import { openLightApp } from '../lib/openLightApp'
 
 const store = useLightAppsStore()
+const { t } = useI18n()
 const launching = ref<Record<string, boolean>>({})
 const deleting = ref<Record<string, boolean>>({})
 
@@ -80,13 +82,13 @@ async function remove(id: string) {
     <!-- Apps list -->
     <div class="space-y-3">
       <div class="flex items-center justify-between">
-        <h2 class="text-base font-semibold text-neutral-900">Light Apps</h2>
+        <h2 class="text-base font-semibold text-neutral-900">{{ t('lightApps.title') }}</h2>
       </div>
 
-      <div v-if="!store.loaded" class="text-sm text-neutral-400">Loading…</div>
+      <div v-if="!store.loaded" class="text-sm text-neutral-400">{{ t('common.loading') }}</div>
 
       <div v-else-if="store.apps.length === 0" class="text-sm text-neutral-400">
-        No light apps yet. Ask the agent to build one using the <code class="font-mono bg-neutral-100 px-1 rounded">build-light-app</code> skill.
+        {{ t('lightApps.empty') }}
       </div>
 
       <div v-else class="divide-y divide-neutral-100 border border-neutral-200 rounded-lg overflow-hidden">
@@ -121,23 +123,23 @@ async function remove(id: string) {
               v-if="app.status === 'running'"
               class="text-xs px-2.5 py-1 rounded border border-neutral-200 text-neutral-700 hover:bg-neutral-100 transition-colors"
               @click="open(app.id)"
-            >Open</button>
+              >{{ t('lightApps.open') }}</button>
             <button
               v-if="app.status === 'running'"
               class="text-xs px-2.5 py-1 rounded border border-neutral-200 text-neutral-600 hover:bg-neutral-100 transition-colors"
               @click="stop(app.id)"
-            >Stop</button>
+            >{{ t('lightApps.stop') }}</button>
             <button
               v-if="app.status !== 'running'"
               class="text-xs px-2.5 py-1 rounded border border-neutral-200 text-neutral-700 hover:bg-neutral-100 transition-colors disabled:opacity-50"
               :disabled="launching[app.id]"
               @click="launch(app.id)"
-            >{{ launching[app.id] ? 'Launching…' : 'Launch' }}</button>
+            >{{ launching[app.id] ? t('common.loading') : t('lightApps.launch') }}</button>
             <button
               class="text-xs px-2.5 py-1 rounded border border-red-100 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
               :disabled="deleting[app.id]"
               @click="remove(app.id)"
-            >Delete</button>
+            >{{ t('lightApps.delete') }}</button>
           </div>
         </div>
       </div>
@@ -146,8 +148,8 @@ async function remove(id: string) {
     <!-- Global env vars -->
     <div class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-neutral-900">Environment Variables</h3>
-        <p class="text-xs text-neutral-400 mt-0.5">Injected at launch — static: <code class="font-mono">window.swiflow.env('KEY')</code> (throws if missing); Python: <code class="font-mono">os.environ['KEY']</code>. Restart after changing.</p>
+        <h3 class="text-sm font-semibold text-neutral-900">{{ t('lightApps.envTitle') }}</h3>
+        <p class="text-xs text-neutral-400 mt-0.5">{{ t('lightApps.envHint') }}</p>
       </div>
 
       <div v-if="Object.keys(env).length > 0" class="divide-y divide-neutral-100 border border-neutral-200 rounded-lg overflow-hidden">
@@ -161,10 +163,10 @@ async function remove(id: string) {
           <button
             class="shrink-0 text-xs px-2 py-0.5 rounded border border-red-100 text-red-500 hover:bg-red-50 transition-colors"
             @click="removeEnv(key)"
-          >Remove</button>
+          >{{ t('lightApps.envRemove') }}</button>
         </div>
       </div>
-      <p v-else class="text-xs text-neutral-400">No environment variables set.</p>
+      <p v-else class="text-xs text-neutral-400">{{ t('lightApps.envEmpty') }}</p>
 
       <!-- Add row -->
       <div class="flex items-center gap-2">
@@ -184,7 +186,7 @@ async function remove(id: string) {
           class="text-xs px-3 py-1.5 rounded border border-neutral-200 text-neutral-700 hover:bg-neutral-100 transition-colors disabled:opacity-50"
           :disabled="savingEnv || !newKey.trim()"
           @click="addEnv"
-        >Add</button>
+        >{{ t('lightApps.envAdd') }}</button>
       </div>
     </div>
   </div>

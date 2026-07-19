@@ -26,16 +26,16 @@ func (s *Server) getPaths(w http.ResponseWriter, r *http.Request) {
 func (s *Server) openDataDir(w http.ResponseWriter, r *http.Request) {
 	dir := s.cfg.DataDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	if err := openPathInOS(abs); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "path": abs})
@@ -49,24 +49,24 @@ func (s *Server) openLogFile(w http.ResponseWriter, r *http.Request) {
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	// Ensure the file exists so the OS can open/reveal it.
 	if _, err := os.Stat(abs); err != nil {
 		f, createErr := os.OpenFile(abs, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 		if createErr != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": createErr.Error()})
+			writeErr(w, http.StatusInternalServerError, ErrInternalError, createErr.Error())
 			return
 		}
 		_ = f.Close()
 	}
 	if err := revealPathInOS(abs); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "path": abs})

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import type { RunSnapshot } from '../types'
 
 const props = defineProps<{ open: boolean; focusSession?: string | null }>()
 const emit = defineEmits<{ close: [] }>()
+const { t } = useI18n()
 
 const runs = ref<RunSnapshot[]>([])
 const selected = ref<RunSnapshot | null>(null)
@@ -67,8 +69,8 @@ onMounted(() => {
     <div class="relative z-10 w-full max-w-[560px] h-full bg-white shadow-xl flex flex-col">
       <div class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-neutral-200">
         <div>
-          <div class="text-sm font-medium text-neutral-800">Runtime Harness</div>
-          <div class="text-xs text-neutral-400">观测主/子会话与偏离（一期仅人工审查）</div>
+          <div class="text-sm font-medium text-neutral-800">{{ t('harness.title') }}</div>
+          <div class="text-xs text-neutral-400">{{ t('harness.subtitle') }}</div>
         </div>
         <div class="flex items-center gap-2">
           <button
@@ -76,7 +78,7 @@ onMounted(() => {
             class="text-xs text-neutral-500 hover:underline disabled:opacity-40"
             :disabled="loading"
             @click="refresh"
-          >刷新</button>
+          >{{ t('common.refresh') }}</button>
           <button type="button" class="text-neutral-400 hover:text-neutral-700 text-lg leading-none px-1" @click="emit('close')">×</button>
         </div>
       </div>
@@ -84,8 +86,8 @@ onMounted(() => {
       <div class="flex-1 min-h-0 flex">
         <div class="w-[40%] border-r border-neutral-100 overflow-y-auto">
           <div v-if="error" class="p-3 text-xs text-red-600">{{ error }}</div>
-          <div v-else-if="loading && !runs.length" class="p-3 text-xs text-neutral-400">加载中…</div>
-          <div v-else-if="!runs.length" class="p-3 text-xs text-neutral-400">暂无运行记录</div>
+          <div v-else-if="loading && !runs.length" class="p-3 text-xs text-neutral-400">{{ t('harness.loading') }}</div>
+          <div v-else-if="!runs.length" class="p-3 text-xs text-neutral-400">{{ t('harness.empty') }}</div>
           <button
             v-for="r in runs"
             :key="r.session_id"
@@ -103,7 +105,7 @@ onMounted(() => {
         </div>
 
         <div class="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
-          <div v-if="!selected" class="text-neutral-400">选择左侧会话</div>
+          <div v-if="!selected" class="text-neutral-400">{{ t('harness.select') }}</div>
           <template v-else>
             <div>
               <div class="text-neutral-500 mb-1">Goal</div>

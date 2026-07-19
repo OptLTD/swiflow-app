@@ -50,7 +50,7 @@ func (s *Server) installRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(in.Name)
 	if name != "uvx-py" && name != "js-npx" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name must be uvx-py or js-npx"})
+		writeErr(w, http.StatusBadRequest, ErrInvalidRuntimeInstallName)
 		return
 	}
 	mode := strings.TrimSpace(in.Mode)
@@ -58,14 +58,14 @@ func (s *Server) installRuntime(w http.ResponseWriter, r *http.Request) {
 		mode = "mainland"
 	}
 	if mode != "mainland" && mode != "standard" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mode must be mainland or standard"})
+		writeErr(w, http.StatusBadRequest, ErrInvalidRuntimeInstallMode)
 		return
 	}
 
 	runtimeInstalls.mu.Lock()
 	if runtimeInstalls.running[name] {
 		runtimeInstalls.mu.Unlock()
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "install already running"})
+		writeErr(w, http.StatusConflict, ErrInstallAlreadyRunning)
 		return
 	}
 	runtimeInstalls.running[name] = true
@@ -74,26 +74,26 @@ func (s *Server) installRuntime(w http.ResponseWriter, r *http.Request) {
 	scriptDir := filepath.Join(filepath.Dir(s.cfg.DBPath), "install-scripts")
 	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
 		runtimeInstalls.clear(name)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 
 	scriptName, cmd, args, err := runtimeInstallCmd(name, mode, scriptDir)
 	if err != nil {
 		runtimeInstalls.clear(name)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	bin, err := emb.GetScript(scriptName)
 	if err != nil || len(bin) == 0 {
 		runtimeInstalls.clear(name)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "script not found: " + scriptName})
+		writeErr(w, http.StatusInternalServerError, ErrScriptNotFound, scriptName)
 		return
 	}
 	scriptPath := filepath.Join(scriptDir, scriptName)
 	if err := os.WriteFile(scriptPath, bin, 0o755); err != nil {
 		runtimeInstalls.clear(name)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 
@@ -101,7 +101,7 @@ func (s *Server) installRuntime(w http.ResponseWriter, r *http.Request) {
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		runtimeInstalls.clear(name)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 
@@ -113,7 +113,7 @@ func (s *Server) installRuntime(w http.ResponseWriter, r *http.Request) {
 	if err := c.Start(); err != nil {
 		_ = logFile.Close()
 		runtimeInstalls.clear(name)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "start failed: " + err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInstallStartFailed, err.Error())
 		return
 	}
 

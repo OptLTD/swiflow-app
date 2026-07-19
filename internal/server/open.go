@@ -23,11 +23,11 @@ func (s *Server) openURL(w http.ResponseWriter, r *http.Request) {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Host == "" ||
 		(parsed.Scheme != "http" && parsed.Scheme != "https") {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url must be http or https"})
+		writeErr(w, http.StatusBadRequest, ErrURLMustBeHTTP)
 		return
 	}
 	if err := browser.OpenURL(parsed.String()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

@@ -218,7 +218,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func bindJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		writeErr(w, http.StatusBadRequest, ErrInvalidJSON)
 		return false
 	}
 	return true
@@ -238,7 +238,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listProviders(w http.ResponseWriter, r *http.Request) {
 	list, err := s.st.ListProviders(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		writeErr(w, http.StatusInternalServerError, ErrListFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"providers": list})
@@ -257,7 +257,7 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Name == "" || in.ApiKey == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name, api_key required"})
+		writeErr(w, http.StatusBadRequest, ErrNameAPIKeyRequired)
 		return
 	}
 	if in.ApiBase == "" {
@@ -267,7 +267,7 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 		in.Model = "gpt-4o-mini"
 	}
 	if err := support.ValidateHTTPURL(in.ApiBase); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrURLMustBeHTTP, err.Error())
 		return
 	}
 	enabled := true
@@ -284,7 +284,7 @@ func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
 		Enabled: enabled,
 	}
 	if err := s.st.CreateProvider(r.Context(), p); err != nil {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "create failed"})
+		writeErr(w, http.StatusConflict, ErrCreateFailed)
 		return
 	}
 	s.runner.InvalidateAll()
@@ -296,7 +296,7 @@ func (s *Server) getProvider(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	p, err := s.st.GetProviderByID(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
@@ -316,7 +316,7 @@ func (s *Server) updateProvider(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := s.st.UpdateProvider(r.Context(), id, fields); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		writeErr(w, http.StatusInternalServerError, ErrUpdateFailed)
 		return
 	}
 	s.runner.InvalidateAll()
@@ -326,7 +326,7 @@ func (s *Server) updateProvider(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteProvider(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if err := s.st.DeleteProvider(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		writeErr(w, http.StatusInternalServerError, ErrDeleteFailed)
 		return
 	}
 	s.runner.InvalidateAll()
@@ -338,7 +338,7 @@ func (s *Server) deleteProvider(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	list, err := s.st.ListAgents(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		writeErr(w, http.StatusInternalServerError, ErrListFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"agents": list})
@@ -356,19 +356,19 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Key == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "key required"})
+		writeErr(w, http.StatusBadRequest, ErrKeyRequired)
 		return
 	}
 	if in.TxtModel == "" {
 		in.TxtModel = "default"
 	}
 	if _, err := s.st.GetProviderByName(r.Context(), in.TxtModel); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown txt_model provider"})
+		writeErr(w, http.StatusBadRequest, ErrUnknownTxtModelProvider)
 		return
 	}
 	if in.ImgModel != "" {
 		if _, err := s.st.GetProviderByName(r.Context(), in.ImgModel); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown img_model provider"})
+			writeErr(w, http.StatusBadRequest, ErrUnknownImgModelProvider)
 			return
 		}
 	}
@@ -381,7 +381,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		SysPrompt: in.SysPrompt,
 	}
 	if err := s.st.CreateAgent(r.Context(), a); err != nil {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "create failed"})
+		writeErr(w, http.StatusConflict, ErrCreateFailed)
 		return
 	}
 	s.runner.InvalidateAll()
@@ -392,7 +392,7 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 	key := requestID(r)
 	a, err := s.st.GetAgentByKey(r.Context(), key)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		writeErr(w, http.StatusNotFound, ErrAgentNotFound)
 		return
 	}
 	writeJSON(w, http.StatusOK, a)
@@ -402,7 +402,7 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 	key := requestID(r)
 	a, err := s.st.GetAgentByKey(r.Context(), key)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		writeErr(w, http.StatusNotFound, ErrAgentNotFound)
 		return
 	}
 	var in struct {
@@ -420,7 +420,7 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.TxtModel != nil {
 		if _, err := s.st.GetProviderByName(r.Context(), *in.TxtModel); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown txt_model provider"})
+			writeErr(w, http.StatusBadRequest, ErrUnknownTxtModelProvider)
 			return
 		}
 		fields["txt_model"] = *in.TxtModel
@@ -428,7 +428,7 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 	if in.ImgModel != nil {
 		if *in.ImgModel != "" {
 			if _, err := s.st.GetProviderByName(r.Context(), *in.ImgModel); err != nil {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown img_model provider"})
+				writeErr(w, http.StatusBadRequest, ErrUnknownImgModelProvider)
 				return
 			}
 		}
@@ -438,11 +438,11 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		fields["sys_prompt"] = *in.SysPrompt
 	}
 	if len(fields) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no fields to update"})
+		writeErr(w, http.StatusBadRequest, ErrNoFieldsToUpdate)
 		return
 	}
 	if err := s.st.UpdateAgent(r.Context(), a.ID, fields); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		writeErr(w, http.StatusInternalServerError, ErrUpdateFailed)
 		return
 	}
 	s.runner.InvalidateAll()
@@ -455,7 +455,7 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	list, err := s.st.ListSessions(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		writeErr(w, http.StatusInternalServerError, ErrListFailed)
 		return
 	}
 	// Hide subagent (child) sessions: only top-level sessions (no parent) appear
@@ -473,12 +473,12 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	sess, err := s.st.GetSessionByID(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
 		return
 	}
 	msgs, err := s.st.ListMessages(r.Context(), sess.ID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "load messages failed"})
+		writeErr(w, http.StatusInternalServerError, ErrLoadMessagesFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"session": sess, "messages": msgs})
@@ -487,16 +487,16 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return
 	}
 	if _, err := s.st.GetSessionByID(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
 		return
 	}
 	_ = s.runner.Abort(id)
 	if err := s.st.DeleteSession(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		writeErr(w, http.StatusInternalServerError, ErrDeleteFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -512,7 +512,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Message == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "message required"})
+		writeErr(w, http.StatusBadRequest, ErrMessageRequired)
 		return
 	}
 
@@ -526,13 +526,13 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.runner.AtCapacity() {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "too many concurrent runs"})
+		writeErr(w, http.StatusConflict, ErrTooManyConcurrentRuns)
 		return
 	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming unsupported"})
+		writeErr(w, http.StatusInternalServerError, ErrStreamingUnsupported)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -574,7 +574,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) windowReply(w http.ResponseWriter, r *http.Request) {
 	if s.window == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "window bridge unavailable"})
+		writeErr(w, http.StatusServiceUnavailable, ErrWindowBridgeUnavailable)
 		return
 	}
 	var in struct {
@@ -586,11 +586,11 @@ func (s *Server) windowReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.ID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return
 	}
 	if err := s.window.Reply(in.ID, in.Result, in.Error); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -599,12 +599,12 @@ func (s *Server) windowReply(w http.ResponseWriter, r *http.Request) {
 func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if s.events == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "session watch unavailable"})
+		writeErr(w, http.StatusServiceUnavailable, ErrSessionWatchUnavailable)
 		return
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming unsupported"})
+		writeErr(w, http.StatusInternalServerError, ErrStreamingUnsupported)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -672,25 +672,19 @@ func (s *Server) setToolEnabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Enabled && tool.IsRuntimeTool(name) && !s.cfg.Tools.ExecEnabled {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "runtime tools require tools.exec_enabled or SWIFLOW_EXEC=true in config",
-		})
+		writeErr(w, http.StatusBadRequest, ErrExecToolsDisabled)
 		return
 	}
 	if in.Enabled && tool.IsBrowserTool(name) && !s.cfg.Tools.BrowserEnabled {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "browser tool requires tools.browser_enabled or SWIFLOW_BROWSER=true in config",
-		})
+		writeErr(w, http.StatusBadRequest, ErrBrowserToolDisabled)
 		return
 	}
 	if in.Enabled && tool.IsContentTool(name) && !s.cfg.Tools.DocumentEnabled {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "document tool requires tools.document_enabled or SWIFLOW_DOCUMENT=true in config",
-		})
+		writeErr(w, http.StatusBadRequest, ErrDocumentToolDisabled)
 		return
 	}
 	if err := s.st.SetToolEnabled(r.Context(), name, in.Enabled); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		writeErr(w, http.StatusInternalServerError, ErrUpdateFailed)
 		return
 	}
 	s.tools.SetEnabled(name, in.Enabled)
@@ -728,7 +722,7 @@ func (s *Server) setSkillEnabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.st.SetSkillEnabled(r.Context(), slug, in.Enabled); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		writeErr(w, http.StatusInternalServerError, ErrUpdateFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -743,7 +737,7 @@ func (s *Server) reloadSkills(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listSkillDrafts(w http.ResponseWriter, _ *http.Request) {
 	drafts, err := s.skills.ListDrafts()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	if drafts == nil {
@@ -755,11 +749,11 @@ func (s *Server) listSkillDrafts(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) acceptSkillDraft(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return
 	}
 	if err := s.skills.AcceptDraft(id); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "accepted"})
@@ -768,11 +762,11 @@ func (s *Server) acceptSkillDraft(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteSkillDraft(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return
 	}
 	if err := s.skills.DeleteDraft(id); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

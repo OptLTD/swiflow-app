@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import { useLayoutStore } from '../stores/layout'
 import { useUploadStore } from '../stores/upload'
@@ -9,6 +10,7 @@ import type { WorkspaceEntry } from '../types'
 const props = defineProps<{ path?: string }>()
 const layout = useLayoutStore()
 const upload = useUploadStore()
+const { t } = useI18n()
 
 const entries = ref<WorkspaceEntry[]>([])
 const currentPath = ref('.')
@@ -64,7 +66,7 @@ function openEntry(entry: WorkspaceEntry) {
       <button
         type="button"
         class="cursor-pointer shrink-0 w-7 h-7 flex items-center justify-center rounded text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-default disabled:opacity-50"
-        title="刷新"
+        :title="t('explore.refresh')"
         :disabled="loading"
         @click="loadEntries(currentPath)"
       >

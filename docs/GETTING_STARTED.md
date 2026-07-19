@@ -45,7 +45,22 @@ Chromium 需要足够的 `/dev/shm`（`compose.yml` 已设 `shm_size: 256mb`）�
 
 内置 Skills 打进二进制（`embed/init-skills/`）。用户覆盖放在 `./data/user-skills/`（见 `config.example.json`）。本地改 Skill 不想每次 rebuild，可设 `init_skills_dir` 或 `SWIFLOW_INIT_SKILLS` 指向目录。
 
-## 更多文档
+## Desktop release（GitHub Actions）
+
+推送符合 `v*` 的 tag 后，[.github/workflows/release.yml](../.github/workflows/release.yml) 会自动：
+
+- 在 **macOS** 构建 `Swiflow.app`，打包为 `Swiflow-<version>-macos-arm64.zip`
+- 在 **Windows** 构建 NSIS 安装包 `Swiflow-<version>-windows-installer.exe`
+- 创建 GitHub Release 并挂上上述产物（当前为**未签名**包；macOS 为 ad-hoc codesign）
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+本地等价命令：`make macos`、`make windows`（见根目录 Makefile）。
+
+---
 
 | 文档 | 内容 |
 |------|------|

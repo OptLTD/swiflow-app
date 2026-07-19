@@ -20,12 +20,12 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if s.harness == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "harness unavailable"})
+		writeErr(w, http.StatusNotFound, ErrHarnessUnavailable)
 		return
 	}
 	snap, ok := s.harness.Snapshot(id)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "run not found"})
+		writeErr(w, http.StatusNotFound, ErrRunNotFound)
 		return
 	}
 	children := s.harness.ListChildren(id)
@@ -34,12 +34,12 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) watchRuns(w http.ResponseWriter, r *http.Request) {
 	if s.harness == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "harness unavailable"})
+		writeErr(w, http.StatusServiceUnavailable, ErrHarnessUnavailable)
 		return
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming unsupported"})
+		writeErr(w, http.StatusInternalServerError, ErrStreamingUnsupported)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -76,7 +76,7 @@ func (s *Server) listSessionChildren(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	list, err := s.st.ListSessions(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		writeErr(w, http.StatusInternalServerError, ErrListFailed)
 		return
 	}
 	byID := map[string]sessionChildDTO{}

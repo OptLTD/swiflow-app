@@ -53,9 +53,7 @@ func (s *Server) putSearchSettings(w http.ResponseWriter, r *http.Request) {
 		switch p {
 		case "", "duckduckgo", "ddg", "brave", "searxng", "searx", "bing", "google":
 		default:
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "unsupported provider (use duckduckgo, brave, searxng, bing, google, or empty to disable)",
-			})
+			writeErr(w, http.StatusBadRequest, ErrUnsupportedSearchProvider)
 			return
 		}
 		if p == "ddg" {
@@ -65,14 +63,14 @@ func (s *Server) putSearchSettings(w http.ResponseWriter, r *http.Request) {
 			p = "searxng"
 		}
 		if err := s.st.SetSysSetting(r.Context(), settingSearchProvider, p); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+			writeErr(w, http.StatusInternalServerError, ErrSaveFailed)
 			return
 		}
 		s.webOpts.SearchProvider = p
 	}
 	if in.APIKey != nil {
 		if err := s.st.SetSysSetting(r.Context(), settingSearchAPIKey, *in.APIKey); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+			writeErr(w, http.StatusInternalServerError, ErrSaveFailed)
 			return
 		}
 		s.webOpts.SearchAPIKey = *in.APIKey
@@ -80,7 +78,7 @@ func (s *Server) putSearchSettings(w http.ResponseWriter, r *http.Request) {
 	if in.BaseURL != nil {
 		u := strings.TrimSpace(*in.BaseURL)
 		if err := s.st.SetSysSetting(r.Context(), settingSearchBaseURL, u); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+			writeErr(w, http.StatusInternalServerError, ErrSaveFailed)
 			return
 		}
 		s.webOpts.SearchBaseURL = u

@@ -65,21 +65,21 @@ func readActBody(w http.ResponseWriter, r *http.Request) (map[string]json.RawMes
 	defer r.Body.Close()
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeErr(w, http.StatusBadRequest, ErrInvalidJSON)
 		return nil, "", false
 	}
 	if len(bytes.TrimSpace(data)) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "act required"})
+		writeErr(w, http.StatusBadRequest, ErrActRequired)
 		return nil, "", false
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeErr(w, http.StatusBadRequest, ErrInvalidJSON)
 		return nil, "", false
 	}
 	act := strings.TrimSpace(rawString(raw, "act"))
 	if act == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "act required"})
+		writeErr(w, http.StatusBadRequest, ErrActRequired)
 		return nil, "", false
 	}
 	return raw, act, true
@@ -129,12 +129,12 @@ func withJSONBody(r *http.Request, body []byte) *http.Request {
 
 func requireID(w http.ResponseWriter, id string) bool {
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return false
 	}
 	return true
 }
 
 func unknownAct(w http.ResponseWriter, act string) {
-	writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown act: " + act})
+	writeErr(w, http.StatusBadRequest, ErrUnknownAct, act)
 }

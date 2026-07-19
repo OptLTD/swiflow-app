@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { applyDocumentLang, i18n } from './i18n'
 import { isDesktop, isMacDesktop, isWindowsDesktop } from './lib/desktop'
 import { installProseExternalLinks } from './lib/openExternal'
 import { useAuthStore } from './stores/auth'
@@ -16,6 +17,8 @@ if (isDesktop()) {
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
+app.use(i18n)
+applyDocumentLang()
 useAuthStore(pinia).probe()
 useUploadStore(pinia).bindDesktopDrop()
 installProseExternalLinks()

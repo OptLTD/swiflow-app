@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useLayoutStore } from '../stores/layout'
 import { useChatStore } from '../stores/chat'
 import {
@@ -10,12 +11,23 @@ import {
   toggleMaximize,
 } from '../lib/desktop'
 import LocalSvgIcon from './LocalSvgIcon.vue'
+import type { Tab } from '../stores/layout'
 
+const { t } = useI18n()
 const layout = useLayoutStore()
 const chatStore = useChatStore()
 /** Brand mark in the tab bar; macOS desktop keeps traffic-light space instead. */
 const showHeaderLogo = !isMacDesktop()
 const showWinControls = isWindowsDesktop()
+
+function tabLabel(tab: Tab) {
+  if (tab.type === 'home') return t('layout.home')
+  if (tab.type === 'explore') return t('layout.explore')
+  if (tab.type === 'settings') return t('layout.settings')
+  if (tab.type === 'light-apps') return t('layout.lightApps')
+  if (tab.type === 'chat') return tab.title || t('layout.newChat')
+  return tab.title
+}
 
 function onTitlebarDblClick(e: MouseEvent) {
   if (!isDesktop()) return
@@ -24,10 +36,10 @@ function onTitlebarDblClick(e: MouseEvent) {
   toggleMaximize()
 }
 
-function activateTab(tab: { id: string; type: string; path?: string; title: string }) {
+function activateTab(tab: Tab) {
   layout.activateTab(tab.id)
   if (tab.type === 'chat' && tab.path) {
-    chatStore.setSession(tab.path, tab.title === 'New Chat' ? '' : tab.title)
+    chatStore.setSession(tab.path, tab.title || '')
   }
 }
 </script>
@@ -60,14 +72,14 @@ function activateTab(tab: { id: string; type: string; path?: string; title: stri
           tab.type === 'home' || tab.type === 'explore' ? 'w-9 px-0' : '',
           tab.type === 'home' && isMacDesktop() ? 'border-l' : '',
         ]"
-        :title="tab.type === 'home' ? 'Home' : tab.type === 'explore' ? 'Explore' : tab.title"
+        :title="tabLabel(tab)"
         @click="activateTab(tab)"
       >
         <LocalSvgIcon v-if="tab.type === 'home'" name="home" :size="18" />
         <LocalSvgIcon v-else-if="tab.type === 'explore'" name="folder" :size="18" />
         <template v-else>
           <LocalSvgIcon v-if="tab.type === 'chat'" name="chat" :size="14" />
-          <span class="truncate max-w-[120px] leading-none">{{ tab.title }}</span>
+          <span class="truncate max-w-[120px] leading-none">{{ tabLabel(tab) }}</span>
           <span
             v-if="tab.closable"
             class="w-4 h-4 flex items-center justify-center rounded hover:bg-neutral-300 text-neutral-500"
@@ -83,7 +95,7 @@ function activateTab(tab: { id: string; type: string; path?: string; title: stri
     <div class="shrink-0 flex items-center gap-0.5 px-1.5 border-l border-neutral-200 h-full">
       <button
         class="w-8 h-8 flex items-center justify-center rounded hover:bg-neutral-200 text-neutral-600"
-        title="Settings"
+        :title="t('layout.settings')"
         @click="layout.openSettings()"
       >
         <LocalSvgIcon name="settings" :size="16" />
@@ -93,7 +105,7 @@ function activateTab(tab: { id: string; type: string; path?: string; title: stri
         :class="layout.showChatSidebar
           ? 'bg-neutral-200 text-neutral-900'
           : 'text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700'"
-        :title="layout.isChatTabActive ? 'Chat maximized' : (layout.chatPanelOpen ? 'Hide Chat' : 'Show Chat')"
+        :title="layout.isChatTabActive ? t('layout.chatMaximized') : (layout.chatPanelOpen ? t('layout.hideChat') : t('layout.showChat'))"
         :disabled="layout.isChatTabActive"
         @click="layout.toggleChatPanel()"
       >
@@ -106,17 +118,17 @@ function activateTab(tab: { id: string; type: string; path?: string; title: stri
       v-if="showWinControls"
       class="shrink-0 flex items-stretch h-full border-l border-neutral-200"
     >
-      <button class="win-caption-btn" title="Minimize" @click="minimiseWindow">
+      <button class="win-caption-btn" :title="t('common.minimize')" @click="minimiseWindow">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
           <path d="M1 5h8" stroke="currentColor" stroke-width="1.2" />
         </svg>
       </button>
-      <button class="win-caption-btn" title="Maximize" @click="toggleMaximize">
+      <button class="win-caption-btn" :title="t('common.maximize')" @click="toggleMaximize">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
           <rect x="1.25" y="1.25" width="7.5" height="7.5" stroke="currentColor" stroke-width="1.2" />
         </svg>
       </button>
-      <button class="win-caption-btn win-close" title="Close" @click="closeWindow">
+      <button class="win-caption-btn win-close" :title="t('common.close')" @click="closeWindow">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
           <path d="M2 2l6 6M8 2L2 8" stroke="currentColor" stroke-width="1.2" />
         </svg>

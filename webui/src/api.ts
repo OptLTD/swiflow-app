@@ -1,6 +1,7 @@
 // API client for the Swiflow backend.
 import { desktopDownloadWorkspaceFile } from './lib/desktopWorkspace'
 import { isDesktop } from './lib/desktop'
+import { mapApiError } from './i18n/errors'
 import type {
   Agent,
   ChatEvent,
@@ -29,7 +30,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     signal: AbortSignal.timeout(30_000),
   })
   const text = await res.text()
-  let data: { error?: string } | null = null
+  let data: { error?: string; detail?: string } | null = null
   if (text) {
     try {
       data = JSON.parse(text)
@@ -38,7 +39,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     }
   }
   if (!res.ok) {
-    throw new Error(data?.error || `HTTP ${res.status}`)
+    throw new Error(mapApiError(data?.error, `HTTP ${res.status}`))
   }
   return data as T
 }
@@ -184,7 +185,7 @@ async function uploadWorkspaceFiles(
     }
   }
   if (!res.ok) {
-    throw new Error(data?.error || `HTTP ${res.status}`)
+    throw new Error(mapApiError(data?.error, `HTTP ${res.status}`))
   }
   return data as { path: string; uploaded: { name: string; path: string; size: number }[] }
 }
@@ -208,11 +209,11 @@ export async function chat(
   }
   if (!res.ok) {
     const text = await res.text()
-    let msg = `HTTP ${res.status}`
+    let code = ''
     try {
-      msg = JSON.parse(text).error || msg
+      code = JSON.parse(text).error || ''
     } catch {}
-    throw new Error(msg)
+    throw new Error(mapApiError(code, `HTTP ${res.status}`))
   }
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
@@ -267,11 +268,11 @@ async function streamSSE(
   })
   if (!res.ok) {
     const text = await res.text()
-    let msg = `HTTP ${res.status}`
+    let code = ''
     try {
-      msg = JSON.parse(text).error || msg
+      code = JSON.parse(text).error || ''
     } catch {}
-    throw new Error(msg)
+    throw new Error(mapApiError(code, `HTTP ${res.status}`))
   }
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { t } from '../i18n'
 // Legacy .xls codepage support (e.g. GBK)
 import * as cptable from 'xlsx/dist/cpexcel.full.mjs'
 import type { ExcelSheet } from './filePreview'
@@ -63,7 +64,7 @@ export function parseExcel(buffer: ArrayBuffer): ExcelSheet[] {
     cellText: true,
   })
   if (!workbook.SheetNames.length) {
-    throw new Error('Excel 文件没有工作表')
+    throw new Error(t('excel.noSheets'))
   }
   return workbook.SheetNames.map((name) => ({
     name,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import { openExternalURL } from '../lib/openExternal'
 import { searchProviderPageURL } from '../lib/searchURL'
@@ -19,6 +20,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ viewChild: [key: string] }>()
 const layout = useLayoutStore()
+const { t } = useI18n()
 const open = ref(false) // collapsed by default
 
 // Live clock so the elapsed time keeps ticking while the tool is running.
@@ -147,79 +149,87 @@ const intent = computed(() => {
   const a = props.args || {}
   switch (props.name) {
     case 'fs_read':
-      return '读取文件 ' + trim(pick(a, 'path'), 60)
+      return t('toolCall.fsRead', { path: trim(pick(a, 'path'), 60) })
     case 'fs_write':
-      return '写入文件 ' + trim(pick(a, 'path'), 60)
+      return t('toolCall.fsWrite', { path: trim(pick(a, 'path'), 60) })
     case 'fs_list': {
       const p = pick(a, 'path') || '.'
-      return p === '.' ? '列出目录内容' : '列出目录 ' + trim(p, 40) + ' 内容'
+      return p === '.'
+        ? t('toolCall.fsListRoot')
+        : t('toolCall.fsList', { path: trim(p, 40) })
     }
     case 'fs_edit':
-      return '编辑文件 ' + trim(pick(a, 'path'), 60)
+      return t('toolCall.fsEdit', { path: trim(pick(a, 'path'), 60) })
     case 'content_extract':
-      return '内容抽取 ' + trim(pick(a, 'path'), 60)
+      return t('toolCall.contentExtract', { path: trim(pick(a, 'path'), 60) })
     case 'web_fetch':
-      return '抓取网页 ' + trim(pick(a, 'url'), 60)
+      return t('toolCall.webFetch', { url: trim(pick(a, 'url'), 60) })
     case 'web_search':
-      return '搜索关键字 ' + trim(pick(a, 'query'), 60)
+      return t('toolCall.webSearch', { query: trim(pick(a, 'query'), 60) })
     case 'browser': {
       const act = pick(a, 'action')
-      if (act === 'navigate') return '浏览器打开 ' + trim(pick(a, 'url'), 50)
-      if (act === 'screenshot') return '浏览器截图'
+      if (act === 'navigate') return t('toolCall.browserNavigate', { url: trim(pick(a, 'url'), 50) })
+      if (act === 'screenshot') return t('toolCall.browserScreenshot')
       if (act === 'click') {
         const tip = pick(a, 'text') || pick(a, 'selector')
-        return '浏览器点击 ' + trim(tip, 40)
+        return t('toolCall.browserClick', { target: trim(tip, 40) })
       }
-      if (act === 'type') return '浏览器输入 ' + trim(pick(a, 'selector'), 40)
-      return '浏览器 ' + act
+      if (act === 'type') return t('toolCall.browserType', { selector: trim(pick(a, 'selector'), 40) })
+      return t('toolCall.browser', { action: act })
     }
     case 'exec':
     case 'exec_run':
     case 'cmd_run':
-      return '执行命令: ' + trim(pick(a, 'command'), 60)
+      return t('toolCall.exec', { command: trim(pick(a, 'command'), 60) })
     case 'python_run':
-      if (pick(a, 'file')) return '运行 Python 脚本 ' + trim(pick(a, 'file'), 50)
-      return '运行 Python 代码'
+      if (pick(a, 'file')) return t('toolCall.pythonFile', { file: trim(pick(a, 'file'), 50) })
+      return t('toolCall.pythonCode')
     case 'node_run':
-      if (pick(a, 'file')) return '运行 Node 脚本 ' + trim(pick(a, 'file'), 50)
-      return '运行 Node 代码'
+      if (pick(a, 'file')) return t('toolCall.nodeFile', { file: trim(pick(a, 'file'), 50) })
+      return t('toolCall.nodeCode')
     case 'skill_use':
-      return '使用技能 ' + trim(pick(a, 'slug'), 40)
+      return t('toolCall.skillUse', { slug: trim(pick(a, 'slug'), 40) })
     case 'skill_search':
-      return '搜索技能 ' + trim(pick(a, 'query'), 40)
+      return t('toolCall.skillSearch', { query: trim(pick(a, 'query'), 40) })
     case 'skill_manage': {
       const act = pick(a, 'action')
       const slug = trim(pick(a, 'slug'), 40)
-      if (act === 'create') return '创建技能 ' + slug
-      if (act === 'patch') return '更新技能 ' + slug
-      return '管理技能 ' + slug
+      if (act === 'create') return t('toolCall.skillCreate', { slug })
+      if (act === 'patch') return t('toolCall.skillPatch', { slug })
+      return t('toolCall.skillManage', { slug })
     }
     case 'skill_draft':
-      return '技能草案 ' + trim(pick(a, 'slug'), 40)
+      return t('toolCall.skillDraft', { slug: trim(pick(a, 'slug'), 40) })
     case 'delegate_task':
-      return '委派子任务 ' + trim(pick(a, 'goal'), 50)
+      return t('toolCall.delegate', { goal: trim(pick(a, 'goal'), 50) })
     case 'todo_write':
-      return '更新任务清单'
+      return t('toolCall.todoWrite')
     case 'todo_read':
-      return '读取任务清单'
+      return t('toolCall.todoRead')
     case 'schedule_run':
-      return `将在 ${pick(a, 'delay_seconds') || '?'} 秒后执行任务: ` + trim(pick(a, 'message'), 50)
+      return t('toolCall.scheduleRun', {
+        seconds: pick(a, 'delay_seconds') || '?',
+        message: trim(pick(a, 'message'), 50),
+      })
     case 'schedule_create':
-      return '创建定时任务 ' + trim(pick(a, 'name'), 40) + ' (' + trim(pick(a, 'schedule'), 30) + ')'
+      return t('toolCall.scheduleCreate', {
+        name: trim(pick(a, 'name'), 40),
+        schedule: trim(pick(a, 'schedule'), 30),
+      })
     case 'light_app_create':
-      return '创建 Light App: ' + trim(pick(a, 'name'), 40)
+      return t('toolCall.lightAppCreate', { name: trim(pick(a, 'name'), 40) })
     case 'light_app_list':
-      return '列出 Light Apps'
+      return t('toolCall.lightAppList')
     case 'light_app_launch':
-      return '启动 Light App: ' + trim(pick(a, 'id'), 40)
+      return t('toolCall.lightAppLaunch', { id: trim(pick(a, 'id'), 40) })
     case 'light_app_write':
-      return '写入文件 ' + trim(pick(a, 'path'), 60)
+      return t('toolCall.lightAppWrite', { path: trim(pick(a, 'path'), 60) })
     case 'light_app_read':
-      return '读取文件 ' + trim(pick(a, 'path'), 60)
+      return t('toolCall.lightAppRead', { path: trim(pick(a, 'path'), 60) })
     case 'light_app_ls':
-      return '列出目录 ' + trim(pick(a, 'path'), 40)
+      return t('toolCall.lightAppLs', { path: trim(pick(a, 'path'), 40) })
     case 'light_app_open':
-      return '打开 Light App: ' + trim(pick(a, 'url'), 50)
+      return t('toolCall.lightAppOpen', { url: trim(pick(a, 'url'), 50) })
     default:
       return props.name
   }
@@ -302,7 +312,7 @@ async function openVisit(e: Event) {
           class="text-neutral-700 hover:underline cursor-pointer"
           @click="openPreview"
           @keydown.enter.prevent="openPreview"
-        >查看</span>
+        >{{ t('toolCall.view') }}</span>
         <span
           v-if="canVisit"
           role="button"
@@ -310,7 +320,7 @@ async function openVisit(e: Event) {
           class="text-neutral-700 hover:underline cursor-pointer"
           @click="openVisit"
           @keydown.enter.prevent="openVisit"
-        >访问</span>
+        >{{ t('toolCall.visit') }}</span>
         <span
           v-if="launchURL"
           role="button"
@@ -318,13 +328,13 @@ async function openVisit(e: Event) {
           class="text-neutral-700 hover:underline cursor-pointer"
           @click="openLaunch"
           @keydown.enter.prevent="openLaunch"
-        >打开</span>
+        >{{ t('toolCall.open') }}</span>
         <span
           class="inline-flex items-center gap-1"
           :class="isError ? 'text-red-600' : running ? 'text-neutral-500' : 'text-green-600'"
         >
-          <template v-if="running"><span class="swiflow-spin"></span><span>运行中</span></template>
-          <template v-else>{{ isError ? '失败' : '成功' }}</template>
+          <template v-if="running"><span class="swiflow-spin"></span><span>{{ t('toolCall.running') }}</span></template>
+          <template v-else>{{ isError ? t('toolCall.failed') : t('toolCall.success') }}</template>
         </span>
       </span>
     </button>
@@ -333,13 +343,13 @@ async function openVisit(e: Event) {
       class="px-2 py-1 bg-neutral-50 border-t border-neutral-100 flex items-center gap-1.5"
     >
       <span class="swiflow-spin shrink-0"></span>
-      <span class="truncate text-neutral-500 flex-1">{{ progress || '子任务运行中…' }}</span>
+      <span class="truncate text-neutral-500 flex-1">{{ progress || t('toolCall.subagentRunning') }}</span>
       <button
         v-if="childSession"
         type="button"
         class="shrink-0 text-neutral-700 hover:underline"
         @click="viewChild"
-      >查看</button>
+      >{{ t('toolCall.view') }}</button>
     </div>
     <div
       v-if="name === 'delegate_task' && !running && !isError && childSession"
@@ -349,7 +359,7 @@ async function openVisit(e: Event) {
         type="button"
         class="text-neutral-700 hover:underline"
         @click="viewChild"
-      >查看子任务过程</button>
+      >{{ t('toolCall.viewSubagent') }}</button>
     </div>
     <pre v-show="open" class="p-2 whitespace-pre-wrap max-h-64 overflow-y-auto bg-neutral-50 border-t border-neutral-100">{{ body }}</pre>
   </div>

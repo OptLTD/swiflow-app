@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useProvidersStore } from '../stores/providers'
 import { useAgentsStore } from '../stores/agents'
 import { api } from '../api'
@@ -21,6 +22,7 @@ type Kind = 'text' | 'vision'
 
 const providersStore = useProvidersStore()
 const agentsStore = useAgentsStore()
+const { t } = useI18n()
 const error = ref('')
 const loading = ref(false)
 const saving = ref(false)
@@ -139,6 +141,10 @@ function syncForms() {
   }
 }
 
+function providerPresetLabel(preset: { id: string; label: string }) {
+  return preset.id === 'other' ? t('provider.other') : preset.label
+}
+
 function applyPreset(id: string) {
   activePreset.value = id
   const preset = PROVIDER_PRESETS.find((p) => p.id === id)
@@ -191,7 +197,7 @@ async function save() {
       await api.updateProvider(existing.id, body)
     } else {
       if (!current.api_key) {
-        error.value = 'API Key 必填'
+        error.value = t('provider.apiKeyRequired')
         return
       }
       await api.createProvider({
@@ -240,7 +246,7 @@ function onBackdrop(e: MouseEvent) {
               ? 'border-neutral-900 text-neutral-900 font-medium'
               : 'border-transparent text-neutral-500 hover:text-neutral-800'"
             @click="kind = 'text'"
-          >推理模型</button>
+          >{{ t('provider.textTab') }}</button>
           <button
             type="button"
             class="pb-2 border-b-2 transition-colors"
@@ -248,7 +254,7 @@ function onBackdrop(e: MouseEvent) {
               ? 'border-neutral-900 text-neutral-900 font-medium'
               : 'border-transparent text-neutral-500 hover:text-neutral-800'"
             @click="kind = 'vision'"
-          >视觉模型</button>
+          >{{ t('provider.imgTab') }}</button>
         </div>
         <button
           class="text-neutral-500 hover:text-neutral-800 text-xl leading-none px-2 pb-1.5"
@@ -258,12 +264,12 @@ function onBackdrop(e: MouseEvent) {
       </div>
 
       <form class="p-4 space-y-3" @submit.prevent="save">
-        <div v-if="loading" class="text-sm text-neutral-500">Loading…</div>
+        <div v-if="loading" class="text-sm text-neutral-500">{{ t('common.loading') }}</div>
         <div v-if="error" class="text-sm text-red-600">{{ error }}</div>
 
         <p class="text-xs text-neutral-500">
-          <template v-if="kind === 'text'">配置推理 / 对话所用的模型（绑定到 Agent 的 txt_model）。</template>
-          <template v-else>配置视觉 / 多模态所用的模型（绑定到 Agent 的 img_model）。</template>
+          <template v-if="kind === 'text'">{{ t('provider.textHint') }}</template>
+          <template v-else>{{ t('provider.imgHint') }}</template>
         </p>
 
         <div class="flex flex-wrap gap-1.5">
@@ -276,7 +282,7 @@ function onBackdrop(e: MouseEvent) {
               ? 'bg-neutral-800 text-white border-neutral-800'
               : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'"
             @click="applyPreset(preset.id)"
-          >{{ preset.label }}</button>
+          >{{ providerPresetLabel(preset) }}</button>
         </div>
 
         <div>
@@ -297,17 +303,17 @@ function onBackdrop(e: MouseEvent) {
             v-model="form.api_key"
             type="password"
             class="w-full border rounded px-2 py-1.5 text-sm"
-            :placeholder="providerId ? '留空则不修改' : 'sk-…'"
+            :placeholder="providerId ? t('provider.leaveBlank') : 'sk-…'"
           />
         </div>
 
         <div class="flex justify-end gap-2 pt-1">
-          <button type="button" class="px-3 py-1.5 border rounded text-sm" @click="emit('close')">Cancel</button>
+          <button type="button" class="px-3 py-1.5 border rounded text-sm" @click="emit('close')">{{ t('common.cancel') }}</button>
           <button
             type="submit"
             class="px-3 py-1.5 bg-neutral-800 text-white rounded text-sm disabled:opacity-50"
             :disabled="saving"
-          >{{ saving ? 'Saving…' : 'Save' }}</button>
+          >{{ saving ? t('common.saving') : t('common.save') }}</button>
         </div>
       </form>
     </div>

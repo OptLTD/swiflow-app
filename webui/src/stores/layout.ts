@@ -145,7 +145,7 @@ export const useLayoutStore = defineStore('layout', {
       this.openTab({
         id,
         type: 'chat',
-        title: title || 'New Chat',
+        title: title || '',
         path: sessionKey,
         closable: true,
       })

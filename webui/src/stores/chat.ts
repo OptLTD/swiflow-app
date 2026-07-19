@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { t } from '../i18n'
 import { toAtPath } from '../lib/workspacePath'
 
 const STORAGE_KEY = 'swiflow_chat_session'
@@ -37,7 +38,7 @@ export const useChatStore = defineStore('chat', {
     pendingPrompt: '',
   }),
   getters: {
-    label: (s) => s.currentTitle || s.currentKey || 'New Chat',
+    label: (s) => s.currentTitle || s.currentKey || t('layout.newChat'),
     pendingFor: (s) => (sessionKey: string) => s.pendingBySession[sessionKey] || [],
   },
   actions: {

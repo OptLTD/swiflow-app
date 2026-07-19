@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const CronView = defineAsyncComponent(() => import('./CronView.vue'))
 const ToolsView = defineAsyncComponent(() => import('./ToolsView.vue'))
@@ -9,18 +12,17 @@ const SettingView = defineAsyncComponent(() => import('./SettingView.vue'))
 const AboutUsView = defineAsyncComponent(() => import('./AboutView.vue'))
 const MCPServersView = defineAsyncComponent(() => import('./MCPServersView.vue'))
 
-const tabs = [
-  { key: 'agents', label: 'Agent' },
-  { key: 'skills', label: 'Skills' },
-  { key: 'tools', label: 'Tools' },
-  { key: 'mcp', label: 'MCP' },
-  // { key: 'cron', label: 'Cron' },
-  { key: 'setting', label: 'Setting' },
-  { key: 'aboutus', label: 'About us' },
-] as const
+const tabKeys = ['agents', 'skills', 'tools', 'mcp', 'setting', 'aboutus'] as const
 
-type SubTab = (typeof tabs)[number]['key']
+type SubTab = (typeof tabKeys)[number]
 const activeSubTab = ref<SubTab>('agents')
+
+const tabs = computed(() =>
+  tabKeys.map((key) => ({
+    key,
+    label: t(`settingsTabs.${key}`),
+  })),
+)
 </script>
 
 <template>

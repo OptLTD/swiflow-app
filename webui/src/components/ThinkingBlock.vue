@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{ content: string }>()
+const { t } = useI18n()
 const open = ref(false) // collapsed by default, like tool blocks
 
 // First non-empty line of the thinking, truncated, shown as a preview in the
@@ -24,7 +26,7 @@ const firstLine = computed(() => {
     >
       <span class="flex items-center gap-1 truncate">
         <span class="text-neutral-400">{{ open ? '▼' : '▶' }}</span>
-        <span class="shrink-0">让我想想</span>
+        <span class="shrink-0">{{ t('thinking.label') }}</span>
         <span v-if="firstLine" class="text-neutral-400 truncate">· {{ firstLine }}</span>
       </span>
       <span class="shrink-0">💡</span>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import mammoth from 'mammoth'
 import { fileExtension } from '../../lib/filePreview'
 
 const props = defineProps<{ data: ArrayBuffer; path: string }>()
+const { t } = useI18n()
 
 const html = ref('')
 const loading = ref(true)
@@ -15,7 +17,7 @@ async function renderDoc() {
   html.value = ''
   const ext = fileExtension(props.path)
   if (ext === 'doc') {
-    error.value = '旧版 .doc 格式暂不支持预览，请转换为 .docx'
+    error.value = t('filePreview.docLegacy')
     loading.value = false
     return
   }
@@ -38,7 +40,7 @@ watch(() => [props.data, props.path], renderDoc)
 
 <template>
   <div class="h-full overflow-y-auto bg-white p-6">
-    <div v-if="loading" class="text-neutral-400">Loading document…</div>
+    <div v-if="loading" class="text-neutral-400">{{ t('common.loading') }}</div>
     <div v-else-if="error" class="text-red-600">{{ error }}</div>
     <article v-else class="doc-preview prose prose-neutral max-w-none text-sm" v-html="html" />
   </div>

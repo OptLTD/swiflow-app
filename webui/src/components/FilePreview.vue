@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import { previewKind, type ExcelSheet } from '../lib/filePreview'
 import { useToastStore } from '../stores/toast'
@@ -14,6 +15,7 @@ const ImagePreview = defineAsyncComponent(() => import('./preview/ImagePreview.v
 
 const props = defineProps<{ path: string }>()
 const toast = useToastStore()
+const { t } = useI18n()
 
 const loading = ref(true)
 const error = ref('')
@@ -26,14 +28,14 @@ const mdMode = ref<'preview' | 'source'>('preview')
 async function copyText() {
   const text = textContent.value
   if (!text) {
-    toast.error('暂无内容可复制')
+    toast.error(t('filePreview.nothingToCopy'))
     return
   }
   try {
     await navigator.clipboard.writeText(text)
-    toast.success('已复制')
+    toast.success(t('filePreview.copied'))
   } catch {
-    toast.error('复制失败')
+    toast.error(t('filePreview.copyFailed'))
   }
 }
 
@@ -57,7 +59,7 @@ async function load() {
       return
     }
     if (kind.value === 'unsupported') {
-      error.value = '此文件类型暂不支持预览'
+      error.value = t('filePreview.unsupported')
       return
     }
     const data = await api.downloadWorkspaceFile(props.path)
@@ -68,7 +70,7 @@ async function load() {
     }
     binaryData.value = data
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'failed to load file'
+    error.value = e instanceof Error ? e.message : t('common.failedToLoad')
   } finally {
     loading.value = false
   }
@@ -107,7 +109,7 @@ watch(() => props.path, load, { immediate: true })
         v-if="kind === 'text' || kind === 'markdown'"
         type="button"
         class="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 hover:text-neutral-800"
-        title="复制"
+        :title="t('common.copy')"
         :disabled="loading || !textContent"
         @click="copyText"
       >
@@ -116,7 +118,7 @@ watch(() => props.path, load, { immediate: true })
       <button
         type="button"
         class="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 hover:text-neutral-800"
-        title="刷新"
+        :title="t('common.refresh')"
         :disabled="loading"
         @click="load"
       >
@@ -124,7 +126,7 @@ watch(() => props.path, load, { immediate: true })
       </button>
     </div>
     <div class="flex-1 min-h-0 overflow-hidden">
-      <div v-if="loading" class="p-6 text-neutral-400">Loading…</div>
+      <div v-if="loading" class="p-6 text-neutral-400">{{ t('common.loading') }}</div>
       <div v-else-if="error" class="p-6 text-red-600">{{ error }}</div>
       <MarkdownPreview
         v-else-if="kind === 'markdown'"

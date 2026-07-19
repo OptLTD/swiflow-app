@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api, chat, watchSession } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
@@ -33,6 +34,7 @@ const auth = useAuthStore()
 const chatStore = useChatStore()
 const layout = useLayoutStore()
 const clarifyStore = useClarifyStore()
+const { t } = useI18n()
 
 const clarifyAnswer = ref('')
 const clarifyPending = computed(() => {
@@ -93,7 +95,7 @@ function maximizeChat() {
     key = 'sess-' + Math.random().toString(36).slice(2, 10)
     chatStore.setSession(key, '')
   }
-  layout.openChatTab(key, chatStore.currentTitle || 'New Chat')
+  layout.openChatTab(key, chatStore.currentTitle || '')
 }
 
 function restoreChatSidebar() {
@@ -142,21 +144,21 @@ function toolActivityLabel(m: Msg): string {
   const trim = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '…' : s)
   switch (name) {
     case 'fs_read':
-      return '读取 ' + trim(pick('path'), 40)
+      return t('chat.activityRead', { path: trim(pick('path'), 40) })
     case 'fs_write':
-      return '写入 ' + trim(pick('path'), 40)
+      return t('chat.activityWrite', { path: trim(pick('path'), 40) })
     case 'fs_edit':
-      return '编辑 ' + trim(pick('path'), 40)
+      return t('chat.activityEdit', { path: trim(pick('path'), 40) })
     case 'content_extract':
-      return '内容抽取 ' + trim(pick('path'), 40)
+      return t('chat.activityExtract', { path: trim(pick('path'), 40) })
     case 'web_fetch':
-      return '抓取 ' + trim(pick('url'), 40)
+      return t('chat.activityFetch', { url: trim(pick('url'), 40) })
     case 'web_search':
-      return '搜索 ' + trim(pick('query'), 40)
+      return t('chat.activitySearch', { query: trim(pick('query'), 40) })
     case 'browser':
-      return '浏览器 ' + (pick('action') || '')
+      return t('chat.activityBrowser', { action: pick('action') || '' })
     case 'delegate_task':
-      return '委派 ' + trim(pick('goal'), 40)
+      return t('chat.activityDelegate', { goal: trim(pick('goal'), 40) })
     default:
       return name
   }
@@ -192,7 +194,7 @@ const statusBar = computed(() => {
       if (m.tool_name === 'delegate_task') {
         return {
           kind: 'sub' as const,
-          text: m.progress || toolActivityLabel(m) || '子任务运行中…',
+          text: m.progress || toolActivityLabel(m) || t('chat.statusSubagent'),
           warn: !!latestWarn,
         }
       }
@@ -207,16 +209,16 @@ const statusBar = computed(() => {
       if (m.role !== 'assistant') continue
       if (m.streaming || (!m.content && m.thinking)) {
         if (m.thinking && !m.content) {
-          return { kind: 'think' as const, text: '思考中…', warn: !!latestWarn }
+          return { kind: 'think' as const, text: t('chat.statusThinking'), warn: !!latestWarn }
         }
         if (m.streaming && m.content) {
-          return { kind: 'reply' as const, text: '生成回复中…', warn: !!latestWarn }
+          return { kind: 'reply' as const, text: t('chat.statusReplying'), warn: !!latestWarn }
         }
-        return { kind: 'think' as const, text: '思考中…', warn: !!latestWarn }
+        return { kind: 'think' as const, text: t('chat.statusThinking'), warn: !!latestWarn }
       }
       break
     }
-    return { kind: 'run' as const, text: '运行中…', warn: !!latestWarn }
+    return { kind: 'run' as const, text: t('chat.statusRunning'), warn: !!latestWarn }
   }
 
   if (latestWarn) {
@@ -233,14 +235,14 @@ const statusBar = computed(() => {
   const hasTurn = messages.value.some((m) => m.role === 'assistant' || m.role === 'tool')
   return {
     kind: 'idle' as const,
-    text: hasTurn ? '已完成' : '就绪',
+    text: hasTurn ? t('chat.statusDone') : t('chat.statusReady'),
     warn: false,
   }
 })
 
 const headerTitle = computed(() => {
-  if (showHistory.value) return 'History'
-  if (!currentKey.value) return 'New Chat'
+  if (showHistory.value) return t('chat.history')
+  if (!currentKey.value) return t('chat.newChat')
   if (isTabMode.value) return localTitle.value || currentKey.value
   return chatStore.currentTitle || currentKey.value
 })
@@ -473,7 +475,7 @@ function mapStoredMessages(raw: Message[], opts?: { runActive?: boolean }): Msg[
   if (!runActive) {
     for (const m of out) {
       if (m.role === 'tool' && !m.content && m.endedAt == null) {
-        m.content = 'error: 工具结果未保存'
+        m.content = t('chat.toolResultMissing')
         m.isError = true
         m.endedAt = m.startedAt
       }
@@ -700,7 +702,7 @@ async function startWatch(key: string) {
 function newSession() {
   const key = 'sess-' + Math.random().toString(36).slice(2, 10)
   if (isTabMode.value) {
-    layout.openChatTab(key, 'New Chat')
+    layout.openChatTab(key, '')
     showHistory.value = false
     return
   }
@@ -838,7 +840,7 @@ function gapClass(m: Msg, i: number): string {
             v-if="showHistory"
             type="button"
             class="shrink-0 w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
-            title="Back"
+            :title="t('chat.back')"
             @click="closeHistory"
           >
             <LocalSvgIcon name="back" :size="16" />
@@ -850,7 +852,7 @@ function gapClass(m: Msg, i: number): string {
             v-if="!showHistory && currentKey"
             type="button"
             class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-500"
-            title="Refresh"
+            :title="t('chat.refresh')"
             @click="refreshSession"
           >
             <LocalSvgIcon name="refresh" :size="14" />
@@ -859,7 +861,7 @@ function gapClass(m: Msg, i: number): string {
             v-if="!showHistory && !props.expanded"
             type="button"
             class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
-            title="Maximize chat"
+            :title="t('chat.maximize')"
             @click="maximizeChat"
           >
             <LocalSvgIcon name="maximize" :size="16" />
@@ -868,7 +870,7 @@ function gapClass(m: Msg, i: number): string {
             v-if="!showHistory && props.expanded"
             type="button"
             class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
-            title="Restore sidebar"
+            :title="t('chat.restoreSidebar')"
             @click="restoreChatSidebar"
           >
             <LocalSvgIcon name="minimize" :size="16" />
@@ -877,7 +879,7 @@ function gapClass(m: Msg, i: number): string {
             v-if="!showHistory"
             type="button"
             class="w-7 h-7 flex items-center justify-center rounded hover:bg-neutral-100 text-neutral-600"
-            title="History"
+            :title="t('chat.history')"
             @click="openHistory"
           >
             <LocalSvgIcon name="history" :size="16" />
@@ -887,7 +889,7 @@ function gapClass(m: Msg, i: number): string {
             type="button"
             class="h-7 px-2.5 text-xs rounded bg-neutral-800 text-white hover:bg-neutral-700"
             @click="newSession"
-          >New Chat</button>
+          >{{ t('chat.newChat') }}</button>
         </div>
       </div>
     </div>
@@ -895,7 +897,7 @@ function gapClass(m: Msg, i: number): string {
     <!-- History list -->
     <div v-if="showHistory" class="flex-1 overflow-y-auto">
       <div class="w-full" :class="props.expanded ? 'max-w-[960px] mx-auto' : ''">
-        <div v-if="!sessions.length" class="p-6 text-base text-neutral-400 text-center">No sessions yet</div>
+        <div v-if="!sessions.length" class="p-6 text-base text-neutral-400 text-center">{{ t('chat.noSessions') }}</div>
         <div v-else class="py-1">
           <div
             v-for="s in sessions"
@@ -911,7 +913,7 @@ function gapClass(m: Msg, i: number): string {
             <button
               type="button"
               class="shrink-0 w-6 h-6 inline-flex items-center justify-center rounded text-neutral-400 hover:text-red-600 hover:bg-red-50"
-              title="删除会话"
+              :title="t('chat.deleteSession')"
               @click="askDeleteSession(s)"
             >
               <LocalSvgIcon name="trash" :size="13" />
@@ -924,7 +926,7 @@ function gapClass(m: Msg, i: number): string {
     <!-- Messages -->
     <div v-else ref="scrollEl" class="flex-1 overflow-y-auto" @scroll.passive="onMessagesScroll">
       <div class="w-full p-4" :class="props.expanded ? 'max-w-[960px] mx-auto' : ''">
-        <div v-if="!auth.isAuthed" class="text-neutral-500">Authenticate to start chatting.</div>
+        <div v-if="!auth.isAuthed" class="text-neutral-500">{{ t('chat.authRequired') }}</div>
         <template v-else>
           <div v-for="(m, i) in messages" :key="i" :class="gapClass(m, i)">
             <div v-if="m.role === 'user'" class="flex justify-end">
@@ -985,7 +987,7 @@ function gapClass(m: Msg, i: number): string {
             v-model="clarifyAnswer"
             type="text"
             class="flex-1 text-sm border border-neutral-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-neutral-400"
-            placeholder="Your answer…"
+            :placeholder="t('chat.clarifyPlaceholder')"
             @keydown.enter.prevent="answerClarify()"
           />
           <button
@@ -993,9 +995,9 @@ function gapClass(m: Msg, i: number): string {
             class="px-3 py-1.5 text-sm rounded bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-40"
             :disabled="!clarifyAnswer.trim()"
             @click="answerClarify()"
-          >Send</button>
+          >{{ t('common.send') }}</button>
         </div>
-        <button type="button" class="text-xs text-neutral-500 hover:underline" @click="dismissClarify">Cancel</button>
+        <button type="button" class="text-xs text-neutral-500 hover:underline" @click="dismissClarify">{{ t('common.cancel') }}</button>
       </div>
     </div>
 
@@ -1024,9 +1026,9 @@ function gapClass(m: Msg, i: number): string {
           type="button"
           class="shrink-0 text-neutral-700 hover:underline"
           :class="statusBar.warn ? 'text-amber-800' : ''"
-          title="Runtime harness"
+          :title="t('chat.harness')"
           @click="showHarness = true"
-        >明细</button>
+        >{{ t('chat.details') }}</button>
       </div>
     </div>
 
@@ -1060,7 +1062,7 @@ function gapClass(m: Msg, i: number): string {
             <button
               type="button"
               class="shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 text-neutral-500"
-              title="Remove"
+              :title="t('chat.remove')"
               @click="removePending(f.atPath)"
             >×</button>
           </span>
@@ -1079,13 +1081,13 @@ function gapClass(m: Msg, i: number): string {
           @keydown.enter.exact.prevent="send"
           rows="3"
           class="w-full border-0 bg-transparent px-0 py-0 pr-10 pb-9 text-[15px] leading-relaxed resize-none focus:outline-none"
-          :placeholder="streaming ? 'Message (queued while running)…' : 'Message…'"
+          :placeholder="streaming ? t('chat.messageQueued') : t('chat.messagePlaceholder')"
         ></textarea>
         <button
           v-if="streaming"
           type="button"
           class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700"
-          title="Abort"
+          :title="t('chat.abort')"
           @click="abortRun"
         >
           <LocalSvgIcon name="stop" :size="22" />
@@ -1095,7 +1097,7 @@ function gapClass(m: Msg, i: number): string {
           type="button"
           class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center rounded-md bg-neutral-800 text-white hover:bg-neutral-700 disabled:opacity-35 disabled:hover:bg-neutral-800"
           :disabled="!input.trim() && !pendingAttachments.length"
-          title="Send"
+          :title="t('common.send')"
           @click="send"
         >
           <LocalSvgIcon name="send" :size="22" />
@@ -1120,9 +1122,9 @@ function gapClass(m: Msg, i: number): string {
         class="bg-white rounded-lg shadow-xl w-full max-w-sm p-4 space-y-3"
         @click.stop
       >
-        <div class="text-sm font-medium text-neutral-900">删除会话</div>
+        <div class="text-sm font-medium text-neutral-900">{{ t('chat.deleteSession') }}</div>
         <p class="text-sm text-neutral-600 leading-relaxed">
-          确定删除会话「{{ deleteTargetLabel }}」？删除后不可恢复。
+          {{ t('chat.deleteConfirm', { name: deleteTargetLabel }) }}
         </p>
         <div class="flex justify-end gap-2 pt-1">
           <button
@@ -1130,13 +1132,13 @@ function gapClass(m: Msg, i: number): string {
             class="h-8 px-3 text-sm rounded border border-neutral-200 bg-white hover:bg-neutral-50 disabled:opacity-50"
             :disabled="deleting"
             @click="cancelDeleteSession"
-          >取消</button>
+          >{{ t('common.cancel') }}</button>
           <button
             type="button"
             class="h-8 px-3 text-sm rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
             :disabled="deleting"
             @click="confirmDeleteSession"
-          >{{ deleting ? '删除中…' : '删除' }}</button>
+          >{{ deleting ? t('common.deleting') : t('common.delete') }}</button>
         </div>
       </div>
     </div>

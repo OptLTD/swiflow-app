@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { imageMimeType } from '../../lib/filePreview'
 
 const props = defineProps<{ path: string; data: ArrayBuffer }>()
+const { t } = useI18n()
 
 const url = ref('')
 const error = ref('')
@@ -30,7 +32,7 @@ watch(() => [props.path, props.data], mount, { immediate: true })
 onBeforeUnmount(revoke)
 
 function onImgError() {
-  error.value = '无法显示该图片'
+  error.value = t('filePreview.imageFailed')
 }
 </script>
 

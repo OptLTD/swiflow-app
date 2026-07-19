@@ -10,7 +10,7 @@ import (
 func (s *Server) listCronJobs(w http.ResponseWriter, r *http.Request) {
 	list, err := s.st.ListCronJobs(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		writeErr(w, http.StatusInternalServerError, ErrListFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"jobs": list})
@@ -28,11 +28,11 @@ func (s *Server) createCronJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Name == "" || in.Agent == "" || in.Message == "" || in.Schedule == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name, agent, message, schedule required"})
+		writeErr(w, http.StatusBadRequest, ErrCronFieldsRequired)
 		return
 	}
 	if _, err := s.st.GetAgentByKey(r.Context(), in.Agent); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown agent"})
+		writeErr(w, http.StatusBadRequest, ErrUnknownAgent)
 		return
 	}
 	enabled := true
@@ -44,11 +44,11 @@ func (s *Server) createCronJob(w http.ResponseWriter, r *http.Request) {
 		Message: in.Message, Schedule: in.Schedule, Enabled: enabled,
 	}
 	if err := s.st.CreateCronJob(r.Context(), job); err != nil {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "create failed"})
+		writeErr(w, http.StatusConflict, ErrCreateFailed)
 		return
 	}
 	if err := s.cron.Reload(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "cron reload failed"})
+		writeErr(w, http.StatusInternalServerError, ErrCronReloadFailed)
 		return
 	}
 	writeJSON(w, http.StatusCreated, job)
@@ -69,16 +69,16 @@ func (s *Server) updateCronJob(w http.ResponseWriter, r *http.Request) {
 	}
 	if ak, ok := fields["agent"].(string); ok {
 		if _, err := s.st.GetAgentByKey(r.Context(), ak); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown agent"})
+			writeErr(w, http.StatusBadRequest, ErrUnknownAgent)
 			return
 		}
 	}
 	if err := s.st.UpdateCronJob(r.Context(), id, fields); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		writeErr(w, http.StatusInternalServerError, ErrUpdateFailed)
 		return
 	}
 	if err := s.cron.Reload(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "cron reload failed"})
+		writeErr(w, http.StatusInternalServerError, ErrCronReloadFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -87,11 +87,11 @@ func (s *Server) updateCronJob(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteCronJob(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if err := s.st.DeleteCronJob(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		writeErr(w, http.StatusInternalServerError, ErrDeleteFailed)
 		return
 	}
 	if err := s.cron.Reload(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "cron reload failed"})
+		writeErr(w, http.StatusInternalServerError, ErrCronReloadFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -99,7 +99,7 @@ func (s *Server) deleteCronJob(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) reloadCron(w http.ResponseWriter, r *http.Request) {
 	if err := s.cron.Reload(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "reload failed"})
+		writeErr(w, http.StatusInternalServerError, ErrReloadFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded"})

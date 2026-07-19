@@ -129,7 +129,7 @@ func (s *Server) toolsAct(w http.ResponseWriter, r *http.Request) {
 	switch act {
 	case "set":
 		if name == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name required"})
+			writeErr(w, http.StatusBadRequest, ErrNameRequired)
 			return
 		}
 		s.setToolEnabled(w, withJSONBody(r, bodyWithoutAct(raw, "name")))
@@ -164,7 +164,7 @@ func (s *Server) skillsAct(w http.ResponseWriter, r *http.Request) {
 	switch act {
 	case "set":
 		if slug == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slug required"})
+			writeErr(w, http.StatusBadRequest, ErrSlugRequired)
 			return
 		}
 		s.setSkillEnabled(w, withJSONBody(r, bodyWithoutAct(raw, "slug", "id")))
@@ -269,7 +269,7 @@ func (s *Server) workspaceAct(w http.ResponseWriter, r *http.Request) {
 	case "download":
 		s.downloadFile(w, withJSONBody(r, bodyWithoutAct(raw)))
 	case "upload":
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "upload requires multipart form"})
+		writeErr(w, http.StatusBadRequest, ErrUploadRequiresMultipart)
 	default:
 		unknownAct(w, act)
 	}
@@ -332,7 +332,7 @@ func (s *Server) lightAppsAct(w http.ResponseWriter, r *http.Request) {
 		s.setLightAppEnv(w, withJSONBody(r, bodyWithoutAct(raw)))
 	case "env-del":
 		if key == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "key required"})
+			writeErr(w, http.StatusBadRequest, ErrKeyRequired)
 			return
 		}
 		s.deleteLightAppEnv(w, r)

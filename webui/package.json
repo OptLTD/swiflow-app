@@ -8,6 +8,9 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "vue-demi"]
+  },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-css": "^6.3.1",
@@ -30,6 +33,7 @@
     "pdfjs-dist": "^6.1.200",
     "pinia": "^2.2.0",
     "vue": "^3.5.0",
+    "vue-i18n": "^11.4.6",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

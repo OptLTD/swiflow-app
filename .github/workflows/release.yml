@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS .app
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: webui/pnpm-lock.yaml
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Version from tag
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" build/darwin/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" build/darwin/Info.plist
+
+      - name: Build frontend + macOS app
+        run: make macos
+
+      - name: Package zip
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          ditto -c -k --keepParent bin/Swiflow.app "bin/Swiflow-${VERSION}-macos-arm64.zip"
+          ls -lh bin/*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: bin/Swiflow-*-macos-arm64.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: webui/pnpm-lock.yaml
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install NSIS + make + wails3
+        shell: bash
+        run: |
+          choco install nsis make -y --no-progress
+          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          # Chocolatey NSIS shim or classic install path
+          if [[ -d "/c/Program Files (x86)/NSIS" ]]; then
+            echo "/c/Program Files (x86)/NSIS" >> "$GITHUB_PATH"
+          fi
+          if [[ -d "/c/ProgramData/chocolatey/bin" ]]; then
+            echo "/c/ProgramData/chocolatey/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Version from tag
+        id: ver
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if command -v jq >/dev/null && [[ -f build/windows/info.json ]]; then
+            tmp=$(mktemp)
+            jq --arg v "$VERSION" \
+              '.fixed.file_version = $v | .info["0000"].ProductVersion = $v' \
+              build/windows/info.json > "$tmp" && mv "$tmp" build/windows/info.json
+          fi
+
+      - name: Build Windows installer
+        shell: bash
+        run: make windows
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          src="bin/Swiflow-installer.exe"
+          dst="bin/Swiflow-${VERSION}-windows-installer.exe"
+          test -f "$src"
+          mv "$src" "$dst"
+          ls -lh bin/*.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: bin/Swiflow-*-windows-installer.exe
+          if-no-files-found: error
+
+  publish:
+    name: GitHub Release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find dist -type f -ls
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Swiflow ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: |
+            dist/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

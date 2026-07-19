@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import jspreadsheet from 'jspreadsheet-ce'
 import LocalSvgIcon from '../LocalSvgIcon.vue'
 import type { ExcelSheet } from '../../lib/filePreview'
@@ -10,6 +11,7 @@ const LARGE_CELL_THRESHOLD = 50_000
 
 const props = defineProps<{ sheets: ExcelSheet[]; path: string }>()
 const emit = defineEmits<{ refresh: [] }>()
+const { t } = useI18n()
 const host = ref<HTMLDivElement | null>(null)
 
 function sheetCellCount(data: string[][]): number {
@@ -102,7 +104,7 @@ onBeforeUnmount(destroyGrid)
         type="button"
         class="h-9 w-9 flex items-center justify-center hover:bg-neutral-100"
         :class="editableMode ? 'text-blue-600' : 'text-neutral-500 hover:text-neutral-800'"
-        :title="editableMode ? '切换为只读' : '切换为可编辑'"
+        :title="editableMode ? t('filePreview.excelReadonly') : t('filePreview.excelEditable')"
         @click="toggleEditable"
       >
         <LocalSvgIcon :name="editableMode ? 'edit' : 'lock'" :size="15" />
@@ -110,7 +112,7 @@ onBeforeUnmount(destroyGrid)
       <button
         type="button"
         class="h-9 w-9 flex items-center justify-center text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
-        title="刷新"
+        :title="t('common.refresh')"
         @click="emit('refresh')"
       >
         <LocalSvgIcon name="refresh" :size="15" />

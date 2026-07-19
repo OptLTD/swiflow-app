@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { t } from '../i18n'
 import { api } from '../api'
 import { onDesktopWorkspaceUploaded, patchDesktopNativeDrag } from '../lib/desktopUpload'
 import { isDesktop } from '../lib/desktop'
@@ -77,10 +78,14 @@ export const useUploadStore = defineStore('upload', {
           toast.error(data.error)
           return
         }
-        const loc = data.path === '.' ? 'workspace 根目录' : data.path
+        const loc = data.path === '.' ? t('upload.root') : data.path
         const names = (data.uploaded || []).map((f) => f.name).join('、')
         const preview = names.length > 48 ? `${names.slice(0, 48)}…` : names
-        toast.success(`已上传 ${data.uploaded.length} 个文件到 ${loc}${preview ? `：${preview}` : ''}`)
+        toast.success(t('upload.success', {
+          count: data.uploaded.length,
+          loc,
+          preview: preview ? `：${preview}` : '',
+        }))
         this.refreshSeq += 1
         maybeAttachToChat(data.uploaded || [])
       })
@@ -123,14 +128,18 @@ export const useUploadStore = defineStore('upload', {
       const toast = useToastStore()
       try {
         const r = await api.uploadWorkspace(path, files)
-        const loc = path === '.' ? 'workspace 根目录' : path
+        const loc = path === '.' ? t('upload.root') : path
         const names = r.uploaded.map((f) => f.name).join('、')
         const preview = names.length > 48 ? `${names.slice(0, 48)}…` : names
-        toast.success(`已上传 ${r.uploaded.length} 个文件到 ${loc}${preview ? `：${preview}` : ''}`)
+        toast.success(t('upload.success', {
+          count: r.uploaded.length,
+          loc,
+          preview: preview ? `：${preview}` : '',
+        }))
         this.refreshSeq += 1
         maybeAttachToChat(r.uploaded)
       } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : '上传失败')
+        toast.error(err instanceof Error ? err.message : t('upload.failed'))
       } finally {
         this.uploading = false
       }

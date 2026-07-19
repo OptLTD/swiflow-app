@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import { useLayoutStore } from '../stores/layout'
 import { useToastStore } from '../stores/toast'
 import LocalSvgIcon from '../components/LocalSvgIcon.vue'
 import type { RuntimeBinary, RuntimeInfo } from '../types'
 
+const { t } = useI18n()
 const layout = useLayoutStore()
 const toast = useToastStore()
 
@@ -46,7 +48,7 @@ async function loadVersion() {
     version.value = r.version || '0.1.0'
   } catch (e: unknown) {
     version.value = '0.1.0'
-    loadError.value = e instanceof Error ? e.message : 'failed to load version'
+    loadError.value = e instanceof Error ? e.message : t('common.failedToLoad')
   }
 }
 
@@ -70,7 +72,7 @@ async function loadRuntime() {
     if (pythonReady.value) installing.value['uvx-py'] = false
     if (nodeReady.value) installing.value['js-npx'] = false
   } catch (e: unknown) {
-    runtimeError.value = e instanceof Error ? e.message : '检测失败'
+    runtimeError.value = e instanceof Error ? e.message : t('about.detectFailed')
     runtime.value = null
   } finally {
     runtimeLoading.value = false
@@ -98,20 +100,20 @@ async function onInstall(kind: 'uvx-py' | 'js-npx') {
   try {
     await api.installRuntime(kind, installMode.value)
     toast.success(kind === 'uvx-py'
-      ? '已开始安装 Python / UV，请稍候…'
-      : '已开始安装 Node.js / npx，请稍候…')
+      ? t('about.installStartedPy')
+      : t('about.installStartedNode'))
     startPolling()
     await loadRuntime()
   } catch (e: unknown) {
     installing.value[kind] = false
-    toast.error(e instanceof Error ? e.message : '启动安装失败')
+    toast.error(e instanceof Error ? e.message : t('about.installStartFailed'))
   }
 }
 
 function statusLabel(b?: RuntimeBinary | null) {
   if (!b) return '—'
-  if (!b.found) return '未检测到'
-  return b.version || '已安装'
+  if (!b.found) return t('common.notDetected')
+  return b.version || t('common.installed')
 }
 
 async function openLogs() {
@@ -119,7 +121,7 @@ async function openLogs() {
   try {
     await api.openLogFile()
   } catch (e: unknown) {
-    toast.error(e instanceof Error ? e.message : '打开日志失败')
+    toast.error(e instanceof Error ? e.message : t('about.openLogsFailed'))
   } finally {
     opening.value = false
   }
@@ -130,7 +132,7 @@ async function openStorageDir() {
   try {
     await api.openDataDir()
   } catch (e: unknown) {
-    toast.error(e instanceof Error ? e.message : '打开存储目录失败')
+    toast.error(e instanceof Error ? e.message : t('about.openStorageFailed'))
   } finally {
     opening.value = false
   }
@@ -145,8 +147,8 @@ function openWorkspace() {
   <div class="p-6 max-w-[960px] mx-auto space-y-4">
     <div class="flex items-start justify-between gap-4">
       <div>
-        <h1 class="text-xl font-bold mb-1">About us</h1>
-        <p class="text-sm text-neutral-500">产品介绍、版本与工作区入口。</p>
+        <h1 class="text-xl font-bold mb-1">{{ t('about.title') }}</h1>
+        <p class="text-sm text-neutral-500">{{ t('about.subtitle') }}</p>
       </div>
     </div>
 
@@ -157,21 +159,19 @@ function openWorkspace() {
       <div class="flex items-start justify-between gap-3">
         <div>
           <h2 class="text-sm font-semibold text-neutral-900">Swiflow</h2>
-          <p class="text-xs text-neutral-500 mt-0.5">自托管 AI Agent 运行时</p>
+          <p class="text-xs text-neutral-500 mt-0.5">{{ t('about.productTagline') }}</p>
         </div>
         <span
           class="shrink-0 inline-flex items-center h-7 px-2.5 rounded bg-neutral-100 text-neutral-700 text-xs font-medium tabular-nums"
         >v{{ version }}</span>
       </div>
       <p class="text-sm text-neutral-700 leading-relaxed">
-        Swiflow 是一款面向开发者与小团队的自托管 AI Agent 运行时。单进程即可托管可配置的
-        LLM Agent，通过 HTTP + SSE 与客户端交互，并在工作区内安全地使用文件系统、网页访问、
-        Shell 与 Skills 等工具，对话历史持久保存。
+        {{ t('about.productBody') }}
       </p>
       <ul class="text-sm text-neutral-600 space-y-1 list-disc pl-5">
-        <li>本地优先：数据与密钥留在你自己的环境</li>
-        <li>工具与 MCP：扩展 Agent 能力，对接外部服务</li>
-        <li>桌面与 Web：同一套运行时，便于日常使用与调试</li>
+        <li>{{ t('about.bulletLocal') }}</li>
+        <li>{{ t('about.bulletTools') }}</li>
+        <li>{{ t('about.bulletDesktop') }}</li>
       </ul>
     </section>
 
@@ -179,9 +179,9 @@ function openWorkspace() {
     <section class="border border-neutral-200 rounded-lg p-4 bg-white space-y-3">
       <div class="flex items-start justify-between gap-3">
         <div>
-          <h2 class="text-sm font-semibold text-neutral-900">Runtime environment</h2>
+          <h2 class="text-sm font-semibold text-neutral-900">{{ t('about.runtimeTitle') }}</h2>
           <p class="text-xs text-neutral-500 mt-0.5">
-            检测并安装 Python（含 UV）与 Node.js（含 npx）。MCP / 脚本工具常用。
+            {{ t('about.runtimeHint') }}
           </p>
         </div>
         <button
@@ -190,12 +190,12 @@ function openWorkspace() {
           :disabled="runtimeLoading"
           @click="loadRuntime"
         >
-          重新检测
+          {{ t('common.detectAgain') }}
         </button>
       </div>
 
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-neutral-500">镜像：</span>
+        <span class="text-neutral-500">{{ t('about.mirror') }}</span>
         <button
           type="button"
           class="px-2 py-0.5 rounded border"
@@ -203,7 +203,7 @@ function openWorkspace() {
             ? 'bg-neutral-800 text-white border-neutral-800'
             : 'border-neutral-200 text-neutral-600'"
           @click="installMode = 'mainland'"
-        >国内</button>
+        >{{ t('about.mainland') }}</button>
         <button
           type="button"
           class="px-2 py-0.5 rounded border"
@@ -211,10 +211,10 @@ function openWorkspace() {
             ? 'bg-neutral-800 text-white border-neutral-800'
             : 'border-neutral-200 text-neutral-600'"
           @click="installMode = 'standard'"
-        >官方</button>
+        >{{ t('about.official') }}</button>
       </div>
 
-      <div v-if="runtimeLoading && !runtime" class="text-sm text-neutral-500">检测中…</div>
+      <div v-if="runtimeLoading && !runtime" class="text-sm text-neutral-500">{{ t('common.detecting') }}</div>
       <div v-else-if="runtimeError" class="text-sm text-red-600">{{ runtimeError }}</div>
       <div v-else class="space-y-2">
         <div class="border border-neutral-200 rounded p-3 space-y-2">
@@ -239,11 +239,11 @@ function openWorkspace() {
               class="shrink-0 px-2.5 py-1 border rounded text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
               :disabled="!!installing['uvx-py']"
               @click="onInstall('uvx-py')"
-            >{{ installing['uvx-py'] ? '安装中…' : '安装' }}</button>
-            <span v-else class="shrink-0 text-xs text-green-700 px-1">就绪</span>
+            >{{ installing['uvx-py'] ? t('common.installing') : t('common.install') }}</button>
+            <span v-else class="shrink-0 text-xs text-green-700 px-1">{{ t('common.ready') }}</span>
           </div>
           <p v-if="installing['uvx-py']" class="text-xs text-neutral-500">
-            正在后台安装，可能需要几分钟；完成后状态会自动更新。
+            {{ t('about.installBackground') }}
           </p>
         </div>
 
@@ -269,11 +269,11 @@ function openWorkspace() {
               class="shrink-0 px-2.5 py-1 border rounded text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
               :disabled="!!installing['js-npx']"
               @click="onInstall('js-npx')"
-            >{{ installing['js-npx'] ? '安装中…' : '安装' }}</button>
-            <span v-else class="shrink-0 text-xs text-green-700 px-1">就绪</span>
+            >{{ installing['js-npx'] ? t('common.installing') : t('common.install') }}</button>
+            <span v-else class="shrink-0 text-xs text-green-700 px-1">{{ t('common.ready') }}</span>
           </div>
           <p v-if="installing['js-npx']" class="text-xs text-neutral-500">
-            正在后台安装，可能需要几分钟；完成后状态会自动更新。
+            {{ t('about.installBackground') }}
           </p>
         </div>
       </div>
@@ -282,9 +282,9 @@ function openWorkspace() {
     <!-- Logs / storage -->
     <section class="border border-neutral-200 rounded-lg p-4 bg-white space-y-3">
       <div>
-        <h2 class="text-sm font-semibold text-neutral-900">Logs & storage</h2>
+        <h2 class="text-sm font-semibold text-neutral-900">{{ t('about.logsTitle') }}</h2>
         <p class="text-xs text-neutral-500 mt-0.5">
-          数据库与应用日志保存在存储目录；日志文件为
+          {{ t('about.logsHint') }}
           <code class="bg-neutral-100 px-1 py-0.5 rounded">swiflow.log</code>。
         </p>
         <p
@@ -300,7 +300,7 @@ function openWorkspace() {
           @click="openStorageDir"
         >
           <LocalSvgIcon name="folder" :size="14" />
-          打开存储目录
+          {{ t('about.openStorage') }}
         </button>
         <button
           type="button"
@@ -309,7 +309,7 @@ function openWorkspace() {
           @click="openLogs"
         >
           <LocalSvgIcon name="file" :size="14" />
-          查看日志
+          {{ t('about.openLogs') }}
         </button>
         <button
           type="button"
@@ -317,7 +317,7 @@ function openWorkspace() {
           @click="openWorkspace"
         >
           <LocalSvgIcon name="folder" :size="14" />
-          打开工作区
+          {{ t('about.openWorkspace') }}
         </button>
       </div>
     </section>

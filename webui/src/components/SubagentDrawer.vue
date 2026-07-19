@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import { renderMarkdown } from '../lib/markdown'
 import ToolCallBlock from './ToolCallBlock.vue'
@@ -8,6 +9,7 @@ import type { Message } from '../types'
 
 const props = defineProps<{ sessionKey: string | null }>()
 const emit = defineEmits<{ close: [] }>()
+const { t } = useI18n()
 
 interface Row {
   role: string
@@ -72,7 +74,7 @@ function mapMessages(raw: Message[]): Row[] {
   }
   for (const m of out) {
     if (m.role === 'tool' && !m.content && m.endedAt == null) {
-      m.content = 'error: 工具结果未保存'
+      m.content = t('subagent.toolResultMissing')
       m.isError = true
       m.endedAt = m.startedAt
     }
@@ -109,7 +111,7 @@ watch(
     <div class="relative z-10 w-full max-w-[520px] h-full bg-white shadow-xl flex flex-col">
       <div class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-neutral-200">
         <div class="min-w-0">
-          <div class="text-sm font-medium text-neutral-800">子任务过程（只读）</div>
+          <div class="text-sm font-medium text-neutral-800">{{ t('subagent.title') }}</div>
           <div class="text-xs text-neutral-400 font-mono truncate">{{ sessionKey }}</div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -117,14 +119,14 @@ watch(
             class="text-xs text-neutral-500 hover:text-neutral-800 hover:underline disabled:opacity-40"
             :disabled="loading || !sessionKey"
             @click="sessionKey && load(sessionKey)"
-          >刷新</button>
+          >{{ t('subagent.refresh') }}</button>
           <button class="text-neutral-400 hover:text-neutral-700 text-lg leading-none px-1" @click="emit('close')">×</button>
         </div>
       </div>
       <div class="flex-1 overflow-y-auto p-3 space-y-3">
-        <div v-if="loading" class="text-sm text-neutral-400">加载中…</div>
+        <div v-if="loading" class="text-sm text-neutral-400">{{ t('subagent.loading') }}</div>
         <div v-else-if="error" class="text-sm text-red-600">{{ error }}</div>
-        <div v-else-if="!rows.length" class="text-sm text-neutral-400">暂无内容</div>
+        <div v-else-if="!rows.length" class="text-sm text-neutral-400">{{ t('subagent.empty') }}</div>
         <template v-for="(m, i) in rows" :key="i">
           <div v-if="m.role === 'user'" class="flex justify-end">
             <div

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAgentsStore } from '../stores/agents'
 import { useProvidersStore } from '../stores/providers'
 import { api } from '../api'
@@ -10,6 +11,7 @@ import { PROMPT_STYLE_PRESETS, guessPromptStyleId } from '../constants/promptSty
 
 const agentsStore = useAgentsStore()
 const providersStore = useProvidersStore()
+const { t } = useI18n()
 const error = ref('')
 const saving = ref(false)
 const providerOpen = ref(false)
@@ -56,6 +58,16 @@ function syncForm() {
     sys_prompt: a.sys_prompt || '',
   }
   activePromptStyle.value = guessPromptStyleId(form.value.sys_prompt)
+}
+
+function promptStyleLabel(id: string) {
+  const keys: Record<string, string> = {
+    concise: 'promptStyles.concise',
+    engineer: 'promptStyles.engineer',
+    researcher: 'promptStyles.research',
+    teacher: 'promptStyles.mentor',
+  }
+  return keys[id] ? t(keys[id]) : id
 }
 
 function applyPromptStyle(id: string) {
@@ -116,50 +128,50 @@ async function save() {
       <div class="shrink-0 flex items-center gap-2">
         <button
           type="button"
-          title="配置推理 / 对话模型"
+          :title="t('agent.textModelTitle')"
           class="h-8 px-3 flex items-center gap-1.5 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-sm text-neutral-700"
           @click="openProvider('text')"
         >
           <LocalSvgIcon name="provider" :size="15" />
-          推理模型
+          {{ t('agent.textModel') }}
         </button>
         <button
           type="button"
-          title="配置视觉 / 多模态模型"
+          :title="t('agent.imgModelTitle')"
           class="h-8 px-3 flex items-center gap-1.5 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-sm text-neutral-700"
           @click="openProvider('vision')"
         >
           <LocalSvgIcon name="provider" :size="15" />
-          视觉模型
+          {{ t('agent.imgModel') }}
         </button>
         <button
           @click="save" type="button"
           class="h-8 px-3 bg-neutral-800 text-white rounded text-sm disabled:opacity-50"
           :disabled="saving || !defaultAgent"
-        >{{ saving ? '保存中…' : '保存' }}</button>
+        >{{ saving ? t('common.saving') : t('common.save') }}</button>
       </div>
     </div>
 
     <div v-if="error" class="text-red-600 mb-2 text-sm">{{ error }}</div>
 
     <div v-if="!defaultProvider" class="text-sm text-neutral-500 border border-neutral-200 rounded p-4 bg-neutral-50 mb-4">
-      尚未配置推理模型，请点击右上角 <strong>推理模型</strong> 添加 API 连接。
+      {{ t('agent.noTextModel') }}
     </div>
 
     <div v-else-if="defaultAgent" class="border border-neutral-200 rounded p-4 bg-white space-y-3">
       <div class="text-xs text-neutral-400 font-mono space-y-0.5 pb-1 border-b border-neutral-100">
         <div class="truncate">
-          <span class="text-neutral-500">推理</span>
+          <span class="text-neutral-500">{{ t('agent.text') }}</span>
           · {{ defaultProvider.api_base }}
           <span v-if="defaultProvider.model"> · {{ defaultProvider.model }}</span>
         </div>
         <div class="truncate">
-          <span class="text-neutral-500">视觉</span>
+          <span class="text-neutral-500">{{ t('agent.vision') }}</span>
           <template v-if="visionProvider">
             · {{ visionProvider.api_base }}
             <span v-if="visionProvider.model"> · {{ visionProvider.model }}</span>
           </template>
-          <template v-else> · 未配置</template>
+          <template v-else> · {{ t('agent.notConfigured') }}</template>
         </div>
       </div>
 
@@ -187,7 +199,7 @@ async function save() {
               ? 'bg-neutral-800 text-white border-neutral-800'
               : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'"
             @click="applyPromptStyle(preset.id)"
-          >{{ preset.label }}</button>
+          >{{ promptStyleLabel(preset.id) }}</button>
         </div>
       </div>
     </div>

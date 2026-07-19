@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useUploadStore } from '../stores/upload'
 import LocalSvgIcon from './LocalSvgIcon.vue'
 
 const upload = useUploadStore()
+const { t } = useI18n()
 </script>
 
 <template>
@@ -26,10 +28,10 @@ const upload = useUploadStore()
       <div class="text-center px-6">
         <LocalSvgIcon name="folder-open" :size="36" class="text-blue-500 mx-auto mb-2" />
         <div class="text-sm font-medium text-blue-700">
-          {{ upload.uploading ? '正在上传…' : '释放以上传到 workspace' }}
+          {{ upload.uploading ? t('dropzone.uploading') : t('dropzone.release') }}
         </div>
         <div class="text-xs text-blue-500 mt-1 font-mono">
-          {{ upload.targetPath === '.' ? '根目录' : upload.targetPath }}
+          {{ upload.targetPath === '.' ? t('common.rootDir') : upload.targetPath }}
         </div>
       </div>
     </div>

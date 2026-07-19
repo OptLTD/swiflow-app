@@ -10,7 +10,7 @@ import (
 func (s *Server) listMCPServers(w http.ResponseWriter, r *http.Request) {
 	list, err := s.st.ListMCPServers(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		writeErr(w, http.StatusInternalServerError, ErrListFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"servers": list})
@@ -32,22 +32,22 @@ func (s *Server) createMCPServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Name == "" || in.Type == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and type required"})
+		writeErr(w, http.StatusBadRequest, ErrNameAndTypeRequired)
 		return
 	}
 	switch in.Type {
 	case "stdio":
 		if in.Cmd == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cmd required for stdio"})
+			writeErr(w, http.StatusBadRequest, ErrCmdRequiredForStdio)
 			return
 		}
 	case "sse", "streamable":
 		if in.URL == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url required for " + in.Type})
+			writeErr(w, http.StatusBadRequest, ErrURLRequiredForType, in.Type)
 			return
 		}
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type must be stdio, sse, or streamable"})
+		writeErr(w, http.StatusBadRequest, ErrInvalidMCPType)
 		return
 	}
 	enabled := true
@@ -60,11 +60,11 @@ func (s *Server) createMCPServer(w http.ResponseWriter, r *http.Request) {
 		URL: in.URL, Env: in.Env, Enabled: enabled,
 	}
 	if err := s.st.CreateMCPServer(r.Context(), srv); err != nil {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "create failed"})
+		writeErr(w, http.StatusConflict, ErrCreateFailed)
 		return
 	}
 	if err := s.mcp.Sync(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mcp sync failed"})
+		writeErr(w, http.StatusInternalServerError, ErrMCPSyncFailed)
 		return
 	}
 	writeJSON(w, http.StatusCreated, srv)
@@ -74,7 +74,7 @@ func (s *Server) getMCPServer(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	srv, err := s.st.GetMCPServerByID(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	writeJSON(w, http.StatusOK, srv)
@@ -97,11 +97,11 @@ func (s *Server) updateMCPServer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := s.st.UpdateMCPServer(r.Context(), id, fields); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		writeErr(w, http.StatusInternalServerError, ErrUpdateFailed)
 		return
 	}
 	if err := s.mcp.Sync(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mcp sync failed"})
+		writeErr(w, http.StatusInternalServerError, ErrMCPSyncFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -111,16 +111,16 @@ func (s *Server) deleteMCPServer(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	srv, err := s.st.GetMCPServerByID(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	if err := s.st.DeleteMCPServer(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		writeErr(w, http.StatusInternalServerError, ErrDeleteFailed)
 		return
 	}
 	_ = srv
 	if err := s.mcp.Sync(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mcp sync failed"})
+		writeErr(w, http.StatusInternalServerError, ErrMCPSyncFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -128,7 +128,7 @@ func (s *Server) deleteMCPServer(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) reloadMCP(w http.ResponseWriter, r *http.Request) {
 	if err := s.mcp.Sync(r.Context()); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "sync failed"})
+		writeErr(w, http.StatusInternalServerError, ErrSyncFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded"})
@@ -137,12 +137,12 @@ func (s *Server) reloadMCP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getMCPServerCapabilities(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
 	if _, err := s.st.GetMCPServerByID(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeErr(w, http.StatusNotFound, ErrNotFound)
 		return
 	}
 	caps, err := s.mcp.ServerCapabilities(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, caps)

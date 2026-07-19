@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import { useAgentsStore } from '../stores/agents'
 import { useProvidersStore } from '../stores/providers'
@@ -11,6 +12,7 @@ import type { RuntimeBinary, RuntimeInfo } from '../types'
 
 const emit = defineEmits<{ done: [] }>()
 
+const { t } = useI18n()
 const providersStore = useProvidersStore()
 const agentsStore = useAgentsStore()
 const toast = useToastStore()
@@ -77,6 +79,20 @@ watch(step, (s) => {
   }
 })
 
+function providerPresetLabel(preset: { id: string; label: string }) {
+  return preset.id === 'other' ? t('provider.other') : preset.label
+}
+
+function promptStyleLabel(id: string) {
+  const keys: Record<string, string> = {
+    concise: 'promptStyles.concise',
+    engineer: 'promptStyles.engineer',
+    researcher: 'promptStyles.research',
+    teacher: 'promptStyles.mentor',
+  }
+  return keys[id] ? t(keys[id]) : id
+}
+
 function applyPreset(id: string) {
   activePreset.value = id
   const preset = PROVIDER_PRESETS.find((p) => p.id === id)
@@ -123,7 +139,7 @@ async function saveLLM() {
       await api.updateProvider(p.id, body)
     } else {
       if (!llmForm.value.api_key.trim()) {
-        error.value = 'API Key 必填'
+        error.value = t('setup.apiKeyRequired')
         return
       }
       await api.createProvider({
@@ -136,14 +152,14 @@ async function saveLLM() {
     }
     await providersStore.load()
     if (!defaultProvider.value) {
-      error.value = 'Provider 保存失败，请重试'
+      error.value = t('setup.providerSaveFailed')
       return
     }
     step.value = 1
   } catch (e: any) {
     error.value = e?.name === 'TimeoutError' || e?.name === 'AbortError'
-      ? '请求超时，请确认后端已启动'
-      : (e.message || '保存失败')
+      ? t('setup.timeout')
+      : (e.message || t('setup.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -151,7 +167,7 @@ async function saveLLM() {
 
 async function saveAgent() {
   if (!defaultProvider.value) {
-    error.value = '请先完成 LLM 配置'
+    error.value = t('setup.finishLlmFirst')
     return
   }
   saving.value = true
@@ -174,14 +190,14 @@ async function saveAgent() {
     }
     await agentsStore.load()
     if (!defaultAgent.value) {
-      error.value = 'Agent 保存失败，请重试'
+      error.value = t('setup.agentSaveFailed')
       return
     }
     step.value = 2
   } catch (e: any) {
     error.value = e?.name === 'TimeoutError' || e?.name === 'AbortError'
-      ? '请求超时，请确认后端已启动'
-      : (e.message || '保存失败')
+      ? t('setup.timeout')
+      : (e.message || t('setup.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -229,13 +245,13 @@ async function onInstall(kind: 'uvx-py' | 'js-npx') {
   try {
     await api.installRuntime(kind, installMode.value)
     toast.success(kind === 'uvx-py'
-      ? '已开始安装 Python / UV，请稍候…'
-      : '已开始安装 Node.js / npx，请稍候…')
+      ? t('setup.installStartedPy')
+      : t('setup.installStartedNode'))
     startPolling()
     await loadRuntime()
   } catch (e: any) {
     installing.value[kind] = false
-    const msg = e?.message || '启动安装失败'
+    const msg = e?.message || t('setup.installStartFailed')
     error.value = msg
     toast.error(msg)
   }
@@ -248,8 +264,8 @@ function finish() {
 
 function statusLabel(b?: RuntimeBinary | null) {
   if (!b) return '—'
-  if (!b.found) return '未检测到'
-  return b.version || '已安装'
+  if (!b.found) return t('common.notDetected')
+  return b.version || t('common.installed')
 }
 
 onMounted(() => {
@@ -271,8 +287,8 @@ onUnmounted(() => {
         aria-labelledby="setup-wizard-title"
       >
         <div class="px-4 py-3 border-b border-neutral-100">
-          <h2 id="setup-wizard-title" class="font-semibold text-neutral-900">初始化设置</h2>
-          <p class="text-xs text-neutral-500 mt-0.5">配置 LLM、Agent 与运行环境后即可开始对话</p>
+          <h2 id="setup-wizard-title" class="font-semibold text-neutral-900">{{ t('setup.title') }}</h2>
+          <p class="text-xs text-neutral-500 mt-0.5">{{ t('setup.subtitle') }}</p>
         </div>
 
         <div class="px-4 pt-3 flex gap-2">
@@ -305,7 +321,7 @@ onUnmounted(() => {
                   ? 'bg-neutral-800 text-white border-neutral-800'
                   : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'"
                 @click="applyPreset(preset.id)"
-              >{{ preset.label }}</button>
+              >{{ providerPresetLabel(preset) }}</button>
             </div>
             <div>
               <label class="block text-xs text-neutral-500 mb-1">API Base</label>
@@ -321,7 +337,7 @@ onUnmounted(() => {
                 v-model="llmForm.api_key"
                 type="password"
                 class="w-full border rounded px-2 py-1.5 text-sm"
-                :placeholder="defaultProvider ? '留空则不修改' : 'sk-…'"
+                :placeholder="defaultProvider ? t('setup.leaveBlank') : 'sk-…'"
               />
             </div>
             <div class="flex justify-end pt-1">
@@ -329,7 +345,7 @@ onUnmounted(() => {
                 type="submit"
                 class="px-3 py-1.5 bg-neutral-800 text-white rounded text-sm disabled:opacity-50"
                 :disabled="saving"
-              >{{ saving ? 'Saving…' : '下一步' }}</button>
+              >{{ saving ? t('common.saving') : t('common.next') }}</button>
             </div>
           </form>
 
@@ -358,27 +374,27 @@ onUnmounted(() => {
                     ? 'bg-neutral-800 text-white border-neutral-800'
                     : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'"
                   @click="applyPromptStyle(preset.id)"
-                >{{ preset.label }}</button>
+                >{{ promptStyleLabel(preset.id) }}</button>
               </div>
             </div>
             <div class="flex justify-between pt-1">
-              <button type="button" class="px-3 py-1.5 border rounded text-sm" @click="step = 0">上一步</button>
+              <button type="button" class="px-3 py-1.5 border rounded text-sm" @click="step = 0">{{ t('common.back') }}</button>
               <button
                 type="submit"
                 class="px-3 py-1.5 bg-neutral-800 text-white rounded text-sm disabled:opacity-50"
                 :disabled="saving"
-              >{{ saving ? 'Saving…' : '下一步' }}</button>
+              >{{ saving ? t('common.saving') : t('common.next') }}</button>
             </div>
           </form>
 
           <!-- Step 3: Env -->
           <div v-else class="space-y-3">
             <p class="text-sm text-neutral-500">
-              检测并安装 Python（含 UV）与 Node.js（含 npx）。MCP / 脚本工具常用；可稍后安装。
+              {{ t('setup.runtimeHint') }}
             </p>
 
             <div class="flex items-center gap-2 text-xs">
-              <span class="text-neutral-500">镜像：</span>
+              <span class="text-neutral-500">{{ t('setup.mirror') }}</span>
               <button
                 type="button"
                 class="px-2 py-0.5 rounded border"
@@ -386,7 +402,7 @@ onUnmounted(() => {
                   ? 'bg-neutral-800 text-white border-neutral-800'
                   : 'border-neutral-200 text-neutral-600'"
                 @click="installMode = 'mainland'"
-              >国内</button>
+              >{{ t('setup.mainland') }}</button>
               <button
                 type="button"
                 class="px-2 py-0.5 rounded border"
@@ -394,10 +410,10 @@ onUnmounted(() => {
                   ? 'bg-neutral-800 text-white border-neutral-800'
                   : 'border-neutral-200 text-neutral-600'"
                 @click="installMode = 'standard'"
-              >官方</button>
+              >{{ t('setup.official') }}</button>
             </div>
 
-            <div v-if="runtimeLoading && !runtime" class="text-sm text-neutral-500">检测中…</div>
+            <div v-if="runtimeLoading && !runtime" class="text-sm text-neutral-500">{{ t('common.detecting') }}</div>
             <div v-else-if="runtimeError" class="text-sm text-red-600">{{ runtimeError }}</div>
             <div v-else class="space-y-2">
               <!-- Python + UV -->
@@ -423,11 +439,11 @@ onUnmounted(() => {
                     class="shrink-0 px-2.5 py-1 border rounded text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
                     :disabled="!!installing['uvx-py']"
                     @click="onInstall('uvx-py')"
-                  >{{ installing['uvx-py'] ? '安装中…' : '安装' }}</button>
-                  <span v-else class="shrink-0 text-xs text-green-700 px-1">就绪</span>
+                  >{{ installing['uvx-py'] ? t('common.installing') : t('common.install') }}</button>
+                  <span v-else class="shrink-0 text-xs text-green-700 px-1">{{ t('common.ready') }}</span>
                 </div>
                 <p v-if="installing['uvx-py']" class="text-xs text-neutral-500">
-                  正在后台安装，可能需要几分钟；完成后状态会自动更新。
+                  {{ t('setup.installBackground') }}
                 </p>
               </div>
 
@@ -454,29 +470,29 @@ onUnmounted(() => {
                     class="shrink-0 px-2.5 py-1 border rounded text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
                     :disabled="!!installing['js-npx']"
                     @click="onInstall('js-npx')"
-                  >{{ installing['js-npx'] ? '安装中…' : '安装' }}</button>
-                  <span v-else class="shrink-0 text-xs text-green-700 px-1">就绪</span>
+                  >{{ installing['js-npx'] ? t('common.installing') : t('common.install') }}</button>
+                  <span v-else class="shrink-0 text-xs text-green-700 px-1">{{ t('common.ready') }}</span>
                 </div>
                 <p v-if="installing['js-npx']" class="text-xs text-neutral-500">
-                  正在后台安装，可能需要几分钟；完成后状态会自动更新。
+                  {{ t('setup.installBackground') }}
                 </p>
               </div>
             </div>
 
             <div class="flex justify-between items-center pt-1 gap-2">
-              <button type="button" class="px-3 py-1.5 border rounded text-sm" @click="step = 1">上一步</button>
+              <button type="button" class="px-3 py-1.5 border rounded text-sm" @click="step = 1">{{ t('common.back') }}</button>
               <div class="flex gap-2">
                 <button
                   type="button"
                   class="px-3 py-1.5 border rounded text-sm"
                   :disabled="runtimeLoading"
                   @click="loadRuntime"
-                >重新检测</button>
+                >{{ t('common.detectAgain') }}</button>
                 <button
                   type="button"
                   class="px-3 py-1.5 bg-neutral-800 text-white rounded text-sm"
                   @click="finish"
-                >完成</button>
+                >{{ t('common.done') }}</button>
               </div>
             </div>
           </div>

@@ -17,6 +17,16 @@ import (
 
 const maxWorkspaceUpload = workspace.MaxFileSize
 
+func writeWorkspaceOpErr(w http.ResponseWriter, status int, err error) {
+	msg := err.Error()
+	const prefix = "file too large: "
+	if strings.HasPrefix(msg, prefix) {
+		writeErr(w, status, ErrFileTooLarge, strings.TrimSpace(msg[len(prefix):]))
+		return
+	}
+	writeErr(w, status, ErrInternalError, msg)
+}
+
 type workspaceEntry struct {
 	Name    string `json:"name"`
 	Path    string `json:"path"`
@@ -32,12 +42,12 @@ func (s *Server) listWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	full, err := support.SandboxPath(s.cfg.WorkspaceDir, dir)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	infos, err := os.ReadDir(full)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 
@@ -99,26 +109,26 @@ func (s *Server) listWorkspace(w http.ResponseWriter, r *http.Request) {
 func (s *Server) readWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSpace(r.URL.Query().Get("path"))
 	if path == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
+		writeErr(w, http.StatusBadRequest, ErrPathRequired)
 		return
 	}
 	full, err := support.SandboxPath(s.cfg.WorkspaceDir, path)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	info, err := os.Stat(full)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	if info.IsDir() {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path is a directory"})
+		writeErr(w, http.StatusBadRequest, ErrPathIsDirectory)
 		return
 	}
 	data, err := os.ReadFile(full)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	const max = 512 * 1024
@@ -143,12 +153,12 @@ func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimSpace(in.Path)
 	if path == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
+		writeErr(w, http.StatusBadRequest, ErrPathRequired)
 		return
 	}
 	payload, err := workspace.ReadBinaryFile(s.cfg.WorkspaceDir, path)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -162,7 +172,7 @@ type uploadedFile struct {
 
 func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(maxWorkspaceUpload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid multipart form"})
+		writeErr(w, http.StatusBadRequest, ErrInvalidMultipart)
 		return
 	}
 
@@ -172,17 +182,17 @@ func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	destDir, err := support.SandboxPath(s.cfg.WorkspaceDir, dir)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "mkdir failed"})
+		writeErr(w, http.StatusInternalServerError, ErrMkdirFailed)
 		return
 	}
 
 	headers := r.MultipartForm.File["files"]
 	if len(headers) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no files"})
+		writeErr(w, http.StatusBadRequest, ErrNoFiles)
 		return
 	}
 
@@ -190,7 +200,7 @@ func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
 	for _, fh := range headers {
 		item, err := saveUploadedFile(s.cfg.WorkspaceDir, dir, fh)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			writeWorkspaceOpErr(w, http.StatusBadRequest, err)
 			return
 		}
 		uploaded = append(uploaded, item)
