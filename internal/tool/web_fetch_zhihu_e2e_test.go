@@ -36,6 +36,10 @@ func TestE2EWebFetchZhihuBrowserFallback(t *testing.T) {
 	if !strings.Contains(out, "browser") {
 		t.Fatalf("expected browser fallback note, got: %s", out[:min(200, len(out))])
 	}
+	// Zhihu often serves captcha / login walls to datacenter IPs — not a product regression.
+	if strings.Contains(out, "安全验证") || strings.Contains(out, "unhuman") || strings.Contains(out, "请您登录") {
+		t.Skip("zhihu bot/login wall; skip live e2e")
+	}
 	if !strings.Contains(out, "孙燕姿") {
 		t.Fatalf("expected article content, got: %s", out[:min(400, len(out))])
 	}

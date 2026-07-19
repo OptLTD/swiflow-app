@@ -104,7 +104,11 @@ jobs:
 
       - name: Build Windows installer
         shell: bash
-        run: make windows
+        run: |
+          # Ensure make recipes use bash (for loops / test / rm -f).
+          export SHELL="$(command -v bash)"
+          make windows SHELL="$(command -v bash)"
+          ls -la bin/
 
       - name: Rename artifact
         shell: bash

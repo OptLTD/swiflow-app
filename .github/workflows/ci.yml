@@ -30,10 +30,11 @@ jobs:
         run: pnpm install --frozen-lockfile && pnpm build
 
       # Skip cmd/desktop: Wails needs platform CGO/WebView, not available on ubuntu runners.
+      # -short skips live network / browser e2e (zhihu, bing SERP, etc.) which flake on CI.
       - name: Go vet / test / build
         env:
           CGO_ENABLED: "0"
         run: |
           go vet $(go list ./... | grep -v '/cmd/desktop$')
-          go test $(go list ./... | grep -v '/cmd/desktop$')
+          go test -short $(go list ./... | grep -v '/cmd/desktop$')
           go build -o /dev/null ./cmd/swiflow

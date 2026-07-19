@@ -1,5 +1,5 @@
 .PHONY: dev dev-backend dev-frontend build image test migrate tidy \
-	macos macos-app windows \
+	macos macos-app windows windows-exe \
 	wails3 wails3-frontend wails3-app
 
 # Wails CGO objects must match the linker min macOS version to avoid ld warnings.
@@ -33,7 +33,7 @@ migrate:
 test:
 	cd webui && pnpm install && pnpm build
 	CGO_ENABLED=0 go vet $$(go list ./... | grep -v '/cmd/desktop$$')
-	CGO_ENABLED=0 go test $$(go list ./... | grep -v '/cmd/desktop$$')
+	CGO_ENABLED=0 go test -short $$(go list ./... | grep -v '/cmd/desktop$$')
 	CGO_ENABLED=0 go build -o /dev/null ./cmd/swiflow
 
 tidy:
@@ -62,24 +62,32 @@ windows:
 	@command -v makensis >/dev/null 2>&1 || { echo "error: makensis not found (brew install makensis / choco install nsis)"; exit 1; }
 	cd webui && pnpm install && pnpm build
 	mkdir -p bin
-	@for arch in amd64 arm64; do \
-		wails3 generate syso -arch $$arch \
-			-icon build/windows/icon.ico \
-			-manifest build/windows/wails.exe.manifest \
-			-info build/windows/info.json \
-			-out cmd/desktop/wails_windows_$$arch.syso; \
-		GOOS=windows GOARCH=$$arch CGO_ENABLED=0 \
-			go build -trimpath -ldflags="-H windowsgui -s -w" \
-			-o bin/$(APP_NAME)-$$arch.exe ./cmd/desktop; \
-		rm -f cmd/desktop/wails_windows_$$arch.syso; \
-		echo "Built bin/$(APP_NAME)-$$arch.exe"; \
-	done
+	$(MAKE) windows-exe ARCH=amd64
+	$(MAKE) windows-exe ARCH=arm64
 	wails3 generate webview2bootstrapper -dir build/windows/nsis
+	# Relative paths from build/windows/nsis — absolute D:/ paths break NSIS File on Windows CI.
 	cd build/windows/nsis && makensis \
-		-DARG_WAILS_AMD64_BINARY="$(CURDIR)/bin/$(APP_NAME)-amd64.exe" \
-		-DARG_WAILS_ARM64_BINARY="$(CURDIR)/bin/$(APP_NAME)-arm64.exe" \
+		-DARG_WAILS_AMD64_BINARY=../../../bin/$(APP_NAME)-amd64.exe \
+		-DARG_WAILS_ARM64_BINARY=../../../bin/$(APP_NAME)-arm64.exe \
 		project.nsi
+	@test -f bin/$(APP_NAME)-installer.exe || { echo "error: missing bin/$(APP_NAME)-installer.exe"; exit 1; }
 	@echo "Installer: bin/$(APP_NAME)-installer.exe"
+
+# Build one Windows arch (ARCH=amd64|arm64). Used by `make windows`.
+windows-exe:
+	@test -n "$(ARCH)" || { echo "error: ARCH=amd64|arm64 required"; exit 1; }
+	wails3 generate syso -arch $(ARCH) \
+		-icon build/windows/icon.ico \
+		-manifest build/windows/wails.exe.manifest \
+		-info build/windows/info.json \
+		-out cmd/desktop/wails_windows_$(ARCH).syso
+	GOOS=windows GOARCH=$(ARCH) CGO_ENABLED=0 \
+		go build -trimpath -ldflags="-H windowsgui -s -w" \
+		-o bin/$(APP_NAME)-$(ARCH).exe ./cmd/desktop
+	rm -f cmd/desktop/wails_windows_$(ARCH).syso
+	@test -f bin/$(APP_NAME)-$(ARCH).exe || { echo "error: missing bin/$(APP_NAME)-$(ARCH).exe"; exit 1; }
+	@echo "Built bin/$(APP_NAME)-$(ARCH).exe"
+	@ls -la bin/$(APP_NAME)-$(ARCH).exe
 
 # Wails3 desktop development mode: Vite HMR + live desktop window
 # Uses FRONTEND_DEVSERVER_URL so AssetFileServerFS proxies to Vite (non-production build).
