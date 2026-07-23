@@ -49,16 +49,19 @@ Chromium 需要足够的 `/dev/shm`（`compose.yml` 已设 `shm_size: 256mb`）�
 
 推送符合 `v*` 的 tag 后，[.github/workflows/release.yml](../.github/workflows/release.yml) 会自动：
 
-- 在 **macOS** 构建 `Swiflow.app`，打包为 `Swiflow-<version>-macos-arm64.zip`
-- 在 **Windows** 构建 NSIS 安装包 `Swiflow-<version>-windows-installer.exe`
+- 在 **macOS** 构建 `Swiflow.app`，打包为 `Swiflow-<version>-arm64.zip`
+- 在 **Windows** 构建 NSIS 安装包 `Swiflow-<version>-installer.exe`，以及可供应用内更新替换的便携包 `Swiflow-<version>-{amd64,arm64}.exe`
+- 生成并上传 `SHA256SUMS`（更新时校验下载完整性）
 - 创建 GitHub Release 并挂上上述产物（当前为**未签名**包；macOS 为 ad-hoc codesign）
+
+桌面端内置 [Wails updater](https://v3.wails.io/zh-cn/tutorials/04-self-update-a-wails-app/)：菜单 **Check for Updates…** / 关于页「检查更新」，以及每日后台检查。版本号通过 `-ldflags` 注入 `internal/version.Version`（与 tag 对齐，勿带 `v` 前缀）。资源按扩展名区分平台（`.zip`→macOS，`.exe`→Windows），文件名只保留架构。
 
 ```bash
 git tag v0.2.0
 git push origin v0.2.0
 ```
 
-本地等价命令：`make macos`、`make windows`（见根目录 Makefile）。
+本地等价命令：`make macos APP_VERSION=0.2.0`、`make windows APP_VERSION=0.2.0`（见根目录 Makefile）。
 
 ---
 

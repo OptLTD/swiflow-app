@@ -1,20 +1,33 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api'
 import { useLayoutStore } from '../stores/layout'
 import { useToastStore } from '../stores/toast'
+import { useUpdateStore } from '../stores/updates'
 import LocalSvgIcon from '../components/LocalSvgIcon.vue'
+import { isDesktop } from '../lib/desktop'
 import type { RuntimeBinary, RuntimeInfo } from '../types'
 
 const { t } = useI18n()
 const layout = useLayoutStore()
 const toast = useToastStore()
+const updates = useUpdateStore()
+const {
+  available: updateAvailable,
+  latest: updateLatest,
+  notes: updateNotes,
+  checking: updateChecking,
+  lastError: updateError,
+  lastCheckedAt,
+} = storeToRefs(updates)
 
 const version = ref('…')
 const loadError = ref('')
 const dataDir = ref('')
 const opening = ref(false)
+const desktop = isDesktop()
 
 const runtime = ref<RuntimeInfo | null>(null)
 const runtimeLoading = ref(false)
@@ -30,11 +43,23 @@ const nodeReady = computed(() =>
   !!(runtime.value?.node?.found && runtime.value?.npx?.found),
 )
 
+const updateStatusText = computed(() => {
+  if (!desktop) return ''
+  if (updateChecking.value) return t('about.updateStatusChecking')
+  if (updateError.value) return t('about.updateStatusError')
+  if (updateAvailable.value && updateLatest.value) {
+    return t('about.updateStatusAvailable', { version: updateLatest.value })
+  }
+  if (lastCheckedAt.value) return t('about.updateStatusLatest')
+  return t('about.updateStatusIdle')
+})
+
 onMounted(() => {
   void loadVersion()
   void loadPaths()
   void loadRuntime()
   startPolling()
+  if (desktop) void updates.start()
 })
 
 onUnmounted(() => {
@@ -138,6 +163,32 @@ async function openStorageDir() {
   }
 }
 
+async function onDetectUpdate() {
+  const r = await updates.detect()
+  if (!r) {
+    toast.error(t('about.checkUpdateUnavailable'))
+    return
+  }
+  if (r.error) {
+    toast.error(r.error)
+    return
+  }
+  if (r.available && r.latest) {
+    toast.success(t('about.updateStatusAvailable', { version: r.latest }))
+  } else {
+    toast.success(t('about.updateStatusLatest'))
+  }
+}
+
+async function onInstallUpdate() {
+  const ok = await updates.openDialog()
+  if (ok) {
+    toast.success(t('about.checkUpdateStarted'))
+  } else {
+    toast.error(t('about.checkUpdateUnavailable'))
+  }
+}
+
 function openWorkspace() {
   layout.openExplore('.')
 }
@@ -173,6 +224,54 @@ function openWorkspace() {
         <li>{{ t('about.bulletTools') }}</li>
         <li>{{ t('about.bulletDesktop') }}</li>
       </ul>
+    </section>
+
+    <!-- Desktop software update -->
+    <section
+      v-if="desktop"
+      class="border border-neutral-200 rounded-lg p-4 bg-white space-y-3"
+    >
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-neutral-900">{{ t('about.updateSectionTitle') }}</h2>
+          <p class="text-xs text-neutral-500 mt-0.5">{{ t('about.updateSectionHint') }}</p>
+        </div>
+        <div class="shrink-0 flex items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center h-8 px-3 text-sm border border-neutral-200 rounded bg-white hover:bg-neutral-50 disabled:opacity-50"
+            :disabled="updateChecking"
+            @click="onDetectUpdate"
+          >
+            {{ updateChecking ? t('common.detecting') : t('about.updateDetect') }}
+          </button>
+          <button
+            v-if="updateAvailable"
+            type="button"
+            class="inline-flex items-center gap-1.5 h-8 px-3 text-sm rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+            @click="onInstallUpdate"
+          >
+            <LocalSvgIcon name="update" :size="14" />
+            {{ t('about.updateInstall') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        <span class="text-neutral-500">{{ t('common.status') }}</span>
+        <span
+          class="font-medium"
+          :class="updateAvailable ? 'text-sky-700' : updateError ? 'text-amber-700' : 'text-neutral-800'"
+        >{{ updateStatusText }}</span>
+        <span v-if="updateLatest" class="text-xs text-neutral-500 tabular-nums">
+          v{{ version }} → v{{ updateLatest }}
+        </span>
+      </div>
+      <p v-if="updateError" class="text-xs text-amber-700">{{ updateError }}</p>
+      <pre
+        v-if="updateAvailable && updateNotes"
+        class="text-xs text-neutral-600 whitespace-pre-wrap max-h-40 overflow-y-auto bg-neutral-50 border border-neutral-100 rounded p-2"
+      >{{ updateNotes }}</pre>
     </section>
 
     <!-- Runtime env -->

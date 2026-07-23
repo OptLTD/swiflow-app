@@ -21,5 +21,10 @@ app.use(i18n)
 applyDocumentLang()
 useAuthStore(pinia).probe()
 useUploadStore(pinia).bindDesktopDrop()
+if (isDesktop()) {
+  void import('./stores/updates').then(({ useUpdateStore }) => {
+    useUpdateStore(pinia).start()
+  })
+}
 installProseExternalLinks()
 app.mount('#app')

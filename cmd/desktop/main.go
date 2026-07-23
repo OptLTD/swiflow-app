@@ -29,6 +29,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/server"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/tool"
+	"github.com/OptLTD/swiflow/internal/version"
 	"github.com/OptLTD/swiflow/library/browser"
 	"github.com/OptLTD/swiflow/library/httputil"
 	"github.com/OptLTD/swiflow/library/window"
@@ -67,12 +68,14 @@ func main() {
 	backendURL := fmt.Sprintf("http://%s", cfg.Addr())
 	workspaceSvc := &Workspace{cfg: cfg}
 	lightAppSvc := &LightAppService{}
+	updateSvc := &UpdateService{}
 	app := application.New(application.Options{
 		Name:        "Swiflow",
 		Description: "Self-hosted AI Agent Runtime",
 		Services: []application.Service{
 			application.NewService(workspaceSvc),
 			application.NewService(lightAppSvc),
+			application.NewService(updateSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler:    mustDesktopFrontendHandler(),
@@ -84,7 +87,10 @@ func main() {
 	})
 
 	lightAppSvc.app = app
+	updateSvc.app = app
 	app.SetIcon(emb.AppIconPNG)
+	setupUpdater(app)
+	slog.Info("desktop app version", "version", version.Version)
 
 	// 4. Create main window.
 	// macOS: fusion title bar (traffic lights kept, content inset).

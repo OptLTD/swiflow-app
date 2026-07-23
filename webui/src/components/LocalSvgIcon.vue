@@ -21,6 +21,7 @@ withDefaults(
     | 'maximize'
     | 'minimize'
     | 'settings'
+    | 'update'
     | 'folder-open'
     size?: number
   }>(),
@@ -47,6 +48,11 @@ withDefaults(
         d="M6.7 1.6h2.6l.35 1.55c.42.14.8.35 1.15.61l1.5-.55 1.3 1.3-.55 1.5c.26.35.47.73.61 1.15L14.4 6.7v2.6l-1.55.35c-.14.42-.35.8-.61 1.15l.55 1.5-1.3 1.3-1.5-.55c-.35.26-.73.47-1.15.61L9.3 14.4H6.7l-.35-1.55a4.7 4.7 0 0 1-1.15-.61l-1.5.55-1.3-1.3.55-1.5a4.7 4.7 0 0 1-.61-1.15L1.6 9.3V6.7l1.55-.35c.14-.42.35-.8.61-1.15l-.55-1.5 1.3-1.3 1.5.55c.35-.26.73-.47 1.15-.61L6.7 1.6z"
       />
       <circle cx="8" cy="8" r="2.1" />
+    </template>
+    <!-- Arrow up into tray (software update) -->
+    <template v-else-if="name === 'update'">
+      <path d="M8 10.5V3.5M8 3.5L5 6.5M8 3.5l3 3" stroke-width="1.5" />
+      <path d="M3.5 11.5v1a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-1" />
     </template>
     <template v-else-if="name === 'folder'">
       <path d="M2 4.5A1 1 0 0 1 3 3.5h3l1 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4.5z" />

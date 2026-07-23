@@ -40,18 +40,19 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" build/darwin/Info.plist
 
       - name: Build frontend + macOS app
-        run: make macos
+        run: make macos APP_VERSION="${{ steps.ver.outputs.version }}"
 
       - name: Package zip
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
-          ditto -c -k --keepParent bin/Swiflow.app "bin/Swiflow-${VERSION}-macos-arm64.zip"
+          # Platform is implied by extension (.zip = macOS app). Arch stays in the name.
+          ditto -c -k --keepParent bin/Swiflow.app "bin/Swiflow-${VERSION}-arm64.zip"
           ls -lh bin/*.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
-          path: bin/Swiflow-*-macos-arm64.zip
+          path: bin/Swiflow-*-arm64.zip
           if-no-files-found: error
 
   windows:
@@ -107,15 +108,19 @@ jobs:
         run: |
           # Ensure make recipes use bash (for loops / test / rm -f).
           export SHELL="$(command -v bash)"
-          make windows SHELL="$(command -v bash)"
+          make windows SHELL="$(command -v bash)" APP_VERSION="${{ steps.ver.outputs.version }}"
           ls -la bin/
 
-      - name: Rename artifact
+      - name: Rename artifacts
         shell: bash
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
+          # Portable exes are what in-app updater swaps (not the NSIS installer).
+          # Platform is implied by .exe; arch stays in the name.
+          cp "bin/Swiflow-amd64.exe" "bin/Swiflow-${VERSION}-amd64.exe"
+          cp "bin/Swiflow-arm64.exe" "bin/Swiflow-${VERSION}-arm64.exe"
           src="bin/Swiflow-installer.exe"
-          dst="bin/Swiflow-${VERSION}-windows-installer.exe"
+          dst="bin/Swiflow-${VERSION}-installer.exe"
           test -f "$src"
           mv "$src" "$dst"
           ls -lh bin/*.exe
@@ -123,7 +128,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: bin/Swiflow-*-windows-installer.exe
+          path: |
+            bin/Swiflow-*-installer.exe
+            bin/Swiflow-*-amd64.exe
+            bin/Swiflow-*-arm64.exe
           if-no-files-found: error
 
   publish:
@@ -136,8 +144,13 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: List artifacts
-        run: find dist -type f -ls
+      - name: List artifacts + SHA256SUMS
+        run: |
+          find dist -type f -ls
+          cd dist
+          # sha256sum lines use basenames so the GitHub provider can match assets.
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
 
       - uses: softprops/action-gh-release@v2
         with:

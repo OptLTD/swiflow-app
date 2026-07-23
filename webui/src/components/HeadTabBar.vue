@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useLayoutStore } from '../stores/layout'
 import { useChatStore } from '../stores/chat'
+import { useToastStore } from '../stores/toast'
+import { useUpdateStore } from '../stores/updates'
 import {
   closeWindow,
   isDesktop,
@@ -16,6 +19,14 @@ import type { Tab } from '../stores/layout'
 const { t } = useI18n()
 const layout = useLayoutStore()
 const chatStore = useChatStore()
+const toast = useToastStore()
+const updates = useUpdateStore()
+const { available: updateAvailable, latest: updateLatest } = storeToRefs(updates)
+
+async function onUpdateClick() {
+  const ok = await updates.openDialog()
+  if (!ok) toast.error(t('about.checkUpdateUnavailable'))
+}
 /** Brand mark in the tab bar; macOS desktop keeps traffic-light space instead. */
 const showHeaderLogo = !isMacDesktop()
 const showWinControls = isWindowsDesktop()
@@ -93,6 +104,18 @@ function activateTab(tab: Tab) {
 
     <!-- Right actions -->
     <div class="shrink-0 flex items-center gap-0.5 px-1.5 border-l border-neutral-200 h-full">
+      <button
+        v-if="updateAvailable"
+        class="relative w-8 h-8 flex items-center justify-center rounded text-sky-700 hover:bg-sky-100"
+        :title="t('layout.updateAvailable', { version: updateLatest || '' })"
+        @click="onUpdateClick"
+      >
+        <LocalSvgIcon name="update" :size="16" />
+        <span
+          class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-sky-500"
+          aria-hidden="true"
+        />
+      </button>
       <button
         class="w-8 h-8 flex items-center justify-center rounded hover:bg-neutral-200 text-neutral-600"
         :title="t('layout.settings')"

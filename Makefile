@@ -8,6 +8,8 @@ FRONTEND_DEVSERVER_URL ?= http://localhost:5173
 
 APP_NAME := Swiflow
 APP_VERSION := 0.1.0
+VERSION_PKG := github.com/OptLTD/swiflow/internal/version
+VERSION_LDFLAGS := -X $(VERSION_PKG).Version=$(APP_VERSION)
 
 # Local dev: API :8000 + Vite :5173 (proxies /api)
 dev:
@@ -42,7 +44,8 @@ tidy:
 # macOS desktop app (.app)
 macos:
 	cd webui && pnpm install && pnpm build
-	$(DESKTOP_LDFLAGS) go build -o swiflow-desktop ./cmd/desktop
+	$(DESKTOP_LDFLAGS) go build -trimpath -ldflags="$(VERSION_LDFLAGS) -s -w" \
+		-o swiflow-desktop ./cmd/desktop
 	@$(MAKE) macos-app
 
 macos-app:
@@ -86,7 +89,7 @@ windows-exe:
 		-info build/windows/info.json \
 		-out cmd/desktop/wails_windows_$(ARCH).syso
 	GOOS=windows GOARCH=$(ARCH) CGO_ENABLED=0 \
-		go build -trimpath -ldflags="-H windowsgui -s -w" \
+		go build -trimpath -ldflags="-H windowsgui -s -w $(VERSION_LDFLAGS)" \
 		-o bin/$(APP_NAME)-$(ARCH).exe ./cmd/desktop
 	rm -f cmd/desktop/wails_windows_$(ARCH).syso
 	@test -f bin/$(APP_NAME)-$(ARCH).exe || { echo "error: missing bin/$(APP_NAME)-$(ARCH).exe"; exit 1; }
