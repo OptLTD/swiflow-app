@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+env:
+  # Public CDN (Worker on dl.option.ltd → R2 swiflow/).
+  UPDATE_URL: https://dl.option.ltd/swiflow/update.json
+  ASSET_BASE: https://dl.option.ltd/swiflow
+
 jobs:
   macos:
     name: macOS .app
@@ -185,8 +190,7 @@ jobs:
       - name: SHA256SUMS + Wails update.json
         env:
           VERSION: ${{ github.ref_name }}
-          # Public CDN base (Worker on dl.swiflow.cc caches / proxies R2 release-assets/).
-          ASSET_BASE: https://dl.swiflow.cc/release-assets
+          ASSET_BASE: ${{ env.ASSET_BASE }}
         run: |
           set -euo pipefail
           VERSION="${VERSION#v}"
@@ -270,13 +274,17 @@ jobs:
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME: swiflow
-          R2_ENDPOINT_URL: https://2d002fceba7555e1c72fd486005708ea.r2.cloudflarestorage.com
-          R2_PREFIX: release-assets
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          R2_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
+          R2_PREFIX: swiflow
         run: |
           if [[ -z "${R2_ACCESS_KEY_ID:-}" || -z "${R2_SECRET_ACCESS_KEY:-}" ]]; then
             echo "skip R2 upload"
             exit 0
+          fi
+          if [[ -z "${R2_BUCKET_NAME:-}" || -z "${R2_ENDPOINT_URL:-}" ]]; then
+            echo "::error::Set repository variables R2_BUCKET_NAME and R2_ENDPOINT_URL"
+            exit 1
           fi
           set -euo pipefail
           shopt -s nullglob
@@ -290,4 +298,4 @@ jobs:
               --endpoint-url "$R2_ENDPOINT_URL" \
               --no-progress
           done
-          echo "R2 upload complete"
+          echo "R2 upload complete → https://dl.option.ltd/swiflow/"

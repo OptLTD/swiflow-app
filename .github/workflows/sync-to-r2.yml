@@ -20,9 +20,9 @@ jobs:
       contents: read
 
     env:
-      R2_BUCKET_NAME: swiflow
-      R2_ENDPOINT_URL: https://2d002fceba7555e1c72fd486005708ea.r2.cloudflarestorage.com
-      R2_PREFIX: release-assets
+      R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+      R2_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
+      R2_PREFIX: swiflow
 
     steps:
       - name: Resolve release id
@@ -49,7 +49,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p release-assets
+          mkdir -p out
           api_url="https://api.github.com/repos/${{ github.repository }}/releases/${{ steps.rel.outputs.release_id }}"
           release_info=$(curl -fLsS \
             -H "Authorization: Bearer $GH_TOKEN" \
@@ -63,10 +63,10 @@ jobs:
             curl -fL \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/octet-stream" \
-              -o "release-assets/${filename}" \
+              -o "out/${filename}" \
               "$url"
           done
-          ls -lh release-assets/ || true
+          ls -lh out/ || true
 
       - name: Setup R2 credentials
         run: |
@@ -80,9 +80,13 @@ jobs:
       - name: Upload to R2
         run: |
           set -euo pipefail
-          [ -d release-assets ] || exit 0
+          if [[ -z "${R2_BUCKET_NAME:-}" || -z "${R2_ENDPOINT_URL:-}" ]]; then
+            echo "::error::Set repository variables R2_BUCKET_NAME and R2_ENDPOINT_URL"
+            exit 1
+          fi
+          [ -d out ] || exit 0
           shopt -s nullglob
-          files=(release-assets/*)
+          files=(out/*)
           [ ${#files[@]} -eq 0 ] && echo "No assets to upload" && exit 0
           for f in "${files[@]}"; do
             name="$(basename "$f")"
@@ -92,8 +96,8 @@ jobs:
               --endpoint-url "$R2_ENDPOINT_URL" \
               --no-progress
           done
-          echo "Upload complete"
+          echo "Upload complete → https://dl.option.ltd/swiflow/"
 
       - name: Cleanup
         if: always()
-        run: rm -rf release-assets
+        run: rm -rf out

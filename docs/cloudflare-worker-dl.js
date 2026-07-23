@@ -1,50 +1,41 @@
 /**
- * Cloudflare Worker for https://dl.swiflow.cc
+ * Cloudflare Worker for https://dl.option.ltd
  *
- * Origin (R2 public): https://r2.swiflow.cc/release-assets/...
+ * Multi-product CDN: /{product}/… → https://r2.option.ltd/{product}/…
+ * No product allowlist — missing keys surface as R2 404.
  *
- * Routes:
- *   GET /update.json              → release-assets/update.json  (TTL 300s)
- *   GET /release-assets/*         → same key on R2              (binaries TTL 1d;
- *                                   update.json / SHA256SUMS TTL 300s)
- *   GET /clear-cache              → drop Cache API entry for /update.json
+ * Cache:
+ *   update.json / SHA256SUMS → TTL 300s
+ *   other assets             → TTL 1d
  *
- * Deploy on the dl.swiflow.cc zone. Keep in sync with:
- *   - cmd/desktop/updater.go          (defaultUpdateManifestURL)
- *   - .github/workflows/release.yml   (ASSET_BASE)
+ * Deploy on the dl.option.ltd zone. Keep in sync with each app's
+ * defaultUpdateManifestURL and release.yml ASSET_BASE / R2_PREFIX.
+ *
+ * Swiflow: https://dl.option.ltd/swiflow/update.json
+ * (Same worker as option-worth / other OptLTD apps.)
  */
 
-const R2_DOMAIN = "https://r2.swiflow.cc";
-const R2_PREFIX = "release-assets";
-const DL_ORIGIN = "https://dl.swiflow.cc";
+const R2_DOMAIN = "https://r2.option.ltd";
 
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
 
     if (pathname === "" || pathname === "/") {
-      return new Response("hello");
-    }
-
-    if (pathname === "/clear-cache") {
-      const cache = caches.default;
-      const deleted = await cache.delete(new Request(`${DL_ORIGIN}/update.json`));
-      return new Response(deleted ? "success\n" : "not found\n", {
+      return new Response("dl.option.ltd\n", {
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
 
-    if (pathname === "/update.json") {
-      return proxyR2(`${R2_PREFIX}/update.json`, 300);
+    // Require /{product}/… (at least one segment after product).
+    const segments = pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+    if (segments.length < 2) {
+      return new Response("Not Found", { status: 404 });
     }
 
-    if (pathname.startsWith(`/${R2_PREFIX}/`)) {
-      const key = pathname.slice(1);
-      const ttl = /\/(update\.json|SHA256SUMS)$/i.test(pathname) ? 300 : 86400;
-      return proxyR2(key, ttl);
-    }
-
-    return new Response("Not Found", { status: 404 });
+    const key = segments.join("/");
+    const ttl = /(^|\/)(update\.json|SHA256SUMS)$/i.test(key) ? 300 : 86400;
+    return proxyR2(key, ttl);
   },
 };
 

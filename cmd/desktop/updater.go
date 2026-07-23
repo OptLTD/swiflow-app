@@ -16,10 +16,10 @@ import (
 	"github.com/OptLTD/swiflow/internal/version"
 )
 
-// Default Wails Update Manifest URL (CDN: dl.swiflow.cc → R2 release-assets/).
+// Default Wails Update Manifest URL (CDN: dl.option.ltd/swiflow/ → R2 swiflow/).
 // Override with SWIFLOW_UPDATE_MANIFEST.
-// Worker source: docs/cloudflare-worker-dl.js
-const defaultUpdateManifestURL = "https://dl.swiflow.cc/update.json"
+// Worker source: docs/cloudflare-worker-dl.js (shared with other OptLTD apps)
+const defaultUpdateManifestURL = "https://dl.option.ltd/swiflow/update.json"
 
 // UpdateCheckResult is returned by silent update detection (no window).
 type UpdateCheckResult struct {
