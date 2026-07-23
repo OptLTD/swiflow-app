@@ -19,6 +19,8 @@ import (
 // Default Wails Update Manifest URL (served from R2 via dl.swiflow.cc / r2.swiflow.cc).
 // Override with SWIFLOW_UPDATE_MANIFEST.
 const defaultUpdateManifestURL = "https://dl.swiflow.cc/update.json"
+// Artifacts in update.json use https://r2.swiflow.cc/release-assets/...
+// Worker should map GET /update.json → R2 object release-assets/update.json.
 
 // UpdateCheckResult is returned by silent update detection (no window).
 type UpdateCheckResult struct {

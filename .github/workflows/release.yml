@@ -147,8 +147,8 @@ jobs:
       - name: SHA256SUMS + Wails update.json
         env:
           VERSION: ${{ github.ref_name }}
-          # Public CDN base for in-app updater downloads (synced by sync-to-r2).
-          ASSET_BASE: https://r2.swiflow.cc
+          # Public CDN base for in-app updater downloads (synced under release-assets/).
+          ASSET_BASE: https://r2.swiflow.cc/release-assets
         run: |
           set -euo pipefail
           VERSION="${VERSION#v}"
@@ -209,3 +209,47 @@ jobs:
             dist/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # GITHUB_TOKEN 创建的 Release 不会触发同仓库其它 workflow（GitHub 防递归限制）。
+      # 因此在这里直接把产物上传到 R2，不依赖 sync-to-r2 的 release 事件。
+      - name: Setup R2 credentials
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          if [[ -z "${R2_ACCESS_KEY_ID:-}" || -z "${R2_SECRET_ACCESS_KEY:-}" ]]; then
+            echo "::warning::R2 secrets missing; skip CDN upload"
+            exit 0
+          fi
+          pip install --quiet awscli
+          mkdir -p ~/.aws
+          printf '%s\n' "[default]" \
+            "aws_access_key_id=${R2_ACCESS_KEY_ID}" \
+            "aws_secret_access_key=${R2_SECRET_ACCESS_KEY}" > ~/.aws/credentials
+          printf '%s\n' "[default]" "region=auto" > ~/.aws/config
+
+      - name: Upload release assets to R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: swiflow
+          R2_ENDPOINT_URL: https://2d002fceba7555e1c72fd486005708ea.r2.cloudflarestorage.com
+          R2_PREFIX: release-assets
+        run: |
+          if [[ -z "${R2_ACCESS_KEY_ID:-}" || -z "${R2_SECRET_ACCESS_KEY:-}" ]]; then
+            echo "skip R2 upload"
+            exit 0
+          fi
+          set -euo pipefail
+          shopt -s nullglob
+          files=(dist/*)
+          [ ${#files[@]} -eq 0 ] && echo "No files in dist/" && exit 1
+          for f in "${files[@]}"; do
+            name="$(basename "$f")"
+            key="${R2_PREFIX}/${name}"
+            echo "Uploading $name → s3://${R2_BUCKET_NAME}/${key}"
+            aws s3 cp "$f" "s3://${R2_BUCKET_NAME}/${key}" \
+              --endpoint-url "$R2_ENDPOINT_URL" \
+              --no-progress
+          done
+          echo "R2 upload complete"

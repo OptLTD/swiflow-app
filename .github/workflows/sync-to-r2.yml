@@ -1,8 +1,17 @@
 name: Sync Assets to Cloudflare R2
 
+# 注意：用默认 GITHUB_TOKEN 在 release.yml 里创建的 Release，不会触发本 workflow
+# （GitHub 禁止 workflow 用 GITHUB_TOKEN 再触发其它 workflow）。
+# 打 tag 发版时的 R2 上传已写在 release.yml 的 GitHub Release job 末尾。
+# 本 workflow 仍用于：在网页上 Edit Release 后补同步，或手动 workflow_dispatch。
 on:
   release:
     types: [published, edited]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to sync (e.g. v0.9.3)
+        required: true
 
 jobs:
   sync-release-to-r2:
@@ -13,12 +22,27 @@ jobs:
     env:
       R2_BUCKET_NAME: swiflow
       R2_ENDPOINT_URL: https://2d002fceba7555e1c72fd486005708ea.r2.cloudflarestorage.com
+      R2_PREFIX: release-assets
 
     steps:
-      - name: Debug context
+      - name: Resolve release id
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_INPUT: ${{ inputs.tag }}
         run: |
-          echo "Release ID: ${{ github.event.release.id }}"
-          echo "Tag: ${{ github.event.release.tag_name }}"
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="$TAG_INPUT"
+            api="https://api.github.com/repos/${{ github.repository }}/releases/tags/${tag}"
+            id=$(curl -fLsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$api" | jq -r .id)
+          else
+            id="${{ github.event.release.id }}"
+            tag="${{ github.event.release.tag_name }}"
+          fi
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Syncing release id=$id tag=$tag"
 
       - name: Download release assets
         env:
@@ -26,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          api_url="https://api.github.com/repos/${{ github.repository }}/releases/${{ github.event.release.id }}"
+          api_url="https://api.github.com/repos/${{ github.repository }}/releases/${{ steps.rel.outputs.release_id }}"
           release_info=$(curl -fLsS \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
@@ -48,18 +72,10 @@ jobs:
         run: |
           pip install --quiet awscli
           mkdir -p ~/.aws
-          cat > ~/.aws/credentials <<EOF
-          [default]
-          aws_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}
-          aws_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}
-          EOF
-          # Strip leading spaces that YAML indentation may introduce
-          sed -i 's/^[[:space:]]*//' ~/.aws/credentials
-          cat > ~/.aws/config <<EOF
-          [default]
-          region=auto
-          EOF
-          sed -i 's/^[[:space:]]*//' ~/.aws/config
+          printf '%s\n' "[default]" \
+            "aws_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}" \
+            "aws_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}" > ~/.aws/credentials
+          printf '%s\n' "[default]" "region=auto" > ~/.aws/config
 
       - name: Upload to R2
         run: |
@@ -70,8 +86,9 @@ jobs:
           [ ${#files[@]} -eq 0 ] && echo "No assets to upload" && exit 0
           for f in "${files[@]}"; do
             name="$(basename "$f")"
-            echo "Uploading $name"
-            aws s3 cp "$f" "s3://${R2_BUCKET_NAME}/${name}" \
+            key="${R2_PREFIX}/${name}"
+            echo "Uploading $name → s3://${R2_BUCKET_NAME}/${key}"
+            aws s3 cp "$f" "s3://${R2_BUCKET_NAME}/${key}" \
               --endpoint-url "$R2_ENDPOINT_URL" \
               --no-progress
           done
