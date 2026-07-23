@@ -98,13 +98,13 @@ windows-exe:
 
 # Wails3 desktop development mode: Vite HMR + live desktop window
 # Uses FRONTEND_DEVSERVER_URL so AssetFileServerFS proxies to Vite (non-production build).
-wails3:
-	@$(MAKE) -j2 wails3-frontend wails3-app
+wails:
+	@$(MAKE) -j2 wails-frontend wails-app
 
-wails3-frontend:
-	cd webui && pnpm install && pnpm dev -- --host localhost --port 5173 --strictPort
+wails-frontend:
+	cd webui && pnpm install && pnpm dev -- --host 127.0.0.1 --port 5173 --strictPort
 
-wails3-app:
+wails-app:
 	@echo "Waiting for Vite at $(FRONTEND_DEVSERVER_URL) ..."
 	@until curl -sf "$(FRONTEND_DEVSERVER_URL)" >/dev/null 2>&1; do sleep 0.3; done
 	FRONTEND_DEVSERVER_URL="$(FRONTEND_DEVSERVER_URL)" $(DESKTOP_LDFLAGS) go run ./cmd/desktop

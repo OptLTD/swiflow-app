@@ -144,13 +144,59 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: List artifacts + SHA256SUMS
+      - name: SHA256SUMS + Wails update.json
+        env:
+          VERSION: ${{ github.ref_name }}
+          # Public CDN base for in-app updater downloads (synced by sync-to-r2).
+          ASSET_BASE: https://r2.swiflow.cc
         run: |
-          find dist -type f -ls
+          set -euo pipefail
+          VERSION="${VERSION#v}"
           cd dist
-          # sha256sum lines use basenames so the GitHub provider can match assets.
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
+
+          python3 - <<'PY'
+          import base64, hashlib, json, os, pathlib, time
+          version = os.environ["VERSION"].lstrip("v")
+          asset_base = os.environ["ASSET_BASE"].rstrip("/")
+          root = pathlib.Path(".")
+          artifacts = []
+
+          def add(name, platform, arch, filetype):
+              p = root / name
+              if not p.is_file():
+                  print(f"skip missing {name}")
+                  return
+              raw = p.read_bytes()
+              digest = base64.standard_b64encode(hashlib.sha256(raw).digest()).decode()
+              artifacts.append({
+                  "url": f"{asset_base}/{name}",
+                  "filename": name,
+                  "filetype": filetype,
+                  "platform": platform,
+                  "arch": arch,
+                  "size": len(raw),
+                  "digestAlgo": "sha256",
+                  "digest": digest,
+              })
+
+          add(f"Swiflow-{version}-arm64.zip", "darwin", "arm64", "zip")
+          add(f"Swiflow-{version}-amd64.exe", "windows", "amd64", "exe")
+          add(f"Swiflow-{version}-arm64.exe", "windows", "arm64", "exe")
+
+          manifest = {
+              "schemaVersion": 1,
+              "version": version,
+              "channel": "stable",
+              "name": f"Swiflow {version}",
+              "notes": "",
+              "publishedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "artifacts": artifacts,
+          }
+          pathlib.Path("update.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          print(pathlib.Path("update.json").read_text())
+          PY
 
       - uses: softprops/action-gh-release@v2
         with:

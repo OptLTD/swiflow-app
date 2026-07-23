@@ -54,7 +54,9 @@ Chromium 需要足够的 `/dev/shm`（`compose.yml` 已设 `shm_size: 256mb`）�
 - 生成并上传 `SHA256SUMS`（更新时校验下载完整性）
 - 创建 GitHub Release 并挂上上述产物（当前为**未签名**包；macOS 为 ad-hoc codesign）
 
-桌面端内置 [Wails updater](https://v3.wails.io/zh-cn/tutorials/04-self-update-a-wails-app/)：菜单 **Check for Updates…** / 关于页「检查更新」，以及每日后台检查。版本号通过 `-ldflags` 注入 `internal/version.Version`（与 tag 对齐，勿带 `v` 前缀）。资源按扩展名区分平台（`.zip`→macOS，`.exe`→Windows），文件名只保留架构。
+桌面端内置 [Wails updater](https://v3.wails.io/zh-cn/tutorials/04-self-update-a-wails-app/)（`endpoint` provider）：读取 `https://dl.swiflow.cc/update.json`，产物从 R2（`r2.swiflow.cc`）下载。Release 发布后由 [.github/workflows/sync-to-r2.yml](../.github/workflows/sync-to-r2.yml) 同步附件到 Cloudflare R2。版本号通过 `-ldflags` 注入 `internal/version.Version`（与 tag 对齐，勿带 `v` 前缀）。
+
+Worker 需将 `/update.json` 反代到 R2（或直接用 `r2.swiflow.cc/update.json`，可用环境变量 `SWIFLOW_UPDATE_MANIFEST` 覆盖）。
 
 ```bash
 git tag v0.2.0

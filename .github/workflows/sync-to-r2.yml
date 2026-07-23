@@ -1,0 +1,82 @@
+name: Sync Assets to Cloudflare R2
+
+on:
+  release:
+    types: [published, edited]
+
+jobs:
+  sync-release-to-r2:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      R2_BUCKET_NAME: swiflow
+      R2_ENDPOINT_URL: https://2d002fceba7555e1c72fd486005708ea.r2.cloudflarestorage.com
+
+    steps:
+      - name: Debug context
+        run: |
+          echo "Release ID: ${{ github.event.release.id }}"
+          echo "Tag: ${{ github.event.release.tag_name }}"
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          api_url="https://api.github.com/repos/${{ github.repository }}/releases/${{ github.event.release.id }}"
+          release_info=$(curl -fLsS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url")
+
+          echo "$release_info" | jq -r '.assets[]?.browser_download_url // empty' | while read -r url; do
+            [ -z "$url" ] && continue
+            filename="${url##*/}"
+            echo "Downloading $filename"
+            curl -fL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/octet-stream" \
+              -o "release-assets/${filename}" \
+              "$url"
+          done
+          ls -lh release-assets/ || true
+
+      - name: Setup R2 credentials
+        run: |
+          pip install --quiet awscli
+          mkdir -p ~/.aws
+          cat > ~/.aws/credentials <<EOF
+          [default]
+          aws_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}
+          aws_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}
+          EOF
+          # Strip leading spaces that YAML indentation may introduce
+          sed -i 's/^[[:space:]]*//' ~/.aws/credentials
+          cat > ~/.aws/config <<EOF
+          [default]
+          region=auto
+          EOF
+          sed -i 's/^[[:space:]]*//' ~/.aws/config
+
+      - name: Upload to R2
+        run: |
+          set -euo pipefail
+          [ -d release-assets ] || exit 0
+          shopt -s nullglob
+          files=(release-assets/*)
+          [ ${#files[@]} -eq 0 ] && echo "No assets to upload" && exit 0
+          for f in "${files[@]}"; do
+            name="$(basename "$f")"
+            echo "Uploading $name"
+            aws s3 cp "$f" "s3://${R2_BUCKET_NAME}/${name}" \
+              --endpoint-url "$R2_ENDPOINT_URL" \
+              --no-progress
+          done
+          echo "Upload complete"
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf release-assets
