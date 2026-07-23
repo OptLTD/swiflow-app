@@ -1,5 +1,5 @@
 .PHONY: dev dev-backend dev-frontend build image test migrate tidy \
-	macos macos-app windows windows-exe \
+	macos macos-app windows windows-amd64 windows-arm64 windows-exe \
 	wails3 wails3-frontend wails3-app
 
 # Wails CGO objects must match the linker min macOS version to avoid ld warnings.
@@ -61,12 +61,12 @@ macos-app:
 # Usage: make windows
 # Output: bin/Swiflow-installer.exe
 windows:
-	@command -v wails3 >/dev/null 2>&1 || { echo "error: wails3 not found (go install github.com/wailsapp/wails/v3/cmd/wails3@latest)"; exit 1; }
+	@command -v wails3 >/dev/null 2>&1 || { echo "error: wails3 not found (go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.117)"; exit 1; }
 	@command -v makensis >/dev/null 2>&1 || { echo "error: makensis not found (brew install makensis / choco install nsis)"; exit 1; }
 	cd webui && pnpm install && pnpm build
 	mkdir -p bin
-	$(MAKE) windows-exe ARCH=amd64
-	$(MAKE) windows-exe ARCH=arm64
+	# Build both arches in parallel (each target sets its own ARCH).
+	$(MAKE) -j2 windows-amd64 windows-arm64
 	wails3 generate webview2bootstrapper -dir build/windows/nsis
 	# NSIS File on Windows fails with D:/ abs paths and ../../../ relative paths
 	# (especially under Git Bash). Stage binaries next to project.nsi.
@@ -79,6 +79,12 @@ windows:
 	rm -f build/windows/nsis/$(APP_NAME)-amd64.exe build/windows/nsis/$(APP_NAME)-arm64.exe
 	@test -f bin/$(APP_NAME)-installer.exe || { echo "error: missing bin/$(APP_NAME)-installer.exe"; exit 1; }
 	@echo "Installer: bin/$(APP_NAME)-installer.exe"
+
+windows-amd64:
+	$(MAKE) windows-exe ARCH=amd64
+
+windows-arm64:
+	$(MAKE) windows-exe ARCH=arm64
 
 # Build one Windows arch (ARCH=amd64|arm64). Used by `make windows`.
 windows-exe:

@@ -54,9 +54,11 @@ Chromium 需要足够的 `/dev/shm`（`compose.yml` 已设 `shm_size: 256mb`）�
 - 生成并上传 `SHA256SUMS`（更新时校验下载完整性）
 - 创建 GitHub Release 并挂上上述产物（当前为**未签名**包；macOS 为 ad-hoc codesign）
 
-桌面端内置 [Wails updater](https://v3.wails.io/zh-cn/tutorials/04-self-update-a-wails-app/)（`endpoint` provider）：读取 `https://dl.swiflow.cc/update.json`，产物从 R2 的 `release-assets/` 前缀下载。打 tag 发版时，`release.yml` 的 GitHub Release job **末尾直接上传 R2**（因默认 `GITHUB_TOKEN` 创建的 Release 不会触发其它 workflow）。手动改 Release 后可用 [.github/workflows/sync-to-r2.yml](../.github/workflows/sync-to-r2.yml) 补同步。版本号通过 `-ldflags` 注入 `internal/version.Version`（与 tag 对齐，勿带 `v` 前缀）。
+桌面端内置 [Wails updater](https://v3.wails.io/zh-cn/tutorials/04-self-update-a-wails-app/)（`endpoint` provider）：读取 `https://dl.swiflow.cc/update.json`，产物从 `https://dl.swiflow.cc/release-assets/...` 下载（Worker CDN 缓存，源站为 R2 `release-assets/`）。打 tag 发版时，`release.yml` 的 GitHub Release job **末尾直接上传 R2**（因默认 `GITHUB_TOKEN` 创建的 Release 不会触发其它 workflow）。手动改 Release 后可用 [.github/workflows/sync-to-r2.yml](../.github/workflows/sync-to-r2.yml) 补同步。版本号通过 `-ldflags` 注入 `internal/version.Version`（与 tag 对齐，勿带 `v` 前缀）。可用环境变量 `SWIFLOW_UPDATE_MANIFEST` 覆盖 manifest 地址。
 
-Worker 需将 `/update.json` 反代到 `https://r2.swiflow.cc/release-assets/update.json`（也可用环境变量 `SWIFLOW_UPDATE_MANIFEST` 直接指向该地址）。
+CDN Worker 完整脚本见 [cloudflare-worker-dl.js](./cloudflare-worker-dl.js)：
+- `GET /update.json` → R2 `release-assets/update.json`
+- `GET /release-assets/*` → R2 `release-assets/*`（安装包长缓存；`update.json` / `SHA256SUMS` 短 TTL）
 
 ```bash
 git tag v0.2.0

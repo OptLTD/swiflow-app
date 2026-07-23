@@ -25,9 +25,24 @@ jobs:
           cache: pnpm
           cache-dependency-path: webui/pnpm-lock.yaml
 
-      - uses: actions/setup-go@v5
+      # Default setup-go cache packs GOCACHE+GOMODCACHE (~650MB) and is slower to
+      # restore than a fresh go mod download on tag releases.
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
+      - name: Download Go modules
+        run: go mod download
 
       - name: Version from tag
         id: ver
@@ -71,15 +86,38 @@ jobs:
           cache: pnpm
           cache-dependency-path: webui/pnpm-lock.yaml
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-mod-${{ runner.os }}-
+
+      - name: Cache wails3 CLI
+        uses: actions/cache@v4
+        with:
+          # Pin to the same Wails version as go.mod.
+          path: ~/go/bin
+          key: wails3-v3.0.0-alpha2.117-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Download Go modules
+        shell: bash
+        run: go mod download
 
       - name: Install NSIS + make + wails3
         shell: bash
         run: |
           choco install nsis make -y --no-progress
-          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          if [[ ! -x "$(go env GOPATH)/bin/wails3" && ! -x "$(go env GOPATH)/bin/wails3.exe" ]]; then
+            go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.117
+          fi
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           # Chocolatey NSIS shim or classic install path
           if [[ -d "/c/Program Files (x86)/NSIS" ]]; then
@@ -147,8 +185,8 @@ jobs:
       - name: SHA256SUMS + Wails update.json
         env:
           VERSION: ${{ github.ref_name }}
-          # Public CDN base for in-app updater downloads (synced under release-assets/).
-          ASSET_BASE: https://r2.swiflow.cc/release-assets
+          # Public CDN base (Worker on dl.swiflow.cc caches / proxies R2 release-assets/).
+          ASSET_BASE: https://dl.swiflow.cc/release-assets
         run: |
           set -euo pipefail
           VERSION="${VERSION#v}"
