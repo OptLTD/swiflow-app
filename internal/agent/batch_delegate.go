@@ -120,7 +120,7 @@ func batchDelegateNudge(paths []string) string {
 	b.WriteString(strconv.Itoa(len(paths)))
 	b.WriteString(" @/ files for a batch (likely a table/Excel). content_extract is DISABLED on the MAIN agent. ")
 	b.WriteString("Do NOT ask which columns — use sensible defaults (单据编号、车牌号、装货量、卸货量、日期…). ")
-	b.WriteString("Call delegate_task ONCE now (synchronous full handoff). Put EVERY path below inside the goal text (not a separate path arg), ")
+	b.WriteString("Call subagent_spawn now (async). Put EVERY path below inside the goal text (not a separate path arg), ")
 	b.WriteString("ask the child to write an xlsx under workspace, use max_rounds ≥ 16, and let the child choose tools. Do not one-file-per-delegate:\n")
 	for _, p := range paths {
 		b.WriteString(p)
@@ -129,9 +129,9 @@ func batchDelegateNudge(paths []string) string {
 	return b.String()
 }
 
-// isChildRun reports whether opts belong to a delegate_task child.
+// isChildRun reports whether opts belong to a subagent child.
 func isChildRun(opts RunOpts) bool {
-	return opts.DenyTools["delegate_task"]
+	return opts.DenyTools["subagent_spawn"]
 }
 
 func denyContentExtract(opts *RunOpts) {

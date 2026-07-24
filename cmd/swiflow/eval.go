@@ -41,7 +41,7 @@ func evalAsyncImgExtractCmd() *cobra.Command {
 Default (scripted): drives soft-async OCR overlap + premature-stop re-ask.
 
 --live: real chat model; after ~2 soft-async OCR on main with remaining >3s,
-content_extract is denied and main should call delegate_task for the rest.`,
+content_extract is denied and main should call subagent_spawn for the rest.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if live {
 				return runEvalLiveDelegate(casesDir, agentKey, time.Duration(timeoutSec)*time.Second)
@@ -51,7 +51,7 @@ content_extract is denied and main should call delegate_task for the rest.`,
 	}
 	cmd.Flags().StringVar(&casesDir, "cases", "data/testcases/async-img-extract", "directory of sample images")
 	cmd.Flags().StringVar(&agentKey, "agent", "default", "agent key")
-	cmd.Flags().BoolVar(&live, "live", false, "use real LLM from config/DB (test delegate_task routing)")
+	cmd.Flags().BoolVar(&live, "live", false, "use real LLM from config/DB (test subagent_spawn routing)")
 	cmd.Flags().IntVar(&timeoutSec, "timeout", 300, "max wall-clock seconds for --live (0 = no limit)")
 	return cmd
 }
@@ -134,7 +134,7 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 					fmt.Printf("  args: %s\n", trimOneLine(string(b), 240))
 				}
 			}
-			if ev.Name == "delegate_task" {
+			if ev.Name == "subagent_spawn" {
 				parentDelegate++
 				delegateArgs = append(delegateArgs, ev.Arguments)
 				if g, _ := ev.Arguments["goal"].(string); g != "" {
@@ -146,7 +146,7 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 			}
 		case "tool_result":
 			fmt.Printf("  ← %s result (%d bytes)%s\n", ev.Name, len(ev.Result), map[bool]string{true: " ERROR", false: ""}[ev.IsError])
-			if ev.Name == "delegate_task" && ev.Result != "" {
+			if ev.Name == "subagent_spawn" && ev.Result != "" {
 				fmt.Printf("  summary snippet: %s\n", trimOneLine(ev.Result, 280))
 			}
 			if ev.Result == agent.SoftAsyncPlaceholder {
@@ -194,7 +194,7 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 	fmt.Println("=== live observations ===")
 	fmt.Printf("elapsed:              %s\n", elapsed.Round(time.Millisecond))
 	fmt.Printf("parent tool order:    %v\n", toolOrder)
-	fmt.Printf("parent delegate_task: %d\n", parentDelegate)
+	fmt.Printf("parent subagent_spawn: %d\n", parentDelegate)
 	fmt.Printf("parent content_extract: %d\n", parentExtract)
 	fmt.Printf("child sessions:       %d\n", childSessions)
 	fmt.Printf("child content_extract msgs: %d\n", childExtract)
@@ -204,7 +204,7 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 
 	var fails []string
 	if parentDelegate == 0 {
-		fails = append(fails, "main agent never called delegate_task after slow async handoff")
+		fails = append(fails, "main agent never called subagent_spawn after slow async handoff")
 	}
 	if parentExtract > 3 {
 		fails = append(fails, fmt.Sprintf("main content_extract=%d; after handoff should stop stacking (want ≤3)", parentExtract))
@@ -212,14 +212,14 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 	if parentDelegate > 0 {
 		delIdx := -1
 		for i, n := range toolOrder {
-			if n == "delegate_task" {
+			if n == "subagent_spawn" {
 				delIdx = i
 				break
 			}
 		}
 		for i := delIdx + 1; i < len(toolOrder); i++ {
 			if toolOrder[i] == "content_extract" {
-				fails = append(fails, "parent called content_extract after delegate_task")
+				fails = append(fails, "parent called content_extract after subagent_spawn")
 				break
 			}
 		}
@@ -227,20 +227,20 @@ func runEvalLiveDelegate(casesDir, agentKey string, wallTimeout time.Duration) e
 	// Full handoff quality: one batch goal covering remaining paths; no invented path/tools args.
 	for i, args := range delegateArgs {
 		if _, ok := args["path"]; ok {
-			fails = append(fails, fmt.Sprintf("delegate_task[%d] invented path arg", i))
+			fails = append(fails, fmt.Sprintf("subagent_spawn[%d] invented path arg", i))
 		}
 		if _, ok := args["tools"]; ok {
-			fails = append(fails, fmt.Sprintf("delegate_task[%d] passed tools whitelist (removed)", i))
+			fails = append(fails, fmt.Sprintf("subagent_spawn[%d] passed tools whitelist (removed)", i))
 		}
 		goal, _ := args["goal"].(string)
 		atCount := strings.Count(goal, "@/")
 		// After cost probe (~2), remaining should be listed; require ≥3 @/ in goal for this 7-file case.
 		if len(files) >= 5 && atCount < 3 {
-			fails = append(fails, fmt.Sprintf("delegate_task[%d] goal has %d @/ paths (want batch ≥3); goal=%s", i, atCount, trimOneLine(goal, 160)))
+			fails = append(fails, fmt.Sprintf("subagent_spawn[%d] goal has %d @/ paths (want batch ≥3); goal=%s", i, atCount, trimOneLine(goal, 160)))
 		}
 	}
 	if parentDelegate > 1 {
-		fails = append(fails, fmt.Sprintf("delegate_task called %d times; want one full handoff", parentDelegate))
+		fails = append(fails, fmt.Sprintf("subagent_spawn called %d times; want one full handoff", parentDelegate))
 	}
 	if !sawDone && err == nil && runErr == "" {
 		fails = append(fails, "missing done event")

@@ -14,6 +14,7 @@ const props = defineProps<{
   isError?: boolean
   progress?: string
   childSession?: string
+  childActive?: boolean
   startedAt?: number
   endedAt?: number
   durationMs?: number
@@ -61,18 +62,27 @@ function trim(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + '…' : s
 }
 
-// Prefer the live child-session key from progress events; fall back to the final
-// delegate_task result JSON once the call completes.
+// Prefer the live child-session key from progress events; fall back to args / spawn result JSON.
 const childSession = computed(() => {
-  if (props.name !== 'delegate_task') return ''
   if (props.childSession) return props.childSession
-  if (!props.content) return ''
+  const fromArgs = pick(props.args, 'child_session').trim()
+  if (props.name === 'subagent_status' || props.name === 'subagent_wait') return fromArgs
+  if (props.name !== 'subagent_spawn') return ''
+  if (!props.content) return fromArgs
   try {
     const j = JSON.parse(props.content)
-    return typeof j.child_session === 'string' ? j.child_session : ''
+    return typeof j.child_session === 'string' ? j.child_session : fromArgs
   } catch {
-    return ''
+    return fromArgs
   }
+})
+
+const canViewChild = computed(() => {
+  return !!childSession.value && (
+    props.name === 'subagent_spawn' ||
+    props.name === 'subagent_status' ||
+    props.name === 'subagent_wait'
+  )
 })
 
 /** Workspace-relative file path for file tools (preview in a new app tab). */
@@ -200,8 +210,16 @@ const intent = computed(() => {
     }
     case 'skill_draft':
       return t('toolCall.skillDraft', { slug: trim(pick(a, 'slug'), 40) })
-    case 'delegate_task':
-      return t('toolCall.delegate', { goal: trim(pick(a, 'goal'), 50) })
+    case 'subagent_spawn':
+      return t('toolCall.subagentSpawn', { goal: trim(pick(a, 'goal'), 50) })
+    case 'subagent_status':
+      return t('toolCall.subagentStatus', { session: trim(pick(a, 'child_session'), 40) })
+    case 'subagent_wait':
+      return t('toolCall.subagentWait', { session: trim(pick(a, 'child_session'), 40) })
+    case 'experience_write':
+      return t('toolCall.experienceWrite', { summary: trim(pick(a, 'summary'), 50) })
+    case 'experience_list':
+      return t('toolCall.experienceList')
     case 'todo_write':
       return t('toolCall.todoWrite')
     case 'todo_read':
@@ -249,6 +267,11 @@ const running = computed(() => {
   if (props.isError) return false
   if (props.endedAt != null || props.durationMs != null) return false
   return !props.content
+})
+
+const showChildProgress = computed(() => {
+  return props.name === 'subagent_spawn' && !!childSession.value &&
+    (props.childActive || running.value || !!props.progress)
 })
 
 /** URL returned by light_app_launch — shown as an "打开" action button. */
@@ -330,6 +353,14 @@ async function openVisit(e: Event) {
           @keydown.enter.prevent="openLaunch"
         >{{ t('toolCall.open') }}</span>
         <span
+          v-if="canViewChild"
+          role="button"
+          tabindex="0"
+          class="text-neutral-700 hover:underline cursor-pointer"
+          @click="viewChild"
+          @keydown.enter.prevent="viewChild"
+        >{{ t('toolCall.view') }}</span>
+        <span
           class="inline-flex items-center gap-1"
           :class="isError ? 'text-red-600' : running ? 'text-neutral-500' : 'text-green-600'"
         >
@@ -339,27 +370,11 @@ async function openVisit(e: Event) {
       </span>
     </button>
     <div
-      v-if="name === 'delegate_task' && running && (progress || childSession)"
+      v-if="showChildProgress"
       class="px-2 py-1 bg-neutral-50 border-t border-neutral-100 flex items-center gap-1.5"
     >
       <span class="swiflow-spin shrink-0"></span>
       <span class="truncate text-neutral-500 flex-1">{{ progress || t('toolCall.subagentRunning') }}</span>
-      <button
-        v-if="childSession"
-        type="button"
-        class="shrink-0 text-neutral-700 hover:underline"
-        @click="viewChild"
-      >{{ t('toolCall.view') }}</button>
-    </div>
-    <div
-      v-if="name === 'delegate_task' && !running && !isError && childSession"
-      class="px-2 py-1 bg-neutral-50 border-t border-neutral-100"
-    >
-      <button
-        type="button"
-        class="text-neutral-700 hover:underline"
-        @click="viewChild"
-      >{{ t('toolCall.viewSubagent') }}</button>
     </div>
     <pre v-show="open" class="p-2 whitespace-pre-wrap max-h-64 overflow-y-auto bg-neutral-50 border-t border-neutral-100">{{ body }}</pre>
   </div>

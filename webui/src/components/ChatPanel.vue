@@ -118,6 +118,7 @@ interface Msg {
   streaming?: boolean
   progress?: string
   childSession?: string
+  childActive?: boolean
   startedAt?: number
   endedAt?: number
   durationMs?: number
@@ -157,8 +158,16 @@ function toolActivityLabel(m: Msg): string {
       return t('chat.activitySearch', { query: trim(pick('query'), 40) })
     case 'browser':
       return t('chat.activityBrowser', { action: pick('action') || '' })
-    case 'delegate_task':
-      return t('chat.activityDelegate', { goal: trim(pick('goal'), 40) })
+    case 'subagent_spawn':
+      return t('chat.activitySubagentSpawn', { goal: trim(pick('goal'), 40) })
+    case 'subagent_status':
+      return t('chat.activitySubagentStatus', { session: trim(pick('child_session'), 24) })
+    case 'subagent_wait':
+      return t('chat.activitySubagentWait', { session: trim(pick('child_session'), 24) })
+    case 'experience_write':
+      return t('chat.activityExperienceWrite', { summary: trim(pick('summary'), 40) })
+    case 'experience_list':
+      return t('chat.activityExperienceList')
     default:
       return name
   }
@@ -190,14 +199,14 @@ const statusBar = computed(() => {
     for (let i = messages.value.length - 1; i >= 0; i--) {
       const m = messages.value[i]
       if (m.role !== 'tool') continue
-      if (m.content || m.isError) continue
-      if (m.tool_name === 'delegate_task') {
+      if (m.tool_name === 'subagent_spawn' && m.childActive) {
         return {
           kind: 'sub' as const,
           text: m.progress || toolActivityLabel(m) || t('chat.statusSubagent'),
           warn: !!latestWarn,
         }
       }
+      if (m.content || m.isError) continue
       return {
         kind: 'tool' as const,
         text: toolActivityLabel(m),
@@ -389,6 +398,20 @@ function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Ms
     if (t) {
       if (ev.child) t.childSession = ev.child
       if (ev.content) t.progress = ev.content
+      if (t.tool_name === 'subagent_spawn') t.childActive = true
+    }
+  } else if (ev.type === 'subagent_progress') {
+    const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
+    if (t) {
+      if (ev.child) t.childSession = ev.child
+      if (ev.content) t.progress = ev.content
+      t.childActive = true
+    }
+  } else if (ev.type === 'subagent_done') {
+    const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
+    if (t) {
+      t.childActive = false
+      if (ev.content) t.progress = ev.content
     }
   } else if (ev.type === 'tool_result') {
     const t = messages.value.find((m) => m.role === 'tool' && m.id === ev.id)
@@ -397,6 +420,13 @@ function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Ms
       t.isError = !!ev.is_error || looksLikeToolError(ev.result)
       t.endedAt = Date.now()
       if (typeof ev.duration_ms === 'number') t.durationMs = ev.duration_ms
+      if (t.tool_name === 'subagent_spawn' && ev.result) {
+        try {
+          const j = JSON.parse(ev.result)
+          if (j.child_session) t.childSession = String(j.child_session)
+          if (j.status === 'running') t.childActive = true
+        } catch { /* ignore */ }
+      }
     }
   } else if (ev.type === 'harness_warn') {
     const code = ev.name || 'drift'
@@ -475,7 +505,7 @@ function mapStoredMessages(raw: Message[], opts?: { runActive?: boolean }): Msg[
   if (!runActive) {
     for (const m of out) {
       if (m.role === 'tool' && !m.content && m.endedAt == null) {
-        m.content = t('chat.toolResultMissing')
+        m.content = t('chat.toolError')
         m.isError = true
         m.endedAt = m.startedAt
       }
@@ -953,6 +983,7 @@ function gapClass(m: Msg, i: number): string {
                 :is-error="m.isError"
                 :progress="m.progress"
                 :child-session="m.childSession"
+                :child-active="m.childActive"
                 :started-at="m.startedAt"
                 :ended-at="m.endedAt"
                 :duration-ms="m.durationMs"

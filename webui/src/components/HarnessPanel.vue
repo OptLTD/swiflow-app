@@ -70,7 +70,6 @@ onMounted(() => {
       <div class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-neutral-200">
         <div>
           <div class="text-sm font-medium text-neutral-800">{{ t('harness.title') }}</div>
-          <div class="text-xs text-neutral-400">{{ t('harness.subtitle') }}</div>
         </div>
         <div class="flex items-center gap-2">
           <button

@@ -1,7 +1,7 @@
 // Package agent — bounded concurrent tool executor. Spec §6.7.
 //
 // One turn's tool calls run here: independent tools execute concurrently (capped
-// by maxParallelTools) with a per-call timeout; serial tools (delegate_task /
+// by maxParallelTools) with a per-call timeout; serial tools (subagent_wait /
 // clarify / window_*) run sequentially. All calls are awaited before the loop
 // starts the next LLM turn, and results are appended by the single loop writer.
 package agent
@@ -33,7 +33,7 @@ type toolOutcome struct {
 // toolNeedsSerial reports tools that must run alone/sequentially: sub-agent runs
 // and UI bridges must fully finish before the parent continues.
 func toolNeedsSerial(name string) bool {
-	return name == "clarify" || name == "delegate_task" || strings.HasPrefix(name, "window_")
+	return name == "clarify" || name == "subagent_wait" || strings.HasPrefix(name, "window_")
 }
 
 // toolTimeout is the single source of truth for per-tool timeouts.
@@ -44,8 +44,8 @@ func (r *Runner) toolTimeout(name string) time.Duration {
 		}
 	}
 	switch name {
-	case "clarify", "delegate_task":
-		// Interactive / nested runs are naturally long; bound them generously.
+	case "clarify", "subagent_wait":
+		// Interactive / blocking collect; bound generously.
 		return 15 * time.Minute
 	}
 	if r.deps.ToolTimeoutSec > 0 {
@@ -143,8 +143,7 @@ func (r *Runner) runToolOne(runCtx context.Context, sessionID, agentKey string, 
 	timeout := r.toolTimeout(tc.Name)
 	tctx, cancel := context.WithTimeout(runCtx, timeout)
 	defer cancel()
-	// Live progress: serial tools (delegate_task) run on this goroutine, so it is
-	// safe to publish tool_progress directly onto the foreground stream.
+	// Live progress: serial tools run on this goroutine; subagent_spawn is fast/async.
 	emitProgress := func(p tool.ToolProgress) {
 		if publisher == nil {
 			return

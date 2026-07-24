@@ -125,7 +125,7 @@ Built by `buildSystem`:
 - `## Scheduling` — `schedule_run` / `schedule_create`
 - `## Skill authoring` — `skill_manage` / `skill_draft`
 - `## Checklist` — `todo_write` / `todo_read`
-- `## Delegation` — `delegate_task` (summary-only child run)
+- `## Subagents` — `subagent_spawn` / `subagent_status` / `subagent_wait` (async child run)
 
 Built-in skill guides: `embed/init-skills/window-context/`, `reflection-loop/`.
 
@@ -138,7 +138,7 @@ Built-in skill guides: `embed/init-skills/window-context/`, `reflection-loop/`.
 |------------|------------|
 | Different sessions running at once | **Yes** (multi Chat tabs, parallel requests, cron/`schedule_run` on other keys) |
 | Same session second run while busy | **Queued** → HTTP **202** + FIFO; auto `Run` after exit |
-| Isolated subagent tree / nested spawn | **Yes** via `delegate_task` (child session; no nested delegate) |
+| Isolated subagent tree / nested spawn | **Yes** via `subagent_spawn` (async; child session; no nested subagent tools) |
 | Global max concurrent runs | **Yes** (`max_concurrent_runs`; 0 = unlimited) |
 | FS write mutex | **No** |
 | Browser multi-page | **No** — single shared page pool; concurrent gate helps |
@@ -186,7 +186,7 @@ Event types from the runner: `delta`, `thinking`, `tool_call`, `tool_result`,
 
 `fs_read`, `fs_write`, `fs_list`, `fs_edit`, `web_fetch`, `web_search`, `exec`,
 `browser`, `skill_use`, `skill_search`, `skill_manage`, `skill_draft`,
-`todo_write`, `todo_read`, `delegate_task`, `clarify`, `schedule_run`, `schedule_create`,
+`todo_write`, `todo_read`, `subagent_spawn`, `subagent_status`, `subagent_wait`, `clarify`, `schedule_run`, `schedule_create`,
 `window_opened`, `window_active`, `window_open`, plus MCP `mcp_*`.
 
 Config gates: `tools.exec_enabled`, `tools.browser_enabled` /

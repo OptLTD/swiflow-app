@@ -70,8 +70,9 @@ func TestChildExitsCleanlyOnLLMError(t *testing.T) {
 		case "error":
 			sawErr = ev.Error
 		}
-	}, RunOpts{MaxRounds: 5, DenyTools: map[string]bool{"delegate_task": true, "clarify": true}})
-
+	}, RunOpts{MaxRounds: 5, DenyTools: map[string]bool{
+		"subagent_spawn": true, "subagent_status": true, "subagent_wait": true, "clarify": true,
+	}})
 	if err != nil {
 		t.Fatalf("want clean exit (nil err), got %v", err)
 	}

@@ -49,10 +49,10 @@ withDefaults(
       />
       <circle cx="8" cy="8" r="2.1" />
     </template>
-    <!-- Arrow up into tray (software update) -->
+    <!-- Download update (mirror of send + base line) -->
     <template v-else-if="name === 'update'">
-      <path d="M8 10.5V3.5M8 3.5L5 6.5M8 3.5l3 3" stroke-width="1.5" />
-      <path d="M3.5 11.5v1a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-1" />
+      <path d="M8 3.75V11.5M8 11.5L4.25 8.25M8 11.5l3.75-3.75" stroke-width="1.75" />
+      <path d="M4.25 13.25h7.5" />
     </template>
     <template v-else-if="name === 'folder'">
       <path d="M2 4.5A1 1 0 0 1 3 3.5h3l1 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4.5z" />

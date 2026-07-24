@@ -131,7 +131,7 @@ func runEvalSubagentExit(casesDir, agentKey string, fileN, maxRounds int, childW
 		}
 	}, agent.RunOpts{
 		MaxRounds: maxRounds,
-		DenyTools: map[string]bool{"delegate_task": true, "clarify": true},
+		DenyTools: map[string]bool{"subagent_spawn": true, "subagent_status": true, "subagent_wait": true, "clarify": true},
 	})
 	elapsed := time.Since(t0)
 

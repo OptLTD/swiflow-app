@@ -44,11 +44,15 @@ func TestTrackerGoalAndDelegateChild(t *testing.T) {
 
 	tr.Publish("root-1", agent.Event{Type: "user", Content: "OCR @/a.png @/b.png 汇总成 csv"})
 	tr.Publish("root-1", agent.Event{
-		Type: "tool_call", Name: "delegate_task", ID: "c1",
+		Type: "tool_call", Name: "subagent_spawn", ID: "c1",
 		Arguments: map[string]any{"goal": "extract all images to result.csv", "max_rounds": float64(8)},
 	})
 	tr.Publish("root-1", agent.Event{
-		Type: "tool_progress", ID: "c1", Child: "sub-root-1-abc", Content: "content_extract",
+		Type: "tool_result", Name: "subagent_spawn", ID: "c1",
+		Result: `{"child_session":"sub-root-1-abc","status":"running","goal":"extract all images to result.csv"}`,
+	})
+	tr.Publish("root-1", agent.Event{
+		Type: "subagent_progress", ID: "c1", Child: "sub-root-1-abc", Content: "content_extract", Name: "subagent_spawn",
 	})
 
 	snap, ok := tr.Snapshot("root-1")
@@ -178,15 +182,19 @@ func TestLooksLikeBatchGoal(t *testing.T) {
 	}
 }
 
-func TestDelegateResultJSON(t *testing.T) {
+func TestSubagentDoneJSON(t *testing.T) {
 	hub := &memHub{}
 	tr := NewTracker(hub, nil)
 	defer tr.Close()
 
 	tr.Publish("p", agent.Event{Type: "user", Content: "go"})
 	tr.Publish("p", agent.Event{
-		Type: "tool_call", Name: "delegate_task",
+		Type: "tool_call", Name: "subagent_spawn",
 		Arguments: map[string]any{"goal": "child goal", "max_rounds": float64(6)},
+	})
+	tr.Publish("p", agent.Event{
+		Type: "tool_result", Name: "subagent_spawn",
+		Result: `{"child_session":"sub-p-1","status":"running","goal":"child goal"}`,
 	})
 	body, _ := json.Marshal(map[string]any{
 		"child_session": "sub-p-1",
@@ -194,7 +202,7 @@ func TestDelegateResultJSON(t *testing.T) {
 		"summary":       "stopped",
 		"metrics":       map[string]any{"rounds": 6, "tool_calls": 10, "failures": 1},
 	})
-	tr.Publish("p", agent.Event{Type: "tool_result", Name: "delegate_task", Result: string(body)})
+	tr.Publish("p", agent.Event{Type: "subagent_done", Name: "subagent_spawn", Child: "sub-p-1", Result: string(body)})
 
 	child, ok := tr.Snapshot("sub-p-1")
 	if !ok || child.Status != StatusBudget {

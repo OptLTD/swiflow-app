@@ -176,8 +176,8 @@ func (t *Tracker) observe(sessionID string, ev agent.Event) {
 		if isProgressTool(ev.Name) {
 			st.hadProgressSinceHalf = true
 		}
-		if ev.Name == "delegate_task" {
-			t.onDelegateCallLocked(sessionID, st, ev, now)
+		if ev.Name == "subagent_spawn" {
+			t.onSubagentSpawnCallLocked(sessionID, st, ev, now)
 		}
 		if st.snap.ParentID != "" && st.snap.MaxRounds > 0 &&
 			st.snap.Round >= st.snap.MaxRounds/2 && !st.halfBudgetNoted {
@@ -197,19 +197,23 @@ func (t *Tracker) observe(sessionID string, ev agent.Event) {
 		if ev.Name == "todo_write" || ev.Name == "todo_read" {
 			t.refreshTodosLocked(sessionID, st)
 		}
-		if ev.Name == "delegate_task" && ev.Result != "" {
-			t.onDelegateResultLocked(sessionID, st, ev.Result, now)
+		if ev.Name == "subagent_spawn" && ev.Result != "" {
+			t.onSubagentSpawnResultLocked(sessionID, st, ev.Result, now)
 		}
 		// End of tool round when we stop seeing tool_call — heuristic: leave inToolRound
 		// until delta/done; clear on next non-tool event below.
 
-	case "tool_progress":
+	case "tool_progress", "subagent_progress":
 		st.snap.LastAction = truncate(ev.Content, 120)
 		st.lastProgress = now
+		parentID := sessionID
+		if ev.Type == "subagent_progress" && ev.Name == "subagent_spawn" {
+			st.snap.LastAction = "subagent: " + truncate(ev.Content, 80)
+		}
 		if ev.Child != "" {
 			child := t.ensureLocked(ev.Child, now)
 			if child.snap.ParentID == "" {
-				child.snap.ParentID = sessionID
+				child.snap.ParentID = parentID
 			}
 			child.snap.Status = StatusRunning
 			child.snap.LastAction = truncate(ev.Content, 120)
@@ -223,6 +227,18 @@ func (t *Tracker) observe(sessionID string, ev agent.Event) {
 			if child.snap.StartedAt.IsZero() {
 				child.snap.StartedAt = now
 			}
+			t.linkChildLocked(st, ev.Child)
+		}
+
+	case "subagent_done":
+		st.lastProgress = now
+		if ev.Result != "" {
+			t.onSubagentDoneLocked(sessionID, st, ev.Result, now)
+		} else if ev.Child != "" {
+			child := t.ensureLocked(ev.Child, now)
+			child.snap.ParentID = sessionID
+			child.snap.Status = StatusDone
+			child.snap.UpdatedAt = now
 			t.linkChildLocked(st, ev.Child)
 		}
 
@@ -332,7 +348,7 @@ func (t *Tracker) linkChildLocked(parent *runState, childID string) {
 	parent.snap.Children = append(parent.snap.Children, childID)
 }
 
-func (t *Tracker) onDelegateCallLocked(_ string, parent *runState, ev agent.Event, _ time.Time) {
+func (t *Tracker) onSubagentSpawnCallLocked(_ string, parent *runState, ev agent.Event, _ time.Time) {
 	goal, _ := ev.Arguments["goal"].(string)
 	maxRounds := 10
 	switch v := ev.Arguments["max_rounds"].(type) {
@@ -341,12 +357,45 @@ func (t *Tracker) onDelegateCallLocked(_ string, parent *runState, ev agent.Even
 	case int:
 		maxRounds = v
 	}
-	parent.snap.LastAction = "delegate_task: " + truncate(goal, 80)
+	parent.snap.LastAction = "subagent_spawn: " + truncate(goal, 80)
 	parent.pendingDelegateMax = maxRounds
 	parent.pendingDelegateGoal = goal
 }
 
-func (t *Tracker) onDelegateResultLocked(parentID string, parent *runState, result string, now time.Time) {
+func (t *Tracker) onSubagentSpawnResultLocked(parentID string, parent *runState, result string, now time.Time) {
+	var parsed struct {
+		ChildSession string `json:"child_session"`
+		Status       string `json:"status"`
+		Goal         string `json:"goal"`
+	}
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		return
+	}
+	if parsed.ChildSession == "" {
+		return
+	}
+	t.linkChildLocked(parent, parsed.ChildSession)
+	child := t.ensureLocked(parsed.ChildSession, now)
+	child.snap.ParentID = parentID
+	if child.snap.Goal == "" {
+		if parsed.Goal != "" {
+			child.snap.Goal = truncate(parsed.Goal, 500)
+		} else if parent.pendingDelegateGoal != "" {
+			child.snap.Goal = truncate(parent.pendingDelegateGoal, 500)
+		}
+	}
+	if child.snap.MaxRounds == 0 && parent.pendingDelegateMax > 0 {
+		child.snap.MaxRounds = parent.pendingDelegateMax
+	}
+	child.snap.Status = StatusRunning
+	if child.snap.StartedAt.IsZero() {
+		child.snap.StartedAt = now
+	}
+	child.snap.UpdatedAt = now
+	_ = parsed.Status
+}
+
+func (t *Tracker) onSubagentDoneLocked(parentID string, parent *runState, result string, now time.Time) {
 	var parsed struct {
 		ChildSession string `json:"child_session"`
 		Status       string `json:"status"`
@@ -377,7 +426,7 @@ func (t *Tracker) onDelegateResultLocked(parentID string, parent *runState, resu
 		child.snap.Status = StatusBudget
 	case "stall":
 		child.snap.Status = StatusStall
-	case "error":
+	case "error", "blocked":
 		child.snap.Status = StatusError
 	default:
 		child.snap.Status = StatusDone

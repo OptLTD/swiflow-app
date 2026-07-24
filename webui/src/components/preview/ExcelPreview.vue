@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import jspreadsheet from 'jspreadsheet-ce'
 import LocalSvgIcon from '../LocalSvgIcon.vue'
@@ -13,6 +13,7 @@ const props = defineProps<{ sheets: ExcelSheet[]; path: string }>()
 const emit = defineEmits<{ refresh: [] }>()
 const { t } = useI18n()
 const host = ref<HTMLDivElement | null>(null)
+let mountSeq = 0
 
 function sheetCellCount(data: string[][]): number {
   const rows = data.length
@@ -62,14 +63,25 @@ function buildWorksheets() {
 }
 
 function destroyGrid() {
-  if (!host.value) return
+  const el = host.value
+  if (!el) return
+  // jspreadsheet init is async; destroy only works once `.spreadsheet` exists.
+  // Always clear the host so a remount cannot stack duplicate grids.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  jspreadsheet.destroy(host.value as any)
+  const root = el as any
+  if (root.spreadsheet) {
+    jspreadsheet.destroy(root, true)
+  } else {
+    root.innerHTML = ''
+  }
 }
 
-function mountGrid() {
+async function mountGrid() {
   if (!host.value || !props.sheets.length) return
+  const seq = ++mountSeq
   destroyGrid()
+  await nextTick()
+  if (seq !== mountSeq || !host.value) return
   jspreadsheet(host.value, {
     tabs: true,
     worksheets: buildWorksheets(),
@@ -78,22 +90,27 @@ function mountGrid() {
 
 function toggleEditable() {
   editableMode.value = !editableMode.value
-  mountGrid()
+  void mountGrid()
 }
 
 watch(
   () => [props.path, props.sheets] as const,
   () => {
     resetEditableDefault()
-    mountGrid()
+    void mountGrid()
   },
   { deep: true },
 )
+
 onMounted(() => {
   resetEditableDefault()
-  mountGrid()
+  void mountGrid()
 })
-onBeforeUnmount(destroyGrid)
+
+onBeforeUnmount(() => {
+  mountSeq++
+  destroyGrid()
+})
 </script>
 
 <template>

@@ -646,15 +646,14 @@ patterns (`^[a-zA-Z0-9_-]+$`); dots are not permitted by OpenAI-compatible APIs.
   waiting; mid-run user messages still queue. Abort cancels the wait. Subagents cannot use
   `clarify`.
 
-### `delegate_task`
-- Description: Spawn **one** sub-agent for a **batch** of remaining work; returns final summary only.
-- Parameters: `goal` (required — list every remaining `@/` path and deliverable inline),
-  `context` (optional), `max_rounds` (default 16, max 24). No `path` / `tools` args;
-  the child gets the full toolkit (minus nesting denies) and chooses tools itself.
-- Behavior: child `sessionKey` `sub-{parent}-{id}`; child cannot nest
-  `delegate_task` or `clarify`; parent cancel cancels child; counts toward `max_concurrent_runs`.
-  Parent runs `delegate_task` **synchronously** (not soft-async) with a long tool deadline
-  so the child can finish its round budget.
+### Subagent tools (`subagent_spawn` / `subagent_status` / `subagent_wait`)
+- **`subagent_spawn`**: Start **one** async sub-agent for a batch; returns immediately with `{child_session, status: running}`.
+  Parameters: `goal` (required), `context` (optional), `max_rounds` (default 10, max 16).
+- **`subagent_status`**: Non-blocking progress read (todos, last_action, metrics; summary/artifacts when terminal).
+  Parameter: `child_session` (required).
+- **`subagent_wait`**: Block until child terminal or timeout (default 900s). Allowed only when exactly one subagent is still running for the parent session.
+  Parameters: `child_session` (required), `timeout_seconds` (optional, max 900).
+- Behavior: child `sessionKey` `sub-{parent}-{id}`; child cannot use subagent tools or `clarify`; parent abort cancels children; child runs in background goroutine; progress via `subagent_progress` / `subagent_done` SSE on parent session.
 
 **Panic recovery:** `Registry.Execute` wraps every tool call in a recover; a
 panic becomes a tool-error result (`"error: panic: <msg>"`), not a run crash.

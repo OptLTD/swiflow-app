@@ -30,7 +30,7 @@ func TestShouldForceBatchDelegate(t *testing.T) {
 
 func TestBatchDelegateNudge(t *testing.T) {
 	n := batchDelegateNudge([]string{"@/a.png", "@/b.png", "@/c.png"})
-	if !strings.Contains(n, "delegate_task") || !strings.Contains(n, "@/a.png") {
+	if !strings.Contains(n, "subagent_spawn") || !strings.Contains(n, "@/a.png") {
 		t.Fatalf("nudge=%q", n)
 	}
 	if !strings.Contains(n, "DISABLED on the MAIN agent") {

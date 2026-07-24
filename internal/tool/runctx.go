@@ -5,7 +5,7 @@ import "context"
 type runCtxKey struct{}
 
 // ToolProgress is a lightweight live-progress signal a long-running tool can emit
-// mid-execution (e.g. delegate_task streaming its subagent's latest action). It is
+// mid-execution (e.g. subagent_spawn streaming its subagent's latest action). It is
 // defined here (not in the agent package) to avoid an import cycle.
 type ToolProgress struct {
 	Child   string // subagent session key, if any
@@ -19,7 +19,7 @@ type RunContext struct {
 	// ToolCallID is the id of the current tool call (set by the executor).
 	ToolCallID string
 	// Emit, when non-nil, forwards live progress to the foreground stream. Only
-	// invoked by serial tools that run on the run goroutine (e.g. delegate_task),
+	// invoked by tools during a run (e.g. subagent_spawn progress forwarded to parent UI).
 	// so it is safe to call without extra synchronization.
 	Emit func(ToolProgress)
 }

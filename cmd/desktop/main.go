@@ -314,7 +314,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	tool.RegisterSchedule(toolsReg, st, cronSched)
 	tool.RegisterExperience(toolsReg, st)
 	tool.RegisterTodo(toolsReg, st)
-	tool.RegisterDelegate(toolsReg, runner)
+	tool.RegisterSubagent(toolsReg, runner)
 	tool.RegisterClarify(toolsReg, winBridge)
 	if err := cronSched.Start(ctx); err != nil {
 		slog.Warn("cron start", "error", err)

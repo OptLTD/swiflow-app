@@ -22,7 +22,7 @@ Tracked against [`SPEC.md`](SPEC.md) and [`AGENT_ARCHITECTURE.md`](AGENT_ARCHITE
 | Per-round observe (`internal/observe`) + `tool_timeout_sec` + `max_concurrent_runs` | Done |
 | Mid-run message queue (busy → 202 + FIFO; Abort keeps queue; drain → sesshub) | Done |
 | Chat event Publish to sesshub; UI watch for auto-continue | Done |
-| `delegate_task` subagent (summary-only; full child toolkit; child session tab UI) | Done |
+| `subagent_spawn` / `subagent_status` / `subagent_wait` async subagent (summary via status/wait; child session UI) | Done |
 | `todo_write` / `todo_read` (session checklist; soft acceptance via prompt) | Done |
 | `skill_draft` + drafts API/UI (accept → user-skills; no auto `system_extra`) | Done |
 | Clarify mid-run (`clarify` tool + Chat UI; ≤15m wait via window reply) | Done |

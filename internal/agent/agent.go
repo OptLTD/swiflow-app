@@ -135,17 +135,25 @@ type Runner struct {
 	queue     map[string][]queuedMsg
 	provMu    sync.Mutex
 	provCache map[string]llmclient.Provider
+
+	subagents *SubagentRegistry
 }
 
 // NewRunner constructs a Runner.
 func NewRunner(deps RunnerDeps) *Runner {
-	return &Runner{
+	r := &Runner{
 		deps:      deps,
 		busy:      map[string]struct{}{},
 		cancels:   map[string]context.CancelFunc{},
 		queue:     map[string][]queuedMsg{},
 		provCache: map[string]llmclient.Provider{},
 	}
+	if st, ok := deps.Store.(subagentTodoStore); ok {
+		r.subagents = NewSubagentRegistry(r, deps.Publish, st)
+	} else {
+		r.subagents = NewSubagentRegistry(r, deps.Publish, nil)
+	}
+	return r
 }
 
 // ErrBusy is returned when a session already has a run in flight.
@@ -198,6 +206,9 @@ func (r *Runner) Abort(sessionID string) bool {
 	}
 	observe.Abort(sessionID)
 	cancel()
+	if r.subagents != nil {
+		r.subagents.CancelParent(sessionID)
+	}
 	return true
 }
 
@@ -686,13 +697,16 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 	b.WriteString("\n\n## Parallel tools\n")
 	b.WriteString("You may request several independent tool calls in one turn; they run concurrently and all of their real results are returned before your next turn. ")
 	b.WriteString("Do not invent tool output, and never say you will continue later and stop: either keep calling tools for remaining work, or produce the final deliverable (e.g. Excel) with completed results only.")
-	b.WriteString("\n\n## Delegation\n")
-	b.WriteString("Use delegate_task ONCE for a batch of remaining work (own session + round budget). ")
-	b.WriteString("List every remaining @/ path inside goal; the child chooses tools itself — do not pass path/tools args, and do not one-file-per-delegate. ")
-	b.WriteString("You receive one structured result (status/summary/artifacts/metrics) — large artifacts stay in workspace files cited in the child goal.\n")
-	b.WriteString("When many files or a table/Excel deliverable is obvious, delegate early. ")
-	b.WriteString("When ≥3 @/ files are attached for a table, content_extract is disabled on the main agent by the runtime: do not ask which columns — pick sensible defaults and hand the whole batch to one delegate_task. ")
-	b.WriteString("Never pretend you will continue later without calling tools.")
+	b.WriteString("\n\n## Subagents\n")
+	b.WriteString("Use subagent_spawn for batch work (own session + round budget). List every remaining @/ path inside goal; the child chooses tools itself.\n")
+	b.WriteString("Tools: subagent_spawn (start, returns immediately), subagent_status (non-blocking progress), subagent_wait (blocking collect — use sparingly).\n")
+	b.WriteString("Rules: (1) Spawn before wait — never subagent_wait while you still need to subagent_spawn. ")
+	b.WriteString("(2) When multiple subagents are running, use subagent_status only; wait is rejected unless exactly one is running. ")
+	b.WriteString("(3) Do not mix subagent_spawn and subagent_wait in the same tool-call batch. ")
+	b.WriteString("(4) Maintain a parent checklist with todo_write; read child progress via subagent_status (child maintains its own todos). ")
+	b.WriteString("(5) Claim completion only after terminal status (done|budget|stall|error|blocked|timeout).\n")
+	b.WriteString("When many files or a table/Excel deliverable is obvious, spawn early. ")
+	b.WriteString("When ≥3 @/ files are attached for a table, content_extract is disabled on the main agent: pick sensible columns and subagent_spawn the whole batch once.")
 	b.WriteString("\n\n## Clarify\n")
 	b.WriteString("When you need a user choice, confirmation, or missing info before continuing, call clarify. ")
 	b.WriteString("Do not invent answers; wait for the tool result. Prefer short options when choices are discrete.")
@@ -904,7 +918,12 @@ func (r *Runner) RunChild(ctx context.Context, opts tool.ChildRunOpts, onDelta f
 		MaxRounds:     opts.MaxRounds,
 		MaxWallClock:  opts.MaxWallClock,
 		AllowTools:    allow,
-		DenyTools:     map[string]bool{"delegate_task": true, "clarify": true},
+		DenyTools: map[string]bool{
+			"subagent_spawn":  true,
+			"subagent_status": true,
+			"subagent_wait":   true,
+			"clarify":         true,
+		},
 		ParentSession: opts.ParentSessionID,
 	})
 	cr := tool.ChildResult{
@@ -959,4 +978,58 @@ func (r *Runner) SetProvider(name string, p llmclient.Provider) {
 	r.provMu.Lock()
 	defer r.provMu.Unlock()
 	r.provCache[name] = p
+}
+
+// SpawnSubagent implements tool.SubagentBackend.
+func (r *Runner) SpawnSubagent(ctx context.Context, rc tool.RunContext, goal, contextHint string, maxRounds int) (string, error) {
+	if r.subagents == nil {
+		return "", fmt.Errorf("subagent_spawn unavailable")
+	}
+	parent := rc.SessionID
+	if parent == "" {
+		parent = "unknown"
+	}
+	agentKey := rc.Agent
+	if agentKey == "" {
+		agentKey = "default"
+	}
+	userMsg := goal
+	if contextHint != "" {
+		userMsg = "Context:\n" + contextHint + "\n\nGoal:\n" + goal
+	}
+	return r.subagents.Spawn(SpawnOpts{
+		ParentSession:   parent,
+		SpawnToolCallID: rc.ToolCallID,
+		AgentKey:        agentKey,
+		UserMessage:     userMsg,
+		Goal:            goal,
+		MaxRounds:       maxRounds,
+		OnProgress:      rc.Emit,
+	})
+}
+
+// SubagentStatusJSON implements tool.SubagentBackend.
+func (r *Runner) SubagentStatusJSON(ctx context.Context, parentSession, childSession string) (string, error) {
+	if r.subagents == nil {
+		return "", fmt.Errorf("subagent_status unavailable")
+	}
+	resp, err := r.subagents.Status(ctx, parentSession, childSession)
+	if err != nil {
+		return "", err
+	}
+	b, _ := json.Marshal(resp)
+	return string(b), nil
+}
+
+// SubagentWaitJSON implements tool.SubagentBackend.
+func (r *Runner) SubagentWaitJSON(ctx context.Context, parentSession, childSession string, timeoutSec int) (string, error) {
+	if r.subagents == nil {
+		return "", fmt.Errorf("subagent_wait unavailable")
+	}
+	resp, err := r.subagents.Wait(ctx, parentSession, childSession, time.Duration(timeoutSec)*time.Second)
+	if err != nil {
+		return "", err
+	}
+	b, _ := json.Marshal(resp)
+	return string(b), nil
 }

@@ -48,7 +48,7 @@ func (t *contentExtractTool) Name() string { return ToolContentExtract }
 func (t *contentExtractTool) Description() string {
 	return "Extract text (OCR) or structured fields from one workspace file: image, PDF, doc, or txt. " +
 		"Use prompt for full-text / OCR; fields or schema for structured values. " +
-		"For ≥3 files or table/Excel batch work, use delegate_task instead of calling this repeatedly on the main agent."
+		"For ≥3 files or table/Excel batch work, use subagent_spawn instead of calling this repeatedly on the main agent."
 }
 
 func (t *contentExtractTool) Parameters() map[string]any {

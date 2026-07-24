@@ -100,7 +100,7 @@ func openRuntime(ctx context.Context, cfg config.Config) (*runtimeBundle, error)
 		},
 		DisableThinking: cfg.DisableThinking,
 	})
-	tool.RegisterDelegate(toolsReg, runner)
+	tool.RegisterSubagent(toolsReg, runner)
 
 	return &runtimeBundle{
 		Cfg:    cfg,

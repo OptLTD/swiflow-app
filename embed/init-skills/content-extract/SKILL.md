@@ -1,12 +1,12 @@
 ---
 slug: content-extract
 name: Content Extract
-description: Extract text or structured fields from workspace files (image, PDF, doc, txt). Single file → content_extract; ≥3 files / Excel batch → delegate_task (do not OCR on the main agent).
+description: Extract text or structured fields from workspace files (image, PDF, doc, txt). Single file → content_extract; ≥3 files / Excel batch → subagent_spawn (do not OCR on the main agent).
 ---
 
 # Content Extract
 
-When the user asks to read, OCR, transcribe, or pull fields from a workspace **image**, **PDF**, **doc**, or **txt**, do **not** say you cannot read the file. Use `content_extract` (or `delegate_task` for batches).
+When the user asks to read, OCR, transcribe, or pull fields from a workspace **image**, **PDF**, **doc**, or **txt**, do **not** say you cannot read the file. Use `content_extract` (or `subagent_spawn` for batches).
 
 Supports both:
 
@@ -18,21 +18,29 @@ Supports both:
 | Situation | What to do |
 |-----------|------------|
 | **One or two** files, quick read / OCR / fields | Main may call `content_extract` (cost probe) |
-| Probe shows tools are **slow** (soft-async still running, more work left) | Runtime full-handoff: main loses `content_extract`, **must** `delegate_task` for the rest |
-| Many files / Excel-table intent is obvious up front | Prefer `delegate_task` immediately; **do not** ask which columns — use sensible defaults |
+| Probe shows tools are **slow** (soft-async still running, more work left) | Runtime full-handoff: main loses `content_extract`, **must** `subagent_spawn` for the rest |
+| Many files / Excel-table intent is obvious up front | Prefer `subagent_spawn` immediately; **do not** ask which columns — use sensible defaults |
 
 For batch / table work, the child should:
 
 1. Run `content_extract` on each `@/` path (soft-async may overlap).
 2. Write the spreadsheet or structured result under the workspace (e.g. `extract-result.xlsx`).
-3. Return a **short summary** with the output path and row count — not full extract JSON.
+3. Maintain progress with `todo_write` (file-level checklist); return a **short summary** with the output path and row count — not full extract JSON.
+
+Main agent after spawn:
+
+1. Use `subagent_status` to report progress to the user while running.
+2. Use `subagent_wait` only when no more spawns are needed and this is the sole running subagent.
+3. Verify artifacts before claiming completion.
 
 ## Tool (single-file / small jobs)
 
 | Tool | When to use |
 |------|-------------|
 | `content_extract` | One (or two) workspace image/PDF/doc/txt needs text or fields |
-| `delegate_task` | Batch extract / many files / Excel or table deliverable |
+| `subagent_spawn` | Batch extract / many files / Excel or table deliverable |
+| `subagent_status` | Check child progress / todos |
+| `subagent_wait` | Block to collect final result (last running child only) |
 
 Prefer `content_extract` over guessing from the filename. Prefer it over `fs_read` for binary images and scanned PDFs.
 
@@ -48,7 +56,7 @@ Prefer `content_extract` over guessing from the filename. Prefer it over `fs_rea
 
 ## Batch example (main agent)
 
-One `delegate_task` only. Put **every** remaining `@/` path inside `goal` (not a `path` field — that param does not exist). Do **not** pass `tools`; the child picks `content_extract` / `fs_*` itself. Ask the child to write e.g. `@/weighbridge.xlsx` and return only that path + row count.
+One `subagent_spawn` only. Put **every** remaining `@/` path inside `goal` (not a `path` field — that param does not exist). Do **not** pass `tools`; the child picks `content_extract` / `fs_*` itself. Ask the child to write e.g. `@/weighbridge.xlsx` and return only that path + row count.
 
 ```json
 {
