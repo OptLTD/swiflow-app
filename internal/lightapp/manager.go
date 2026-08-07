@@ -107,15 +107,25 @@ func (m *Manager) RunningPort(id string) int {
 func (m *Manager) Launch(ctx context.Context, id string, cfg LaunchConfig) (url string, port int, err error) {
 	m.Stop(id)
 
+	appDir := m.AppDirAt(cfg.BaseDir, id)
+	entryPoint := cfg.EntryPoint
+	if entryPoint == "" {
+		if cfg.Runtime == RuntimeStatic {
+			entryPoint = "index.html"
+		} else {
+			entryPoint = "app.py"
+		}
+	}
+	if !filepath.IsAbs(entryPoint) {
+		entryPoint = filepath.Join(appDir, entryPoint)
+	}
+	if _, statErr := os.Stat(entryPoint); statErr != nil {
+		return "", 0, fmt.Errorf("entry point missing: %s (write the app files before launch)", entryPoint)
+	}
+
 	port, err = freePort()
 	if err != nil {
 		return "", 0, fmt.Errorf("find free port: %w", err)
-	}
-
-	appDir := m.AppDirAt(cfg.BaseDir, id)
-	entryPoint := cfg.EntryPoint
-	if !filepath.IsAbs(entryPoint) {
-		entryPoint = filepath.Join(appDir, entryPoint)
 	}
 
 	appCtx, cancel := context.WithCancel(context.Background())

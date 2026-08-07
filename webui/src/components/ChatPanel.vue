@@ -168,6 +168,8 @@ function toolActivityLabel(m: Msg): string {
       return t('chat.activityExperienceWrite', { summary: trim(pick('summary'), 40) })
     case 'experience_list':
       return t('chat.activityExperienceList')
+    case 'experience_use':
+      return t('chat.activityExperienceUse')
     default:
       return name
   }
@@ -376,6 +378,13 @@ function handleChatEvent(ev: ChatEvent, getCur: () => Msg | null, setCur: (m: Ms
     if (!cur) { streaming.value = true; cur = pushAssistant(); setCur(cur) }
     cur.thinking = (cur.thinking || '') + (ev.content || '')
   } else if (ev.type === 'tool_call') {
+    // chat SSE + session watch both receive the same publish; if the watch
+    // dedupe window misses a frame we would push the same call_id twice.
+    // Refresh looks fine because DB only stores one call.
+    if (ev.id && messages.value.some((m) => m.role === 'tool' && m.id === ev.id)) {
+      scrollBottom()
+      return
+    }
     if (cur) {
       cur.streaming = false
       if (!cur.content && !cur.thinking) {
@@ -463,7 +472,10 @@ function mapStoredMessages(raw: Message[], opts?: { runActive?: boolean }): Msg[
         out.push({ role: 'assistant', content: m.content, thinking: m.thinking })
       }
       const startedAt = parseTs(m.created_at)
+      const seenCall = new Set<string>()
       for (const tc of tcs) {
+        if (tc.id && seenCall.has(tc.id)) continue
+        if (tc.id) seenCall.add(tc.id)
         const entry: Msg = {
           role: 'tool',
           id: tc.id,
@@ -482,6 +494,8 @@ function mapStoredMessages(raw: Message[], opts?: { runActive?: boolean }): Msg[
       const isErr = looksLikeToolError(m.content)
       const existing = m.tool_call_id ? toolByID.get(m.tool_call_id) : undefined
       if (existing) {
+        // Same call_id may have been executed/persisted twice; keep the first result.
+        if (existing.content || existing.endedAt != null) continue
         existing.content = m.content || ''
         existing.isError = isErr
         existing.endedAt = parseTs(m.created_at)
@@ -717,6 +731,15 @@ async function startWatch(key: string) {
           ev.type !== 'error' &&
           ev.type !== 'harness_warn'
         ) return
+        // Extra guard: same tool_call may arrive on watch after chatStreamActive
+        // flips false at SSE end while a late frame was already applied.
+        if (
+          ev.type === 'tool_call' &&
+          ev.id &&
+          messages.value.some((m) => m.role === 'tool' && m.id === ev.id)
+        ) {
+          return
+        }
         handleChatEvent(ev, watchGetCur, watchSetCur)
       }, ac.signal)
     } catch (e: unknown) {
@@ -769,12 +792,16 @@ async function send() {
   scrollBottom(true)
 
   if (wasStreaming) {
+    // Queued follow-up still gets a chat SSE body; keep watch from double-applying.
+    chatStreamActive = true
     try {
       await chat(key, text, DEFAULT_AGENT_KEY, (ev) => {
         handleChatEvent(ev, watchGetCur, watchSetCur)
       })
     } catch (e: any) {
       error.value = e.message
+    } finally {
+      chatStreamActive = false
     }
     return
   }

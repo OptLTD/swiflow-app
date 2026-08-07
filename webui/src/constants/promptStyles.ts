@@ -4,7 +4,7 @@ export interface PromptStylePreset {
   prompt: string
 }
 
-/** Quick sys_prompt styles for onboarding / agent settings. */
+/** Quick prompt styles for onboarding / agent settings. */
 export const PROMPT_STYLE_PRESETS: PromptStylePreset[] = [
   {
     id: 'concise',

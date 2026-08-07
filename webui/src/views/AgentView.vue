@@ -19,7 +19,8 @@ const providerKind = ref<'text' | 'vision'>('text')
 const activePromptStyle = ref('none')
 const form = ref({
   display: '',
-  sys_prompt: '',
+  prompt: '',
+  charter: '',
 })
 
 const defaultAgent = computed(() =>
@@ -55,9 +56,10 @@ function syncForm() {
   if (!a) return
   form.value = {
     display: a.display || '',
-    sys_prompt: a.sys_prompt || '',
+    prompt: a.prompt || '',
+    charter: a.charter || '',
   }
-  activePromptStyle.value = guessPromptStyleId(form.value.sys_prompt)
+  activePromptStyle.value = guessPromptStyleId(form.value.prompt)
 }
 
 function promptStyleLabel(id: string) {
@@ -74,11 +76,11 @@ function applyPromptStyle(id: string) {
   activePromptStyle.value = id
   const preset = PROMPT_STYLE_PRESETS.find((p) => p.id === id)
   if (!preset) return
-  form.value.sys_prompt = preset.prompt
+  form.value.prompt = preset.prompt
 }
 
 function onPromptInput() {
-  activePromptStyle.value = guessPromptStyleId(form.value.sys_prompt)
+  activePromptStyle.value = guessPromptStyleId(form.value.prompt)
 }
 
 async function onProviderSaved(model: string) {
@@ -107,7 +109,8 @@ async function save() {
     await api.updateAgent(a.key, {
       display: form.value.display,
       txt_model: DEFAULT_PROVIDER_NAME,
-      sys_prompt: form.value.sys_prompt,
+      prompt: form.value.prompt,
+      charter: form.value.charter,
     })
     await agentsStore.load()
     syncForm()
@@ -183,7 +186,7 @@ async function save() {
       <div>
         <label class="block text-xs text-neutral-500 mb-1">Prompt</label>
         <textarea
-          v-model="form.sys_prompt"
+          v-model="form.prompt"
           class="w-full border rounded px-2 py-1.5 text-sm"
           rows="4"
           placeholder="Optional additional system instructions"
@@ -201,6 +204,17 @@ async function save() {
             @click="applyPromptStyle(preset.id)"
           >{{ promptStyleLabel(preset.id) }}</button>
         </div>
+      </div>
+
+      <div>
+        <label class="block text-xs text-neutral-500 mb-1">{{ t('agent.charter') }}</label>
+        <textarea
+          v-model="form.charter"
+          class="w-full border rounded px-2 py-1.5 text-sm font-mono"
+          rows="5"
+          :placeholder="t('agent.charterPlaceholder')"
+        />
+        <p class="text-xs text-neutral-400 mt-1">{{ t('agent.charterHint') }}</p>
       </div>
     </div>
 

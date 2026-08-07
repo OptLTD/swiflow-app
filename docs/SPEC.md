@@ -464,7 +464,7 @@ User messages may cite files as @/relative/path (@/ = workspace root). UI upload
 [UPLOAD FILES START]
 @/uploads/…
 [UPLOAD FILES END]
-Resolve with fs_*. Organize by copying out of uploads — do not move/delete upload originals. The chat UI strips this block from the visible bubble and shows path chips instead.
+Resolve with fs_*. Never write new deliverables at the workspace root — create/reuse a short topic slug folder (e.g. `@/q3-sales-recon/`) and put related outputs there. Copy out of uploads into that folder; do not move/delete upload originals. Reuse the session's existing topic folder when continuing. The chat UI strips this block from the visible bubble and shows path chips instead.
 
 ## Skills
 <skill.Summary(discovered - disabled); omitted entirely if empty>

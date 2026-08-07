@@ -4,7 +4,8 @@ export interface Agent {
   display?: string
   txt_model: string
   img_model?: string
-  sys_prompt?: string
+  prompt?: string
+  charter?: string
 }
 
 export interface Provider {

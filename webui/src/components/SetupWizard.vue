@@ -30,7 +30,7 @@ const llmForm = ref({
 
 const agentForm = ref({
   display: 'Default Agent',
-  sys_prompt: '',
+  prompt: '',
 })
 const activePromptStyle = ref('none')
 
@@ -67,9 +67,9 @@ watch(step, (s) => {
   if (s === 1 && defaultAgent.value) {
     agentForm.value = {
       display: defaultAgent.value.display || 'Default Agent',
-      sys_prompt: defaultAgent.value.sys_prompt || '',
+      prompt: defaultAgent.value.prompt || '',
     }
-    activePromptStyle.value = guessPromptStyleId(agentForm.value.sys_prompt)
+    activePromptStyle.value = guessPromptStyleId(agentForm.value.prompt)
   }
   if (s === 2) {
     void loadRuntime()
@@ -105,11 +105,11 @@ function applyPromptStyle(id: string) {
   activePromptStyle.value = id
   const preset = PROMPT_STYLE_PRESETS.find((p) => p.id === id)
   if (!preset) return
-  agentForm.value.sys_prompt = preset.prompt
+  agentForm.value.prompt = preset.prompt
 }
 
 function onPromptInput() {
-  activePromptStyle.value = guessPromptStyleId(agentForm.value.sys_prompt)
+  activePromptStyle.value = guessPromptStyleId(agentForm.value.prompt)
 }
 
 function syncLLMFromProvider() {
@@ -178,14 +178,14 @@ async function saveAgent() {
       await api.updateAgent(a.key, {
         display: agentForm.value.display,
         txt_model: DEFAULT_PROVIDER_NAME,
-        sys_prompt: agentForm.value.sys_prompt,
+        prompt: agentForm.value.prompt,
       })
     } else {
       await api.createAgent({
         key: DEFAULT_AGENT_KEY,
         display: agentForm.value.display || 'Default Agent',
         txt_model: DEFAULT_PROVIDER_NAME,
-        sys_prompt: agentForm.value.sys_prompt,
+        prompt: agentForm.value.prompt,
       })
     }
     await agentsStore.load()
@@ -358,7 +358,7 @@ onUnmounted(() => {
             <div>
               <label class="block text-xs text-neutral-500 mb-1">Prompt</label>
               <textarea
-                v-model="agentForm.sys_prompt"
+                v-model="agentForm.prompt"
                 class="w-full border rounded px-2 py-1.5 text-sm"
                 rows="4"
                 placeholder="Optional additional system instructions"

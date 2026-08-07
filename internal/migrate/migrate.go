@@ -41,6 +41,25 @@ func ApplyPostgres(ctx context.Context, db *sql.DB, schemaSQL string) error {
 	reconcile := []string{
 		`ALTER TABLE agent_session ADD COLUMN IF NOT EXISTS parent VARCHAR(36) NOT NULL DEFAULT ''`,
 		`ALTER TABLE sys_tenant ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agent_config ADD COLUMN IF NOT EXISTS charter TEXT NOT NULL DEFAULT ''`,
+		// Rename legacy sys_prompt → prompt, or add prompt if neither exists.
+		`DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'agent_config' AND column_name = 'sys_prompt'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'agent_config' AND column_name = 'prompt'
+  ) THEN
+    ALTER TABLE agent_config RENAME COLUMN sys_prompt TO prompt;
+  ELSIF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'agent_config' AND column_name = 'prompt'
+  ) THEN
+    ALTER TABLE agent_config ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+  END IF;
+END $$`,
 	}
 	for _, stmt := range reconcile {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {

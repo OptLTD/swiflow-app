@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS agent_config (
     display      VARCHAR(128),
     txt_model    VARCHAR(64) NOT NULL DEFAULT '',
     img_model    VARCHAR(64) NOT NULL DEFAULT '',
-    sys_prompt   TEXT NOT NULL DEFAULT '',
+    prompt       TEXT NOT NULL DEFAULT '',
+    charter      TEXT NOT NULL DEFAULT '',
     created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE(tid, key)
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS agent_experience (
     summary     TEXT NOT NULL DEFAULT '',
     outcome     VARCHAR(32) NOT NULL DEFAULT 'unknown',
     tags        TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags)),
+    weight      INTEGER NOT NULL DEFAULT 1,
     created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 -- idx_agent_experience_agent created in migrate.applyCanonicalSchema after renames.

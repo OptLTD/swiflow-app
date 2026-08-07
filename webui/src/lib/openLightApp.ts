@@ -22,11 +22,12 @@ export async function openLightApp(url: string, title = 'Light App'): Promise<vo
   const trimmed = url.trim()
   if (!/^https?:\/\//i.test(trimmed)) return
 
-  if (isDesktop()) {
-    const call = await wailsCallNS()
-    if (call) {
-      // Wails v3 FQN = PkgPath.Type.Method (not "main.").
-      const method = 'github.com/OptLTD/swiflow/cmd/desktop.LightAppService.OpenWindow'
+  const call = await wailsCallNS()
+  if (call) {
+    const methods = [
+      'main.LightAppService.OpenWindow',
+    ]
+    for (const method of methods) {
       try {
         if (typeof call.ByName === 'function') {
           await call.ByName(method, trimmed, title)
@@ -37,7 +38,7 @@ export async function openLightApp(url: string, title = 'Light App'): Promise<vo
           return
         }
       } catch {
-        /* fall through to browser */
+        /* try next */
       }
     }
   }

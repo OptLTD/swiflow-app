@@ -124,7 +124,8 @@ Exhaustion fallback: emit a short `continueHint` + `done`.
 
 Built by `buildSystem`:
 
-- `You are Swiflow agent <key>.` + optional `system_extra`
+- `You are Swiflow agent <key>.` + optional `prompt`
+- `## Ways of working` — agent `charter` (or built-in default seed): directional bias for forks
 - `## Workspace` (if configured) — absolute root + `@/` alias (`@/` = workspace root;
   user attachments / mentions map to relative paths for `fs_*`)
 - `## Skills` — only if `Catalog.Summary` is non-empty (no “No skills available.”
@@ -134,6 +135,12 @@ Built by `buildSystem`:
 - `## Skill authoring` — `skill_manage` / `skill_draft`
 - `## Checklist` — `todo_write` / `todo_read`
 - `## Subagents` — `subagent_spawn` / `subagent_status` / `subagent_wait` (async child run)
+- `## Learning & memory` — `experience_*` + charter refinement via corrections
+
+**In-run reflection:** on significant runs (tools used or open todos), a premature
+no-tool “done” is blocked once: the runner injects a self-check nudge, optionally
+narrows tools, and lets the model fix gaps before shipping. Logged via
+`observe.ReflectEnter` / `ReflectExit` / `ClaimRejected` (slog → `swiflow.log`).
 
 Built-in skill guides: `embed/init-skills/window-context/`, `reflection-loop/`.
 

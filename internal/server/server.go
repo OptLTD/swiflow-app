@@ -365,7 +365,8 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		Display   string `json:"display"`
 		TxtModel  string `json:"txt_model"`
 		ImgModel  string `json:"img_model"`
-		SysPrompt string `json:"sys_prompt"`
+		Prompt    string `json:"prompt"`
+		Charter   string `json:"charter"`
 	}
 	if !bindJSON(w, r, &in) {
 		return
@@ -388,12 +389,13 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a := &store.Agent{
-		ID:        support.NewID(),
-		Key:       in.Key,
-		Display:   in.Display,
-		TxtModel:  in.TxtModel,
-		ImgModel:  in.ImgModel,
-		SysPrompt: in.SysPrompt,
+		ID:       support.NewID(),
+		Key:      in.Key,
+		Display:  in.Display,
+		TxtModel: in.TxtModel,
+		ImgModel: in.ImgModel,
+		Prompt:   in.Prompt,
+		Charter:  in.Charter,
 	}
 	if err := s.st.CreateAgent(r.Context(), a); err != nil {
 		writeErr(w, http.StatusConflict, ErrCreateFailed)
@@ -424,7 +426,8 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		Display   *string `json:"display"`
 		TxtModel  *string `json:"txt_model"`
 		ImgModel  *string `json:"img_model"`
-		SysPrompt *string `json:"sys_prompt"`
+		Prompt    *string `json:"prompt"`
+		Charter   *string `json:"charter"`
 	}
 	if !bindJSON(w, r, &in) {
 		return
@@ -449,8 +452,11 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		}
 		fields["img_model"] = *in.ImgModel
 	}
-	if in.SysPrompt != nil {
-		fields["sys_prompt"] = *in.SysPrompt
+	if in.Prompt != nil {
+		fields["prompt"] = *in.Prompt
+	}
+	if in.Charter != nil {
+		fields["charter"] = *in.Charter
 	}
 	if len(fields) == 0 {
 		writeErr(w, http.StatusBadRequest, ErrNoFieldsToUpdate)

@@ -30,7 +30,8 @@ type Agent struct {
 	Display   string `json:"display" db:"display"`
 	TxtModel  string `json:"txt_model" db:"txt_model"`
 	ImgModel  string `json:"img_model" db:"img_model"`
-	SysPrompt string `json:"sys_prompt" db:"sys_prompt"`
+	Prompt    string `json:"prompt" db:"prompt"`
+	Charter   string `json:"charter" db:"charter"`
 	CreatedAt string `json:"created_at" db:"created_at"`
 	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
@@ -84,6 +85,8 @@ type Experience struct {
 	Summary   string   `json:"summary" db:"summary"`
 	Outcome   string   `json:"outcome" db:"outcome"` // success|partial|failure|unknown
 	Tags      []string `json:"tags" db:"-"`
+	// Weight rises when the experience proves useful in later tasks (experience_use).
+	Weight    int      `json:"weight" db:"weight"`
 	CreatedAt string   `json:"created_at" db:"created_at"`
 }
 
@@ -213,6 +216,8 @@ type Store interface {
 	// Experience (Phase 3)
 	CreateExperience(ctx context.Context, e *Experience) error
 	ListExperiences(ctx context.Context, agentKey string, limit int) ([]Experience, error)
+	// BumpExperienceWeight increments weight when a past lesson is reused (+delta, min 1).
+	BumpExperienceWeight(ctx context.Context, id string, delta int) (*Experience, error)
 	DeleteExperience(ctx context.Context, id string) error
 
 	// Session todos (Phase 3)

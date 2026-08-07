@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS agent_config (
     display      VARCHAR(128),
     txt_model    VARCHAR(64) NOT NULL DEFAULT '',
     img_model    VARCHAR(64) NOT NULL DEFAULT '',
-    sys_prompt   TEXT NOT NULL DEFAULT '',
+    prompt       TEXT NOT NULL DEFAULT '',
+    charter      TEXT NOT NULL DEFAULT '',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(tid, key)
@@ -89,9 +90,10 @@ CREATE TABLE IF NOT EXISTS agent_experience (
     summary     TEXT NOT NULL DEFAULT '',
     outcome     VARCHAR(32) NOT NULL DEFAULT 'unknown',
     tags        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    weight      INTEGER NOT NULL DEFAULT 1,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_agent_experience_agent ON agent_experience(agent, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_experience_agent ON agent_experience(agent, weight DESC, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS agent_todo (
     sid        VARCHAR(36) PRIMARY KEY,

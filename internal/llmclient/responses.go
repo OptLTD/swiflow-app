@@ -134,6 +134,7 @@ func (p *ResponsesProvider) responsesOnce(ctx context.Context, req ChatRequest, 
 
 // buildResponsesInput maps chat-style messages into Responses instructions + input items.
 func buildResponsesInput(msgs []Message) (instructions string, input []map[string]any) {
+	msgs = dedupeCallIDs(msgs)
 	var sysParts []string
 	input = make([]map[string]any, 0, len(msgs))
 	for _, m := range msgs {
@@ -165,6 +166,9 @@ func buildResponsesInput(msgs []Message) (instructions string, input []map[strin
 				})
 			}
 			for _, tc := range m.ToolCalls {
+				if tc.ID == "" {
+					continue
+				}
 				args, _ := json.Marshal(tc.Arguments)
 				item := map[string]any{
 					"type":      "function_call",
@@ -175,6 +179,9 @@ func buildResponsesInput(msgs []Message) (instructions string, input []map[strin
 				input = append(input, item)
 			}
 		case "tool":
+			if m.ToolCallID == "" {
+				continue
+			}
 			input = append(input, map[string]any{
 				"type":    "function_call_output",
 				"call_id": m.ToolCallID,
@@ -392,27 +399,38 @@ func parseResponsesStream(r io.Reader, onChunk func(StreamChunk)) (*ChatResponse
 		return result, err
 	}
 
+	// Prefer tools accumulated from stream deltas. response.completed often
+	// already merged the same calls into result.ToolCalls — appending would
+	// duplicate each call_id and the agent would execute every tool twice.
 	indices := make([]int, 0, len(accs))
 	for i := range accs {
 		indices = append(indices, i)
 	}
 	sort.Ints(indices)
 	seen := map[string]bool{}
+	built := make([]ToolCall, 0, len(indices))
 	for _, i := range indices {
 		a := accs[i]
 		if a.Name == "" {
 			continue
 		}
 		key := a.ID + "\x00" + a.Name + "\x00" + a.rawArgs
+		if a.ID != "" {
+			key = a.ID // same call_id ⇒ one tool, even if args streamed twice
+		}
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		result.ToolCalls = append(result.ToolCalls, ToolCall{
-			ID:        a.ID,
-			Name:      a.Name,
+		built = append(built, ToolCall{
+			ID: a.ID, Name: a.Name,
 			Arguments: parseArgs(a.rawArgs),
 		})
+	}
+	if len(built) > 0 {
+		result.ToolCalls = built
+	} else {
+		result.ToolCalls = dedupeToolCallsByID(result.ToolCalls)
 	}
 	if len(result.ToolCalls) > 0 && result.FinishReason != "length" && result.FinishReason != "error" {
 		result.FinishReason = "tool_calls"
@@ -438,13 +456,32 @@ func mergeResponsesOutput(dst *ChatResponse, resp map[string]any) {
 		dst.Thinking = parsed.Thinking
 	}
 	if len(dst.ToolCalls) == 0 && len(parsed.ToolCalls) > 0 {
-		dst.ToolCalls = parsed.ToolCalls
+		dst.ToolCalls = dedupeToolCallsByID(parsed.ToolCalls)
 	}
 	if parsed.FinishReason == "length" {
 		dst.FinishReason = "length"
 	} else if len(dst.ToolCalls) > 0 || len(parsed.ToolCalls) > 0 {
 		dst.FinishReason = "tool_calls"
 	}
+}
+
+// dedupeToolCallsByID keeps the first tool call for each non-empty call_id.
+func dedupeToolCallsByID(tcs []ToolCall) []ToolCall {
+	if len(tcs) < 2 {
+		return tcs
+	}
+	seen := map[string]bool{}
+	out := make([]ToolCall, 0, len(tcs))
+	for _, tc := range tcs {
+		if tc.ID != "" {
+			if seen[tc.ID] {
+				continue
+			}
+			seen[tc.ID] = true
+		}
+		out = append(out, tc)
+	}
+	return out
 }
 
 func asString(v any) string {

@@ -220,6 +220,8 @@ const intent = computed(() => {
       return t('toolCall.experienceWrite', { summary: trim(pick(a, 'summary'), 50) })
     case 'experience_list':
       return t('toolCall.experienceList')
+    case 'experience_use':
+      return t('toolCall.experienceUse')
     case 'todo_write':
       return t('toolCall.todoWrite')
     case 'todo_read':

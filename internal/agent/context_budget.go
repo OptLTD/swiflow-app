@@ -181,25 +181,31 @@ func sanitizeLLMMessages(msgs []llmclient.Message) []llmclient.Message {
 			continue
 		}
 		needed := make(map[string]llmclient.ToolCall, len(m.ToolCalls))
+		uniqCalls := make([]llmclient.ToolCall, 0, len(m.ToolCalls))
 		for _, tc := range m.ToolCalls {
-			if tc.ID != "" {
-				needed[tc.ID] = tc
+			if tc.ID == "" {
+				continue
 			}
+			if _, ok := needed[tc.ID]; ok {
+				continue
+			}
+			needed[tc.ID] = tc
+			uniqCalls = append(uniqCalls, tc)
 		}
+		m.ToolCalls = uniqCalls
 		found := make(map[string]llmclient.Message, len(needed))
 		j := i + 1
 		for j < len(msgs) && msgs[j].Role == "tool" {
 			id := msgs[j].ToolCallID
 			if _, ok := needed[id]; ok {
-				found[id] = msgs[j]
+				if _, have := found[id]; !have {
+					found[id] = msgs[j]
+				}
 			}
 			j++
 		}
 		out = append(out, m)
-		for _, tc := range m.ToolCalls {
-			if tc.ID == "" {
-				continue
-			}
+		for _, tc := range uniqCalls {
 			if tm, ok := found[tc.ID]; ok {
 				out = append(out, tm)
 				continue

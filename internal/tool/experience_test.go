@@ -3,6 +3,7 @@ package tool_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -109,7 +110,7 @@ func TestExperienceListLimitCapped(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		if _, err := reg.Execute(ctx, "experience_write", map[string]any{
-			"summary": "item",
+			"summary": fmt.Sprintf("reusable tip number %d about freight parsing", i),
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -125,6 +126,72 @@ func TestExperienceListLimitCapped(t *testing.T) {
 	}
 	if len(list) != 3 {
 		t.Fatalf("expected 3, got %d", len(list))
+	}
+}
+
+func TestExperienceUseBumpsWeight(t *testing.T) {
+	reg, st := makeExperienceRegistry(t)
+	ctx := toolCtx("sess-use", "default")
+
+	if _, err := reg.Execute(ctx, "experience_write", map[string]any{
+		"summary": "Prefer filename over OCR when weigh-ticket numbers are impossible.",
+		"tags":    []any{"ocr"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := st.ListExperiences(ctx, "default", 5)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list=%v err=%v", list, err)
+	}
+	id := list[0].ID
+	if list[0].Weight != 1 {
+		t.Fatalf("initial weight=%d", list[0].Weight)
+	}
+
+	res, err := reg.Execute(ctx, "experience_use", map[string]any{"id": id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res, `"weight":2`) {
+		t.Fatalf("expected weight 2 in %s", res)
+	}
+
+	list, err = st.ListExperiences(ctx, "default", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list[0].Weight != 2 {
+		t.Fatalf("weight after use=%d", list[0].Weight)
+	}
+}
+
+func TestExperienceWriteUsedIDs(t *testing.T) {
+	reg, st := makeExperienceRegistry(t)
+	ctx := toolCtx("sess-used-ids", "default")
+	if _, err := reg.Execute(ctx, "experience_write", map[string]any{
+		"summary": "first lesson about excel merges",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := st.ListExperiences(ctx, "default", 1)
+	id := first[0].ID
+
+	if _, err := reg.Execute(ctx, "experience_write", map[string]any{
+		"summary":  "second lesson about freight sheets",
+		"used_ids": []any{id},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := st.ListExperiences(ctx, "default", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("want 2, got %d", len(list))
+	}
+	// Higher weight should rank first.
+	if list[0].ID != id || list[0].Weight != 2 {
+		t.Fatalf("expected reused experience first with weight 2, got %+v", list[0])
 	}
 }
 

@@ -40,6 +40,9 @@ const stallNudge = "Progress has stalled (repeated tools or repeated failures). 
 
 const childWrapUpNudge = "Sub-agent budget is running low. Finish the batch now: if the deliverable file (e.g. xlsx) exists, reply with ONLY its @/ path and row count — no more tools. If blocked, summarize what failed and stop."
 
+const reflectExperienceNudge = "If this turn produced reusable handling logic (pitfalls / decision rules / recipes worth applying in other tasks), call experience_write for each distinct lesson (short ≤200 chars, outcome, 1-3 English tags). Do not save task diaries. Skip if nothing generalizable. If you applied past experiences, experience_use them (or used_ids)."
+
+
 // maxLLMRetries caps how many times a single round retries after a transient
 // LLM stall/network error before falling back to a graceful wrap-up.
 const maxLLMRetries = 1
@@ -395,11 +398,16 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 	// Persist tool pairing even if the run context is cancelled mid-loop.
 	persistCtx := context.WithoutCancel(runCtx)
 
-	llmMsgs := []llmclient.Message{{Role: "system", Content: r.buildSystem(runCtx, ag, ws, roots.Skills)}}
+	llmMsgs := []llmclient.Message{{Role: "system", Content: r.buildSystem(runCtx, sessionID, ag, ws, roots.Skills)}}
 	for _, m := range history {
 		llmMsgs = append(llmMsgs, toLLM(m))
 	}
 	llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: userMessage})
+
+	// Async calibration: preference-like follow-ups append into working charter.
+	if len(history) > 0 && looksLikeCorrection(userMessage) {
+		appendCharterPrinciple(persistCtx, st, sessionID, ag, userMessage, "correction")
+	}
 
 	toolDefs := r.toolDefinitions(runCtx, tid, opts)
 	firstUser := firstUserMessage(history, userMessage)
@@ -415,16 +423,23 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 	}
 
 	var (
-		repeat          int
-		lastKey         string
-		consecErrors    int
-		softNudged      bool
-		forceWrapUp     bool
-		wrapReason      string
-		toolsUsed       bool
-		childNudged     bool
-		llmRetries      int
-		contextCompacts int
+		repeat            int
+		lastKey           string
+		consecErrors      int
+		softNudged        bool
+		forceWrapUp       bool
+		wrapReason        string
+		toolsUsed         bool
+		childNudged       bool
+		llmRetries        int
+		contextCompacts   int
+		reflectUsed       int
+		reflectPending    bool
+		reflectAllowlist  bool
+		claimReflectDone  bool
+		stallReflectDone  bool
+		experienceWritten bool
+		experienceNudged  bool
 	)
 
 	contextBudget := r.deps.MaxContextChars
@@ -438,18 +453,32 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 		roundT0 := time.Now()
 
 		switch {
+		case reflectAllowlist:
+			roundTools = reflectToolDefs(toolDefs, opts.DenyTools)
+			reflectAllowlist = false
 		case forceWrapUp || round == rounds-1:
-			roundTools = nil
-			nudge := hardBudgetNudge
-			if forceWrapUp && wrapReason == "stall" {
-				nudge = stallNudge
-				res.status = "stall"
+			if forceWrapUp && wrapReason == "stall" && !stallReflectDone && reflectUsed < maxReflectPerRun {
+				stallReflectDone = true
+				reflectUsed++
+				reflectPending = true
+				observe.ReflectEnter(sessionID, round, "stall")
+				llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: reflectNudge})
+				roundTools = reflectToolDefs(toolDefs, opts.DenyTools)
+				forceWrapUp = false
+				wrapReason = ""
 			} else {
-				res.status = "budget"
+				roundTools = nil
+				nudge := hardBudgetNudge
+				if forceWrapUp && wrapReason == "stall" {
+					nudge = stallNudge
+					res.status = "stall"
+				} else {
+					res.status = "budget"
+				}
+				forceWrapUp = false
+				wrapReason = ""
+				llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: nudge})
 			}
-			forceWrapUp = false
-			wrapReason = ""
-			llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: nudge})
 		case !softNudged && round >= rounds*3/4:
 			softNudged = true
 			llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: softBudgetNudge})
@@ -503,13 +532,14 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 				}
 				publisher(Event{Type: "delta", Content: summary})
 				publisher(Event{Type: "done"})
-				slog.Info("agent.run_end", "session", sessionID, "reason", "llm_error_wrapup", "round", round, "child", childRun, "error", err.Error())
+				observe.RunEnd(sessionID, "error", round, rounds, childRun)
 				res.status = "error"
 				res.summary = summary
 				return res, nil
 			}
 			publisher(Event{Type: "error", Error: err.Error()})
 			res.status = "error"
+			observe.RunEnd(sessionID, "error", round, rounds, childRun)
 			return res, err
 		}
 		llmRetries = 0
@@ -519,6 +549,17 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 			toolsUsed = true
 			res.rounds = round + 1
 			observe.RoundEnd(sessionID, round, true)
+			if reflectPending {
+				outcome := "fix"
+				for _, tc := range resp.ToolCalls {
+					if tc.Name == "clarify" {
+						outcome = "clarify"
+						break
+					}
+				}
+				observe.ReflectExit(sessionID, round, outcome)
+				reflectPending = false
+			}
 			key := toolCallKey(resp.ToolCalls)
 			if key == lastKey {
 				repeat++
@@ -549,6 +590,9 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 			outcomes := r.executeToolCalls(runCtx, persistCtx, sessionID, agentKey, tid, roots, resp.ToolCalls, publisher)
 			res.toolCalls += len(outcomes)
 			for _, o := range outcomes {
+				if o.tc.Name == "experience_write" && !o.isErr {
+					experienceWritten = true
+				}
 				if o.isErr {
 					consecErrors++
 					res.failures++
@@ -574,7 +618,7 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 			continue
 		}
 
-		// Model produced a no-tool reply: this is the final answer / wrap-up.
+		// Model produced a no-tool reply: final answer, or reflect checkpoint.
 		observe.RoundEnd(sessionID, round, false)
 		content := resp.Content
 		if strings.TrimSpace(content) == "" && res.status != "done" {
@@ -589,8 +633,29 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 		if _, err := st.AppendMessage(runCtx, sessionID, assistantMsg); err != nil {
 			slog.Error("persist assistant message", "error", err)
 		}
+		llmMsgs = append(llmMsgs, toLLM(assistantMsg))
 		if content != "" && content != resp.Content {
 			publisher(Event{Type: "delta", Content: content})
+		}
+
+		if reflectPending {
+			observe.ReflectExit(sessionID, round, "ship")
+			reflectPending = false
+		} else if isSignificantRun(toolsUsed, sessionHasOpenTodos(runCtx, st, sessionID)) &&
+			!claimReflectDone && reflectUsed < maxReflectPerRun && round < rounds-1 {
+			observe.ClaimRejected(sessionID, "significant_run_needs_reflect")
+			observe.ReflectEnter(sessionID, round, "claim_done")
+			claimReflectDone = true
+			reflectUsed++
+			reflectPending = true
+			reflectAllowlist = true
+			llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: reflectNudge})
+			if toolsUsed && !experienceWritten && !experienceNudged {
+				experienceNudged = true
+				llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: reflectExperienceNudge})
+			}
+			round++
+			continue
 		}
 
 		title := ""
@@ -600,8 +665,11 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 				slog.Error("set session title", "error", err)
 			}
 		}
+		if res.status == "" {
+			res.status = "done"
+		}
 		publisher(Event{Type: "done", Title: title})
-		slog.Info("agent.run_end", "session", sessionID, "reason", "done", "round", round, "max_rounds", rounds, "child", childRun)
+		observe.RunEnd(sessionID, res.status, round, rounds, childRun)
 		res.summary = content
 		for _, p := range extractAtPaths(content) {
 			res.artifacts = appendUnique(res.artifacts, p)
@@ -617,7 +685,7 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 	}
 	publisher(Event{Type: "delta", Content: continueHint})
 	publisher(Event{Type: "done"})
-	slog.Info("agent.run_end", "session", sessionID, "reason", "budget", "max_rounds", rounds, "child", childRun)
+	observe.RunEnd(sessionID, "budget", rounds-1, rounds, childRun)
 	res.status = "budget"
 	res.summary = continueHint
 	return res, nil
@@ -765,21 +833,33 @@ func (r *Runner) streamRound(ctx context.Context, p llmclient.Provider, req llmc
 	})
 }
 
-func (r *Runner) buildSystem(ctx context.Context, ag *store.Agent, workspace, skillsDir string) string {
+func (r *Runner) buildSystem(ctx context.Context, sessionID string, ag *store.Agent, workspace, skillsDir string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are Swiflow agent %s.", ag.Key)
-	if ag.SysPrompt != "" {
+	if ag.Prompt != "" {
 		b.WriteString("\n\n")
-		b.WriteString(ag.SysPrompt)
+		b.WriteString(ag.Prompt)
 	}
+	charter := strings.TrimSpace(ag.Charter)
+	emptySeed := charter == ""
+	if emptySeed {
+		charter = defaultCharterSeed
+	}
+	b.WriteString("\n\n## Ways of working\n")
+	b.WriteString(charter)
+	observe.CharterInjected(sessionID, ag.Key, len(charter), emptySeed)
+
 	if workspace != "" {
 		b.WriteString("\n\n## Workspace\nWorkspace root: ")
 		b.WriteString(workspace)
 		b.WriteString(". File tools are restricted to it.\n")
 		b.WriteString("User messages may cite workspace files as @/relative/path (e.g. @/notes.txt, @/docs/a.md). ")
 		b.WriteString("@/ means the workspace root. Attached uploads appear in a block between [UPLOAD FILES START] and [UPLOAD FILES END] (one @/ path per line). ")
-		b.WriteString("User uploads land under @/uploads/… with unique paths; treat those as immutable originals so chat history keeps working. ")
-		b.WriteString("When organizing by task, copy (or write new files) into task folders — do not move or delete @/uploads/ originals. ")
+		b.WriteString("User uploads land under @/uploads/… with unique paths; treat those as immutable originals so chat history keeps working.\n")
+		b.WriteString("Keep the workspace tidy: never drop new deliverables (reports, spreadsheets, rewritten copies, notes, scripts) in the workspace root. ")
+		b.WriteString("For each topic/task, create or reuse one short slug folder (lowercase, hyphens; e.g. @/q3-sales-recon/, @/meeting-notes-0812/) and put all related outputs under it. ")
+		b.WriteString("Copy out of @/uploads/ into that topic folder when you need editable working copies — do not move or delete @/uploads/ originals. ")
+		b.WriteString("If this session already has a topic folder, keep using it instead of starting another. ")
 		b.WriteString("File tools accept both workspace-relative paths and @/… (equivalent). Prefer passing the path as given; do not invent a literal \"@\" directory. ")
 		b.WriteString("When the user attaches or mentions @/…, resolve it to that relative path and use fs_* / content_extract / other file tools on it — do not treat @/ as a URL or package alias. ")
 		b.WriteString("When you refer to workspace files in replies, prefer the same @/ form.")
@@ -835,9 +915,11 @@ func (r *Runner) buildSystem(ctx context.Context, ag *store.Agent, workspace, sk
 	b.WriteString("When you need a user choice, confirmation, or missing info before continuing, call clarify. ")
 	b.WriteString("Do not invent answers; wait for the tool result. Prefer short options when choices are discrete.")
 	b.WriteString("\n\n## Learning & memory\n")
-	b.WriteString("After completing a significant task (success or failure), call experience_write to record: a one-sentence summary, the outcome, and 1-3 topic tags.\n")
-	b.WriteString("Before starting a complex or unfamiliar task, call experience_list to check for relevant prior experience that could shortcut the work.\n")
-	b.WriteString("When the same pattern appears in multiple experiences, use skill_manage to promote it into a reusable skill.")
+	b.WriteString("Experiences are reusable handling logic (pitfalls, decision rules, recipes) — not one entry per task. ")
+	b.WriteString("Call experience_write whenever you discover a lesson worth reusing elsewhere; a single task may yield several distinct lessons, or none. ")
+	b.WriteString("Each write: one short sentence, outcome, 1-3 English tags. Never save a task diary or product changelog. ")
+	b.WriteString("Before complex work, call experience_list (sorted by weight) and apply relevant lessons; when you do, call experience_use on those ids (or pass used_ids on experience_write) so useful lessons rank higher next time.\n")
+	b.WriteString("When the same pattern appears in multiple experiences, promote it: use skill_manage for reusable workflows, or refine the Ways of working charter via clear user corrections.")
 	return b.String()
 }
 
@@ -954,26 +1036,32 @@ func sanitizeToolHistory(msgs []store.Message) []store.Message {
 		}
 
 		needed := make(map[string]store.ToolCall, len(m.ToolCalls))
+		uniqCalls := make([]store.ToolCall, 0, len(m.ToolCalls))
 		for _, tc := range m.ToolCalls {
-			if tc.ID != "" {
-				needed[tc.ID] = tc
+			if tc.ID == "" {
+				continue
 			}
+			if _, ok := needed[tc.ID]; ok {
+				continue
+			}
+			needed[tc.ID] = tc
+			uniqCalls = append(uniqCalls, tc)
 		}
+		m.ToolCalls = uniqCalls
 		found := make(map[string]store.Message, len(needed))
 		j := i + 1
 		for j < len(msgs) && msgs[j].Role == "tool" {
 			id := msgs[j].ToolCallId
 			if _, ok := needed[id]; ok {
-				found[id] = msgs[j]
+				if _, have := found[id]; !have {
+					found[id] = msgs[j]
+				}
 			}
 			j++
 		}
 
 		out = append(out, m)
-		for _, tc := range m.ToolCalls {
-			if tc.ID == "" {
-				continue
-			}
+		for _, tc := range uniqCalls {
 			if tm, ok := found[tc.ID]; ok {
 				out = append(out, tm)
 				continue

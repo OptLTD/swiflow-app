@@ -55,6 +55,36 @@ func RunStart(session string, child bool, maxRounds int, chatModel string) {
 	slog.Info("agent.run_start", "session", session, "child", child, "max_rounds", maxRounds, "chat_model", chatModel)
 }
 
+// RunEnd logs the end of an agent run.
+func RunEnd(session, status string, round, maxRounds int, child bool) {
+	slog.Info("agent.run_end", "session", session, "status", status, "round", round, "max_rounds", maxRounds, "child", child)
+}
+
+// ReflectEnter logs entry into a reflection checkpoint.
+func ReflectEnter(session string, round int, trigger string) {
+	slog.Info("agent.reflect_enter", "session", session, "round", round, "trigger", trigger)
+}
+
+// ReflectExit logs leaving a reflection checkpoint.
+func ReflectExit(session string, round int, outcome string) {
+	slog.Info("agent.reflect_exit", "session", session, "round", round, "outcome", outcome)
+}
+
+// ClaimRejected logs when a premature done is blocked for reflection.
+func ClaimRejected(session, reason string) {
+	slog.Info("agent.claim_rejected", "session", session, "reason", reason)
+}
+
+// CharterInjected logs Ways of working injection into the system prompt.
+func CharterInjected(session, agent string, bytes int, emptySeed bool) {
+	slog.Info("agent.charter_injected", "session", session, "agent", agent, "bytes", bytes, "empty_seed", emptySeed)
+}
+
+// CharterUpdated logs a working-charter change.
+func CharterUpdated(session, agent, source string) {
+	slog.Info("agent.charter_updated", "session", session, "agent", agent, "source", source)
+}
+
 // LLMStillWaiting logs periodic heartbeat while an LLM stream is in flight.
 func LLMStillWaiting(session string, round int, model string, elapsed time.Duration, ctxRemain string) {
 	slog.Info("agent.llm_still_waiting",

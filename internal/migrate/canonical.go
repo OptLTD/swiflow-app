@@ -17,6 +17,7 @@ func applyCanonicalSchema(ctx context.Context, db *sql.DB) error {
 		{"llm_provider", "api_key_enc", "api_key"},
 		{"agent_config", "display_name", "display"},
 		{"agent_config", "system_extra", "sys_prompt"},
+		{"agent_config", "sys_prompt", "prompt"},
 		{"mcp_server", "transport", "type"},
 		{"mcp_server", "command", "cmd"},
 		{"mcp_server", "args_json", "args"},
@@ -50,10 +51,19 @@ func applyCanonicalSchema(ctx context.Context, db *sql.DB) error {
 	if err := addColumnIfMissing(ctx, db, "agent_config", "img_model", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := addColumnIfMissing(ctx, db, "agent_config", "charter", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(ctx, db, "agent_config", "prompt", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	if err := addColumnIfMissing(ctx, db, "agent_session", "parent", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := addColumnIfMissing(ctx, db, "sys_tenant", "password_hash", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(ctx, db, "agent_experience", "weight", "INTEGER NOT NULL DEFAULT 1"); err != nil {
 		return err
 	}
 
@@ -97,7 +107,7 @@ func applyCanonicalSchema(ctx context.Context, db *sql.DB) error {
 	} else if hasAgent {
 		if _, err := db.ExecContext(ctx, `
 			CREATE INDEX IF NOT EXISTS idx_agent_experience_agent
-			ON agent_experience(agent, created_at)
+			ON agent_experience(agent, weight, created_at)
 		`); err != nil {
 			return err
 		}

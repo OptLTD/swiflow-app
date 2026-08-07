@@ -1,10 +1,12 @@
 export function isDesktop(): boolean {
   if (typeof window === 'undefined') return false
-  // macOS: wails://localhost  |  Windows: http://wails.localhost
+  // macOS: wails://localhost(:port)  |  Windows: http://wails.localhost
+  // _wails / wails are injected by the native webview even when Vite HMR is used.
   return (
     window.location.protocol === 'wails:' ||
     window.location.hostname === 'wails.localhost' ||
-    !!window._wails
+    !!window._wails ||
+    !!window.wails
   )
 }
 

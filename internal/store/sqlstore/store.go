@@ -269,9 +269,9 @@ func (s *Store) CreateAgent(ctx context.Context, a *store.Agent) error {
 	t := tid(ctx)
 	a.Tid = t
 	_, err := s.db.ExecContext(ctx, s.sql(`
-		INSERT INTO agent_config (id, tid, key, display, txt_model, img_model, sys_prompt)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`), a.ID, t, a.Key, a.Display, a.TxtModel, a.ImgModel, a.SysPrompt)
+		INSERT INTO agent_config (id, tid, key, display, txt_model, img_model, prompt, charter)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`), a.ID, t, a.Key, a.Display, a.TxtModel, a.ImgModel, a.Prompt, a.Charter)
 	return err
 }
 
@@ -302,7 +302,7 @@ func (s *Store) GetAgentByKey(ctx context.Context, key string) (*store.Agent, er
 
 func (s *Store) UpdateAgent(ctx context.Context, id string, fields map[string]any) error {
 	allowed := map[string]bool{
-		"display": true, "txt_model": true, "img_model": true, "sys_prompt": true,
+		"display": true, "txt_model": true, "img_model": true, "prompt": true, "charter": true,
 	}
 	sets := []string{}
 	args := []any{}
@@ -692,7 +692,8 @@ type agentRow struct {
 	Display   string `db:"display"`
 	TxtModel  string `db:"txt_model"`
 	ImgModel  string `db:"img_model"`
-	SysPrompt string `db:"sys_prompt"`
+	Prompt    string `db:"prompt"`
+	Charter   string `db:"charter"`
 	CreatedAt dbTime `db:"created_at"`
 	UpdatedAt dbTime `db:"updated_at"`
 }
@@ -700,7 +701,8 @@ type agentRow struct {
 func (r agentRow) toAgent() store.Agent {
 	return store.Agent{
 		ID: r.ID, Tid: r.Tid, Key: r.Key, Display: r.Display,
-		TxtModel: r.TxtModel, ImgModel: r.ImgModel, SysPrompt: r.SysPrompt,
+		TxtModel: r.TxtModel, ImgModel: r.ImgModel, Prompt: r.Prompt,
+		Charter: r.Charter,
 		CreatedAt: r.CreatedAt.String(), UpdatedAt: r.UpdatedAt.String(),
 	}
 }

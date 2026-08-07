@@ -302,6 +302,7 @@ func streamWithIdleGuardParse(body io.ReadCloser, onChunk func(StreamChunk), idl
 }
 
 func buildMessages(msgs []Message) []map[string]any {
+	msgs = dedupeCallIDs(msgs)
 	out := make([]map[string]any, 0, len(msgs))
 	for _, m := range msgs {
 		// content is always present (some strict providers reject a missing
@@ -313,6 +314,9 @@ func buildMessages(msgs []Message) []map[string]any {
 		if len(m.ToolCalls) > 0 {
 			tcs := make([]map[string]any, 0, len(m.ToolCalls))
 			for _, tc := range m.ToolCalls {
+				if tc.ID == "" {
+					continue
+				}
 				args, _ := json.Marshal(tc.Arguments)
 				tcs = append(tcs, map[string]any{
 					"id":   tc.ID,
@@ -323,7 +327,9 @@ func buildMessages(msgs []Message) []map[string]any {
 					},
 				})
 			}
-			msg["tool_calls"] = tcs
+			if len(tcs) > 0 {
+				msg["tool_calls"] = tcs
+			}
 		}
 		if m.ToolCallID != "" {
 			msg["tool_call_id"] = m.ToolCallID

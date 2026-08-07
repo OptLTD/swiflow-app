@@ -34,6 +34,42 @@ func TestBuildResponsesInput(t *testing.T) {
 	}
 }
 
+func TestBuildResponsesInputDedupeCallID(t *testing.T) {
+	_, input := buildResponsesInput([]Message{
+		{Role: "user", Content: "hi"},
+		{Role: "assistant", ToolCalls: []ToolCall{
+			{ID: "call_00_dup", Name: "fs_list", Arguments: map[string]any{}},
+			{ID: "call_00_dup", Name: "fs_list", Arguments: map[string]any{}},
+		}},
+		{Role: "tool", ToolCallID: "call_00_dup", Content: "a"},
+		{Role: "tool", ToolCallID: "call_00_dup", Content: "b"},
+		{Role: "assistant", ToolCalls: []ToolCall{
+			{ID: "call_00_dup", Name: "fs_read", Arguments: map[string]any{"path": "x"}},
+		}},
+		{Role: "tool", ToolCallID: "call_00_dup", Content: "c"},
+	})
+	seen := map[string]int{}
+	for _, item := range input {
+		if id, _ := item["call_id"].(string); id != "" {
+			seen[id]++
+			if seen[id] > 2 {
+				// at most one function_call + one function_call_output
+				t.Fatalf("call_id %q appears %d times in %#v", id, seen[id], input)
+			}
+		}
+	}
+	// Within-turn duplicate dropped → one call + one output for first id;
+	// second turn remapped → different id. Total unique call_ids should be 2.
+	if len(seen) != 2 {
+		t.Fatalf("want 2 unique call_ids, got %d (%v) input=%#v", len(seen), seen, input)
+	}
+	for id, n := range seen {
+		if n != 2 {
+			t.Fatalf("call_id %q count=%d want pair of 2", id, n)
+		}
+	}
+}
+
 func TestParseResponsesNonStream(t *testing.T) {
 	body := `{
 	  "status": "completed",
@@ -103,6 +139,35 @@ func TestParseResponsesStream(t *testing.T) {
 	}
 	if resp.FinishReason != "tool_calls" {
 		t.Fatalf("finish=%s", resp.FinishReason)
+	}
+}
+
+// DeepSeek/OpenAI Responses streams often include the full function_call in
+// response.completed after the same item was already accumulated from
+// output_item.added + argument deltas. Merging then appending used to
+// duplicate every tool (same call_id twice → UI 失败+成功 pairs).
+func TestParseResponsesStreamNoDuplicateToolsFromCompleted(t *testing.T) {
+	stream := strings.Join([]string{
+		`event: response.output_item.added`,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_00_dup","name":"light_app_create","arguments":""}}`,
+		``,
+		`event: response.function_call_arguments.done`,
+		`data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","arguments":"{\"name\":\"jump\",\"runtime\":\"static\"}"}`,
+		``,
+		`event: response.completed`,
+		`data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call","call_id":"call_00_dup","name":"light_app_create","arguments":"{\"name\":\"jump\",\"runtime\":\"static\"}"}]}}`,
+		``,
+	}, "\n")
+
+	resp, err := parseResponsesStream(strings.NewReader(stream), func(StreamChunk) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("want 1 tool call, got %d: %+v", len(resp.ToolCalls), resp.ToolCalls)
+	}
+	if resp.ToolCalls[0].ID != "call_00_dup" || resp.ToolCalls[0].Name != "light_app_create" {
+		t.Fatalf("tool=%+v", resp.ToolCalls[0])
 	}
 }
 
