@@ -29,7 +29,6 @@ async function callMethod(method: string, args: unknown[] = []): Promise<unknown
   const call = await wailsCallNS()
   if (!call) return undefined
   const methods = [
-    `github.com/OptLTD/swiflow/cmd/desktop.${method}`,
     `main.${method}`,
   ]
   for (const name of methods) {
@@ -99,7 +98,6 @@ export async function openDesktopUpdateDialog(): Promise<boolean> {
   if (!call) return false
 
   const methods = [
-    'github.com/OptLTD/swiflow/cmd/desktop.UpdateService.CheckForUpdates',
     'main.UpdateService.CheckForUpdates',
   ]
   for (const name of methods) {

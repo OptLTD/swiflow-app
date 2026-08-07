@@ -266,6 +266,8 @@ const en = {
   },
   upload: {
     root: 'workspace root',
+    // {'@'} escapes vue-i18n linked-message syntax (@:key)
+    inbox: "{'@'}/uploads (stable originals — copy to organize)",
     success: 'Uploaded {count} file(s) to {loc}{preview}',
     failed: 'Upload failed',
   },

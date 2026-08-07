@@ -176,20 +176,7 @@ func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dir := strings.TrimSpace(r.FormValue("path"))
-	if dir == "" {
-		dir = "."
-	}
-	destDir, err := support.SandboxPath(s.cfg.WorkspaceDir, dir)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
-		return
-	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		writeErr(w, http.StatusInternalServerError, ErrMkdirFailed)
-		return
-	}
-
+	// Client "path" is ignored: uploads always land in the immutable uploads/ inbox.
 	headers := r.MultipartForm.File["files"]
 	if len(headers) == 0 {
 		writeErr(w, http.StatusBadRequest, ErrNoFiles)
@@ -198,7 +185,7 @@ func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	uploaded := make([]uploadedFile, 0, len(headers))
 	for _, fh := range headers {
-		item, err := saveUploadedFile(s.cfg.WorkspaceDir, dir, fh)
+		item, err := saveUploadedFile(s.cfg.WorkspaceDir, fh)
 		if err != nil {
 			writeWorkspaceOpErr(w, http.StatusBadRequest, err)
 			return
@@ -207,24 +194,24 @@ func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"path":     dir,
+		"path":     workspace.UploadsRoot,
 		"uploaded": uploaded,
 	})
 }
 
-func saveUploadedFile(workspaceDir, dir string, fh *multipart.FileHeader) (uploadedFile, error) {
-	name, err := workspace.SafeUploadName(fh.Filename)
+func saveUploadedFile(workspaceDir string, fh *multipart.FileHeader) (uploadedFile, error) {
+	origName, err := workspace.SafeUploadName(fh.Filename)
+	if err != nil {
+		return uploadedFile{}, err
+	}
+	rel, err := workspace.AllocUploadRel(origName)
 	if err != nil {
 		return uploadedFile{}, err
 	}
 	if fh.Size > maxWorkspaceUpload {
-		return uploadedFile{}, fmt.Errorf("file too large: %s", name)
+		return uploadedFile{}, fmt.Errorf("file too large: %s", origName)
 	}
 
-	rel := name
-	if dir != "." {
-		rel = filepath.ToSlash(filepath.Join(dir, name))
-	}
 	full, err := support.SandboxPath(workspaceDir, rel)
 	if err != nil {
 		return uploadedFile{}, err
@@ -239,7 +226,7 @@ func saveUploadedFile(workspaceDir, dir string, fh *multipart.FileHeader) (uploa
 	}
 	defer src.Close()
 
-	dst, err := os.OpenFile(full, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	dst, err := os.OpenFile(full, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
 	if err != nil {
 		return uploadedFile{}, fmt.Errorf("create file: %w", err)
 	}
@@ -247,12 +234,13 @@ func saveUploadedFile(workspaceDir, dir string, fh *multipart.FileHeader) (uploa
 
 	n, err := io.Copy(dst, io.LimitReader(src, maxWorkspaceUpload+1))
 	if err != nil {
+		_ = os.Remove(full)
 		return uploadedFile{}, fmt.Errorf("write file: %w", err)
 	}
 	if n > maxWorkspaceUpload {
 		_ = os.Remove(full)
-		return uploadedFile{}, fmt.Errorf("file too large: %s", name)
+		return uploadedFile{}, fmt.Errorf("file too large: %s", origName)
 	}
 
-	return uploadedFile{Name: name, Path: rel, Size: n}, nil
+	return uploadedFile{Name: origName, Path: rel, Size: n}, nil
 }

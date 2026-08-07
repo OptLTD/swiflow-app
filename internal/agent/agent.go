@@ -690,6 +690,8 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 		b.WriteString(". File tools are restricted to it.\n")
 		b.WriteString("User messages may cite workspace files as @/relative/path (e.g. @/notes.txt, @/docs/a.md). ")
 		b.WriteString("@/ means the workspace root. Attached uploads appear in a block between [UPLOAD FILES START] and [UPLOAD FILES END] (one @/ path per line). ")
+		b.WriteString("User uploads land under @/uploads/… with unique paths; treat those as immutable originals so chat history keeps working. ")
+		b.WriteString("When organizing by task, copy (or write new files) into task folders — do not move or delete @/uploads/ originals. ")
 		b.WriteString("File tools accept both workspace-relative paths and @/… (equivalent). Prefer passing the path as given; do not invent a literal \"@\" directory. ")
 		b.WriteString("When the user attaches or mentions @/…, resolve it to that relative path and use fs_* / content_extract / other file tools on it — do not treat @/ as a URL or package alias. ")
 		b.WriteString("When you refer to workspace files in replies, prefer the same @/ form.")

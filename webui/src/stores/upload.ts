@@ -7,6 +7,9 @@ import { useLayoutStore } from './layout'
 import { useChatStore } from './chat'
 import { useToastStore } from './toast'
 
+/** Immutable inbox under workspace root; chat history cites these paths. */
+export const UPLOADS_ROOT = 'uploads'
+
 function hasFiles(e: DragEvent) {
   const types = e.dataTransfer?.types
   return !!types && Array.from(types).includes('Files')
@@ -53,13 +56,8 @@ export const useUploadStore = defineStore('upload', {
   getters: {
     isDragging: (s) => s.dragDepth > 0,
     showDropOverlay: (s) => s.dragDepth > 0 || s.nativeDragging || s.uploading,
-    targetPath(): string {
-      const layout = useLayoutStore()
-      if (layout.activeTab.type === 'explore') {
-        return layout.explorePath || layout.activeTab.path || '.'
-      }
-      return '.'
-    },
+    /** Always the immutable uploads inbox (not the Explore folder). */
+    targetPath: () => UPLOADS_ROOT,
   },
   actions: {
     setNativeDragging(active: boolean) {
@@ -78,12 +76,11 @@ export const useUploadStore = defineStore('upload', {
           toast.error(data.error)
           return
         }
-        const loc = data.path === '.' ? t('upload.root') : data.path
         const names = (data.uploaded || []).map((f) => f.name).join('、')
         const preview = names.length > 48 ? `${names.slice(0, 48)}…` : names
         toast.success(t('upload.success', {
           count: data.uploaded.length,
-          loc,
+          loc: t('upload.inbox'),
           preview: preview ? `：${preview}` : '',
         }))
         this.refreshSeq += 1
@@ -123,17 +120,15 @@ export const useUploadStore = defineStore('upload', {
     async uploadFiles(files: File[]) {
       if (!files.length || this.uploading) return
 
-      const path = this.targetPath
       this.uploading = true
       const toast = useToastStore()
       try {
-        const r = await api.uploadWorkspace(path, files)
-        const loc = path === '.' ? t('upload.root') : path
+        const r = await api.uploadWorkspace(UPLOADS_ROOT, files)
         const names = r.uploaded.map((f) => f.name).join('、')
         const preview = names.length > 48 ? `${names.slice(0, 48)}…` : names
         toast.success(t('upload.success', {
           count: r.uploaded.length,
-          loc,
+          loc: t('upload.inbox'),
           preview: preview ? `：${preview}` : '',
         }))
         this.refreshSeq += 1

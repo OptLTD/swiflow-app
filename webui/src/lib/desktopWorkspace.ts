@@ -27,7 +27,8 @@ export async function desktopDownloadWorkspaceFile(path: string): Promise<Worksp
   const call = await wailsCallNS()
   if (!call) return null
   try {
-    const method = 'main.WorkspaceService.DownloadFile'
+    // Type is Workspace (not WorkspaceService); FQN uses PkgPath, not "main.".
+    const method = 'github.com/OptLTD/swiflow/cmd/desktop.Workspace.DownloadFile'
     let result: unknown
     if (typeof call.ByName === 'function') {
       result = await call.ByName(method, path)

@@ -25,24 +25,19 @@ export async function openLightApp(url: string, title = 'Light App'): Promise<vo
   if (isDesktop()) {
     const call = await wailsCallNS()
     if (call) {
-      // Wails v3 FQN is "<import path>.<Type>.<Method>" for cmd/desktop package main.
-      const methods = [
-        'github.com/OptLTD/swiflow/cmd/desktop.LightAppService.OpenWindow',
-        'main.LightAppService.OpenWindow',
-      ]
-      for (const method of methods) {
-        try {
-          if (typeof call.ByName === 'function') {
-            await call.ByName(method, trimmed, title)
-            return
-          }
-          if (typeof call.Call === 'function') {
-            await call.Call({ methodName: method, args: [trimmed, title] })
-            return
-          }
-        } catch {
-          /* try next name */
+      // Wails v3 FQN = PkgPath.Type.Method (not "main.").
+      const method = 'github.com/OptLTD/swiflow/cmd/desktop.LightAppService.OpenWindow'
+      try {
+        if (typeof call.ByName === 'function') {
+          await call.ByName(method, trimmed, title)
+          return
         }
+        if (typeof call.Call === 'function') {
+          await call.Call({ methodName: method, args: [trimmed, title] })
+          return
+        }
+      } catch {
+        /* fall through to browser */
       }
     }
   }

@@ -31,7 +31,7 @@ const { t } = useI18n()
           {{ upload.uploading ? t('dropzone.uploading') : t('dropzone.release') }}
         </div>
         <div class="text-xs text-blue-500 mt-1 font-mono">
-          {{ upload.targetPath === '.' ? t('common.rootDir') : upload.targetPath }}
+          {{ t('upload.inbox') }}
         </div>
       </div>
     </div>

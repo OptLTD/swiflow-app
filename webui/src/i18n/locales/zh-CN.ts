@@ -257,6 +257,8 @@ const zhCN = {
   },
   upload: {
     root: 'workspace 根目录',
+    // {'@'} escapes vue-i18n linked-message syntax (@:key)
+    inbox: "{'@'}/uploads（稳定原文，整理请复制）",
     success: '已上传 {count} 个文件到 {loc}{preview}',
     failed: '上传失败',
   },
