@@ -152,14 +152,15 @@ func runServe() error {
 		Tools:              toolsReg,
 		Skills:             skillsCat,
 		Workspace:          cfg.WorkspaceDir,
-		MaxHistoryMessages: cfg.MaxHistoryMsgs,
+		MaxHistoryMessages: cfg.Context.MaxHistoryMsgs,
+		MaxContextChars:    cfg.Context.MaxContextChars,
 		Publish:            tracker,
-		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
-		ToolTimeoutSec:     cfg.ToolTimeoutSec,
+		MaxConcurrentRuns:  cfg.Context.MaxConcurrentRuns,
+		ToolTimeoutSec:     cfg.Context.ToolTimeoutSec,
 		ToolTimeouts: map[string]time.Duration{
 			tool.ToolContentExtract: docTimeout + 30*time.Second,
 		},
-		DisableThinking: cfg.DisableThinking,
+		DisableThinking: cfg.Context.DisableThinking,
 	})
 
 	cronSched := schedule.New(st, runner, tracker)

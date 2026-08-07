@@ -35,12 +35,16 @@ func OpenStore(t *testing.T) *sqlite.Store {
 // TestConfig returns minimal server config for HTTP tests.
 func TestConfig(t *testing.T) config.Config {
 	t.Helper()
-	return config.Config{
-		Host:          "127.0.0.1",
-		Port:          8000,
+	cfg := config.Config{
+		HostAddress:   "127.0.0.1:8000",
+		DatabaseDSN:   "sqlite://" + filepath.Join(t.TempDir(), "test.db"),
 		WorkspaceDir:  t.TempDir(),
 		UserSkillsDir: "",
 	}
+	if err := cfg.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	return cfg
 }
 
 // SeedProviderAndAgent inserts a provider and default agent for cron/API tests.

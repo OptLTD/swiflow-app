@@ -85,8 +85,15 @@ Each round:
 
 1. Optional **nudge** (soft budget / hard fuse / stall wrap-up) appended as a
    synthetic user message; tools may be withheld (`roundTools = nil`).
-2. `provider.ChatStream` → emit `thinking` / `delta`.
-3. If tool calls and tools allowed:
+2. **Context budget** — `fitMessagesToBudget` shrinks in-memory `llmMsgs` toward
+   `max_context_chars` (default 120000; soft target 85%). Prefer compacting older
+   `tool` results; may drop middle turns while keeping system + recent messages
+   and tool-call pairs. Does **not** rewrite DB history. `0` disables proactive
+   fitting.
+3. `provider.ChatStream` → emit `thinking` / `delta`.
+4. On **context overflow** (`IsContextOverflow`): aggressive compact + retry the
+   **same** round (up to 2 times, separate from network `llmRetries`).
+5. If tool calls and tools allowed:
    - Detect identical tool-call fingerprints; after **3** repeats → set
      `forceWrapUp` (stall), continue (do **not** hard-error).
    - Persist assistant + tool_calls; for each call: emit `tool_call`, execute
@@ -94,7 +101,7 @@ Each round:
      `store.ToolEnabled`), emit `tool_result`, persist truncated result
      (4000 chars). Obs: `ToolStart`/`ToolEnd`.
    - **3 consecutive tool errors** → stall wrap-up next round.
-4. Else (no tool calls, or wrap-up with empty tools): persist final assistant,
+6. Else (no tool calls, or wrap-up with empty tools): persist final assistant,
    set session title if empty (first ~60 chars of first user message), emit
    `done`.
 
@@ -108,7 +115,8 @@ Exhaustion fallback: emit a short `continueHint` + `done`.
 | Same tool-call set 3×, or 3 consecutive tool errors | Forced **no-tool** wrap-up + stall nudge |
 | Round ≥ 75% of 32 | Soft nudge: prefer finishing |
 | Last round or forced wrap-up | Tools withheld + hard/stall nudge |
-| Context cancel / LLM error | `error` terminal |
+| Context overflow | Compact in-memory msgs + retry same round (≤2) |
+| Context cancel / other LLM error | wrap-up if tools ran, else `error` terminal |
 
 `maxRounds` is a **runaway fuse**, not the normal completion signal.
 

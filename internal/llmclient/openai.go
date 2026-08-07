@@ -45,9 +45,47 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("provider http %d: %s", e.StatusCode, e.Body)
 }
 
+// IsContextOverflow reports whether err is a context-window / prompt-too-long
+// failure. Callers should compact messages and retry rather than treating this
+// as a generic fatal LLM error. 400-class overflows are NOT retryableLLMError.
+func IsContextOverflow(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	var ae *APIError
+	if errors.As(err, &ae) {
+		msg = strings.ToLower(ae.Body + " " + msg)
+	}
+	for _, s := range []string{
+		"context_length_exceeded",
+		"maximum context length",
+		"max context length",
+		"context window",
+		"prompt is too long",
+		"prompt too long",
+		"request too large",
+		"too many tokens",
+		"token limit",
+		"tokens exceed",
+		"exceeds the context",
+		"exceed context",
+		"input is too long",
+		"message length too long",
+	} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
+}
+
 // retryableLLMError reports whether err is worth retrying with backoff.
 func retryableLLMError(err error) bool {
 	if err == nil {
+		return false
+	}
+	if IsContextOverflow(err) {
 		return false
 	}
 	var ae *APIError
@@ -207,12 +245,21 @@ func (ir *idleResetReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+type streamParser func(r io.Reader, onChunk func(StreamChunk)) (*ChatResponse, error)
+
 // streamWithIdleGuard parses an SSE stream but aborts if no data arrives for
 // idle. On idle expiry it closes the body (unblocking the scanner) and returns a
 // clear error so the caller can wrap up instead of hanging until ctx deadline.
 func streamWithIdleGuard(body io.ReadCloser, onChunk func(StreamChunk), idle time.Duration) (*ChatResponse, error) {
+	return streamWithIdleGuardParse(body, onChunk, idle, parseStream)
+}
+
+func streamWithIdleGuardParse(body io.ReadCloser, onChunk func(StreamChunk), idle time.Duration, parse streamParser) (*ChatResponse, error) {
+	if parse == nil {
+		parse = parseStream
+	}
 	if idle <= 0 {
-		return parseStream(body, onChunk)
+		return parse(body, onChunk)
 	}
 	resetCh := make(chan struct{}, 1)
 	reset := func() {
@@ -246,7 +293,7 @@ func streamWithIdleGuard(body io.ReadCloser, onChunk func(StreamChunk), idle tim
 		}
 	}()
 
-	out, err := parseStream(&idleResetReader{r: body, reset: reset}, onChunk)
+	out, err := parse(&idleResetReader{r: body, reset: reset}, onChunk)
 	close(watchDone)
 	if stalled.Load() {
 		return out, fmt.Errorf("llm stream stalled: no data for %s", idle)

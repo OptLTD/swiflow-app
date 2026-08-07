@@ -23,11 +23,11 @@ func Open(cfg config.Config) (*sqlstore.Store, error) {
 	case sqlstore.DialectPostgres, "postgresql", "pgx":
 		dsn := strings.TrimSpace(cfg.DBDSN)
 		if dsn == "" {
-			return nil, fmt.Errorf("db_dsn is required when db_driver=%s", driver)
+			return nil, fmt.Errorf("database_dsn postgres URL is required when driver=%s", driver)
 		}
 		return pg.Open(dsn)
 	default:
-		return nil, fmt.Errorf("unsupported db_driver %q (want sqlite or postgres)", cfg.DBDriver)
+		return nil, fmt.Errorf("unsupported database driver %q (want sqlite or postgres)", cfg.DBDriver)
 	}
 }
 

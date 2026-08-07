@@ -1,15 +1,15 @@
 {
-  "host": "127.0.0.1",
-  "port": 8000,
-  "db_driver": "sqlite",
-  "db_path": "./data/swiflow.db",
-  "db_dsn": "",
+  "host_address": "127.0.0.1:8000",
+  "database_dsn": "sqlite://./data/swiflow.db",
   "workspace_dir": "./data/workspace",
   "allowed_origins": ["http://localhost:5173"],
-  "max_history_msgs": 100,
-  "max_concurrent_runs": 0,
-  "tool_timeout_sec": 120,
-  "disable_thinking": true,
+  "context": {
+    "max_history_msgs": 100,
+    "max_context_chars": 120000,
+    "max_concurrent_runs": 0,
+    "tool_timeout_sec": 120,
+    "disable_thinking": true
+  },
   "tools": {
     "exec_enabled": true,
     "browser_enabled": true,

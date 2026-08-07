@@ -13,12 +13,12 @@ make dev      # API :8000 + UI http://localhost:5173
 
 ## Postgres（可选）
 
-设置 `db_driver` 为 `postgres`，`db_dsn` 为 pgx URL（或环境变量 `SWIFLOW_DB_DRIVER` / `SWIFLOW_DB_DSN`）。Schema 来自 `embed/schema.pg.sql`。
+设置 `database_dsn` 为 pgx URL（或环境变量 `SWIFLOW_DATABASE_DSN`）。Schema 来自 `embed/schema.pg.sql`。
 
 ```json
 {
-  "db_driver": "postgres",
-  "db_dsn": "postgres://swiflow:swiflow@localhost:5432/swiflow?sslmode=disable"
+  "host_address": "127.0.0.1:8000",
+  "database_dsn": "postgres://swiflow:swiflow@localhost:5432/swiflow?sslmode=disable"
 }
 ```
 

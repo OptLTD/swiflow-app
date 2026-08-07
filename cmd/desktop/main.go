@@ -174,17 +174,20 @@ func ensureDesktopConfig() (string, error) {
 	}
 
 	cfg := map[string]any{
-		"db_path": filepath.Join(dataDir, "swiflow.db"),
-		"host":    "127.0.0.1", "port": 18765,
+		"host_address":     "127.0.0.1:18765",
+		"database_dsn":     "sqlite://" + filepath.Join(dataDir, "swiflow.db"),
 		"workspace_dir":    filepath.Join(dataDir, "workspace"),
 		"user_skills_dir":  filepath.Join(dataDir, "user-skills"),
 		"light_apps_dir":   filepath.Join(dataDir, "light-apps"),
 		"allowed_origins":  []string{"*"},
-		"max_history_msgs": 100, "tools": map[string]any{
-			"exec_enabled":     true,
-			"browser_enabled":  true,
-			"browser_headless": true,
-			"document_enabled": true,
+		"context": map[string]any{
+			"max_history_msgs":  100,
+			"max_context_chars": 120000,
+			"disable_thinking":  true,
+		},
+		"tools": map[string]any{
+			"document_enabled": true, "exec_enabled": true,
+			"browser_enabled": true, "browser_headless": true,
 		},
 	}
 	raw, err := json.MarshalIndent(cfg, "", "  ")
@@ -208,6 +211,9 @@ func resolveDesktopPaths(cfg config.Config, baseDir string) config.Config {
 	}
 	// Prefer rule-based layout under AppSupport when paths are still defaults/relative.
 	cfg.DBPath = abs(cfg.DBPath)
+	if cfg.DBDriver == "sqlite" || cfg.DBDriver == "" || cfg.DBDriver == "sqlite3" {
+		cfg.DatabaseDSN = "sqlite://" + cfg.DBPath
+	}
 	cfg.WorkspaceDir = abs(cfg.WorkspaceDir)
 	cfg.UserSkillsDir = abs(cfg.UserSkillsDir)
 	cfg.InitSkillsDir = abs(cfg.InitSkillsDir)
@@ -301,13 +307,14 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		Store: st, Tools: toolsReg, Skills: skillsCat,
 		Publish: tracker, Workspace: cfg.WorkspaceDir,
 
-		MaxHistoryMessages: cfg.MaxHistoryMsgs,
-		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
-		ToolTimeoutSec:     cfg.ToolTimeoutSec,
+		MaxHistoryMessages: cfg.Context.MaxHistoryMsgs,
+		MaxContextChars:    cfg.Context.MaxContextChars,
+		MaxConcurrentRuns:  cfg.Context.MaxConcurrentRuns,
+		ToolTimeoutSec:     cfg.Context.ToolTimeoutSec,
 		ToolTimeouts: map[string]time.Duration{
 			tool.ToolContentExtract: docTimeout + 30*time.Second,
 		},
-		DisableThinking: cfg.DisableThinking,
+		DisableThinking: cfg.Context.DisableThinking,
 	})
 
 	cronSched := schedule.New(st, runner, tracker)

@@ -212,10 +212,9 @@ missing fields. See §11 for the full key list.
 
 ```go
 type Config struct {
-    Host, Port, DBPath, AuthToken, EncryptionKey string
-    WorkspaceDir, InitSkillsDir, UserSkillsDir   string
+    HostAddress, DatabaseDSN string
+    WorkspaceDir, InitSkillsDir, UserSkillsDir string
     AllowedOrigins []string
-    WebDistDir     string
     Tools          ToolsConfig
 }
 func Load(path string) (Config, error)
@@ -755,19 +754,18 @@ JSON file with env overlay (env wins). Defaults shown.
 
 | Key (JSON) | Env | Default | Notes |
 |---|---|---|---|
-| `host` | `SWIFLOW_HOST` | `127.0.0.1` | listen host |
-| `port` | `SWIFLOW_PORT` | `18800` | listen port |
-| `db_path` | `SWIFLOW_DB` | `./data/swiflow.db` | SQLite file path |
-| `auth_token` | `SWIFLOW_AUTH_TOKEN` | (required, no default) | bearer token |
-| `encryption_key` | `SWIFLOW_ENCRYPTION_KEY` | (required) | provider-key encryption; ≥16 chars |
+| `host_address` | `SWIFLOW_HOST_ADDRESS` | `127.0.0.1:8000` | listen `host:port` |
+| `database_dsn` | `SWIFLOW_DATABASE_DSN` | `sqlite://./data/swiflow.db` | `sqlite://…` or `postgres://…` |
 | `workspace_dir` | `SWIFLOW_WORKSPACE` | `./data/workspace` | file-tool sandbox root |
 | `init_skills_dir` | `SWIFLOW_INIT_SKILLS` | (empty) | dev override for built-in skills |
 | `user_skills_dir` | `SWIFLOW_USER_SKILLS` | `./data/user-skills` | user skills |
 | `allowed_origins` | — | `[]` | CORS; empty = allow all |
 | `web_dist_dir` | — | (embedded) | override for dev |
-| `max_history_msgs` | — | `100` | truncate chat history per run |
-| `max_concurrent_runs` | `SWIFLOW_MAX_CONCURRENT_RUNS` | `0` | global in-flight Run cap; `0` = unlimited |
-| `tool_timeout_sec` | `SWIFLOW_TOOL_TIMEOUT_SEC` | `120` | default per-tool `context` deadline |
+| `max_history_msgs` | — | `100` | under `context`; truncate chat history per run |
+| `max_context_chars` | `SWIFLOW_MAX_CONTEXT_CHARS` | `120000` | under `context`; in-memory LLM prompt budget (0 = proactive fit off) |
+| `max_concurrent_runs` | `SWIFLOW_MAX_CONCURRENT_RUNS` | `0` | under `context`; global in-flight Run cap; `0` = unlimited |
+| `tool_timeout_sec` | `SWIFLOW_TOOL_TIMEOUT_SEC` | `120` | under `context`; default per-tool deadline |
+| `disable_thinking` | `SWIFLOW_DISABLE_THINKING` | `true` | under `context`; GLM thinking off |
 | `tools.exec_enabled` | `SWIFLOW_EXEC` | `false` | register `exec` if true |
 | `tools.browser_enabled` | — | `false` | register `browser` if true |
 | `tools.browser_headless` | — | `true` | browser headless mode |

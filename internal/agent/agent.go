@@ -90,6 +90,10 @@ type RunnerDeps struct {
 
 	Workspace          string
 	MaxHistoryMessages int
+	// MaxContextChars is the soft character budget for in-memory LLM messages.
+	// 0 disables proactive fitting; overflow still triggers emergency compact.
+	// Negative values are treated as the package default (120_000).
+	MaxContextChars int
 
 	// Publish is optional; when set, every emit is also published for watchers.
 	Publish EventPublisher
@@ -359,16 +363,22 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 	}
 
 	var (
-		repeat       int
-		lastKey      string
-		consecErrors int
-		softNudged   bool
-		forceWrapUp  bool
-		wrapReason   string
-		toolsUsed    bool
-		childNudged  bool
-		llmRetries   int
+		repeat          int
+		lastKey         string
+		consecErrors    int
+		softNudged      bool
+		forceWrapUp     bool
+		wrapReason      string
+		toolsUsed       bool
+		childNudged     bool
+		llmRetries      int
+		contextCompacts int
 	)
+
+	contextBudget := r.deps.MaxContextChars
+	if contextBudget < 0 {
+		contextBudget = defaultMaxContextChars
+	}
 
 	for round := 0; round < rounds; {
 		observe.RoundStart(sessionID, round)
@@ -396,6 +406,10 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 			llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: childWrapUpNudge})
 		}
 
+		if contextBudget > 0 {
+			llmMsgs = fitMessagesToBudget(llmMsgs, contextBudget, contextFitOpts{})
+		}
+
 		req := llmclient.ChatRequest{Model: model, Messages: llmMsgs, Tools: roundTools}
 		ctxRemain := ctxRemaining(runCtx)
 		slog.Info("agent.llm_wait", "session", sessionID, "round", round, "model", model, "ctx_remain", ctxRemain)
@@ -406,6 +420,20 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 		llmMS := time.Since(roundT0).Milliseconds()
 		if err != nil {
 			slog.Warn("agent.llm_error", "session", sessionID, "round", round, "model", model, "ms", llmMS, "error", err.Error())
+			// Context overflow: compact in-memory messages and retry same round.
+			if runCtx.Err() == nil && llmclient.IsContextOverflow(err) && contextCompacts < maxContextCompacts {
+				contextCompacts++
+				emergency := contextBudget
+				if emergency <= 0 {
+					emergency = defaultMaxContextChars
+				}
+				before := estimateChars(llmMsgs)
+				llmMsgs = fitMessagesToBudget(llmMsgs, emergency, contextFitOpts{Aggressive: true, KeepTail: 8})
+				slog.Info("agent.context_compact",
+					"session", sessionID, "round", round, "attempt", contextCompacts,
+					"chars_before", before, "chars_after", estimateChars(llmMsgs), "budget", emergency)
+				continue
+			}
 			// Transient stall/network error: retry the same round once.
 			if runCtx.Err() == nil && llmRetries < maxLLMRetries {
 				llmRetries++
@@ -604,7 +632,7 @@ func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llmclient.Pr
 		return p, model, nil
 	}
 	r.provMu.Unlock()
-	p := llmclient.NewOpenAIProvider(name, apiBase, apiKey, "")
+	p := llmclient.NewAdaptiveProvider(name, apiBase, apiKey, "")
 	p.SetDisableThinking(r.deps.DisableThinking)
 	r.provMu.Lock()
 	if existing, ok := r.provCache[name]; ok {
@@ -879,6 +907,14 @@ func titleFromMessage(msg string) string {
 // after tool work already ran. It does not claim success (the deliverable may be
 // missing); completed tool results remain persisted in the session.
 func buildLLMErrorSummary(cause error) string {
+	if llmclient.IsContextOverflow(cause) {
+		msg := "未能完成本次任务：上下文过长，已尝试压缩仍失败"
+		if cause != nil {
+			msg += "（" + cause.Error() + "）"
+		}
+		msg += "。已完成的工具结果已保存在会话中；请开新会话或让我继续（continue）并尽量缩小范围。"
+		return msg
+	}
 	msg := "未能完成本次任务：调用模型时出错"
 	if cause != nil {
 		msg += "（" + cause.Error() + "）"

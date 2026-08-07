@@ -17,8 +17,10 @@ func TestPostgresCRUDSmoke(t *testing.T) {
 		t.Skip("set SWIFLOW_TEST_PG_DSN to run Postgres smoke test")
 	}
 	cfg := config.Config{
-		DBDriver: "postgres",
-		DBDSN:    dsn,
+		DatabaseDSN: dsn,
+	}
+	if err := cfg.Normalize(); err != nil {
+		t.Fatal(err)
 	}
 	ctx := context.Background()
 	st, err := appdb.MigrateAndOpen(ctx, cfg, true)

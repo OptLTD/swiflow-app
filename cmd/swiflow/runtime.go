@@ -85,20 +85,19 @@ func openRuntime(ctx context.Context, cfg config.Config) (*runtimeBundle, error)
 	tracker := harness.NewTracker(nil, st)
 
 	runner := agent.NewRunner(agent.RunnerDeps{
-		Store:              st,
-		Tools:              toolsReg,
-		Skills:             skillsCat,
-		Workspace:          cfg.WorkspaceDir,
-		MaxHistoryMessages: cfg.MaxHistoryMsgs,
-		Publish:            tracker,
-		MaxConcurrentRuns:  cfg.MaxConcurrentRuns,
-		ToolTimeoutSec:     cfg.ToolTimeoutSec,
+		Store: st, Tools: toolsReg, Skills: skillsCat,
+		Publish: tracker, Workspace: cfg.WorkspaceDir,
+
+		MaxHistoryMessages: cfg.Context.MaxHistoryMsgs,
+		MaxContextChars:    cfg.Context.MaxContextChars,
+		MaxConcurrentRuns:  cfg.Context.MaxConcurrentRuns,
+		ToolTimeoutSec:     cfg.Context.ToolTimeoutSec,
 		// Align the content_extract call timeout with the provider timeout
 		// (+margin) so the provider's own HTTP timeout errors first.
 		ToolTimeouts: map[string]time.Duration{
 			tool.ToolContentExtract: docTimeout + 30*time.Second,
 		},
-		DisableThinking: cfg.DisableThinking,
+		DisableThinking: cfg.Context.DisableThinking,
 	})
 	tool.RegisterSubagent(toolsReg, runner)
 
