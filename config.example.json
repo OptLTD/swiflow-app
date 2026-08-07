@@ -3,6 +3,7 @@
   "database_dsn": "sqlite://./data/swiflow.db",
   "workspace_dir": "./data/workspace",
   "allowed_origins": ["http://localhost:5173"],
+  "encryption_key": "change-me-in-production",
   "context": {
     "max_history_msgs": 100,
     "max_context_chars": 120000,

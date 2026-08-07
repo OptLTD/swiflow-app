@@ -18,7 +18,8 @@ type Pool struct {
 	proxy    string // optional Chrome --proxy-server value
 	launch   *launcherHolder
 	browser  *rod.Browser
-	page     *rod.Page
+	page     *rod.Page            // shared page when tid is empty (LocalMode)
+	pages    map[string]*rod.Page // per-tenant pages
 }
 
 type launcherHolder struct {
@@ -27,12 +28,12 @@ type launcherHolder struct {
 
 // NewPool creates a browser pool (direct connection). Call Close on shutdown.
 func NewPool(headless bool) *Pool {
-	return &Pool{headless: headless}
+	return &Pool{headless: headless, pages: map[string]*rod.Page{}}
 }
 
 // NewPoolWithProxy creates a browser pool that launches Chrome with proxy.
 func NewPoolWithProxy(headless bool, proxy string) *Pool {
-	return &Pool{headless: headless, proxy: proxy}
+	return &Pool{headless: headless, proxy: proxy, pages: map[string]*rod.Page{}}
 }
 
 // Close shuts down the browser and launcher.
@@ -43,6 +44,12 @@ func (p *Pool) Close() {
 }
 
 func (p *Pool) cleanupLocked() {
+	if p.pages != nil {
+		for tid, pg := range p.pages {
+			_ = pg.Close()
+			delete(p.pages, tid)
+		}
+	}
 	if p.browser != nil {
 		_ = p.browser.Close()
 		p.browser = nil
@@ -96,26 +103,56 @@ func (p *Pool) ensureBrowser() error {
 	p.launch = &launcherHolder{l: l}
 	p.browser = browser
 	p.page = page
+	if p.pages == nil {
+		p.pages = map[string]*rod.Page{}
+	}
 	return nil
 }
 
-func (p *Pool) pageFor(ctx context.Context) (*rod.Page, error) {
+func (p *Pool) pageFor(ctx context.Context, tid string) (*rod.Page, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if err := p.ensureBrowser(); err != nil {
 		return nil, err
 	}
-	return p.page.Context(ctx), nil
+	if tid == "" {
+		return p.page.Context(ctx), nil
+	}
+	pg := p.pages[tid]
+	if pg != nil {
+		// Detect dead pages and recreate.
+		if _, err := pg.Info(); err == nil {
+			return pg.Context(ctx), nil
+		}
+		_ = pg.Close()
+		delete(p.pages, tid)
+	}
+	pg, err := stealth.Page(p.browser)
+	if err != nil {
+		return nil, fmt.Errorf("stealth page for tenant: %w", err)
+	}
+	if err := prepareStealthPage(pg); err != nil {
+		_ = pg.Close()
+		return nil, fmt.Errorf("prepare tenant page: %w", err)
+	}
+	p.pages[tid] = pg
+	return pg.Context(ctx), nil
 }
 
-// WithPage runs fn with a page bound to a timeout context.
+// WithPage runs fn with the shared page bound to a timeout context.
 func (p *Pool) WithPage(ctx context.Context, timeout time.Duration, fn func(*rod.Page) (string, error)) (string, error) {
+	return p.WithPageTenant(ctx, "", timeout, fn)
+}
+
+// WithPageTenant runs fn with a page for tid. Empty tid uses the shared page
+// (LocalMode). Non-empty tid reuses a stealth page per tenant from the same browser.
+func (p *Pool) WithPageTenant(ctx context.Context, tid string, timeout time.Duration, fn func(*rod.Page) (string, error)) (string, error) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	page, err := p.pageFor(cctx)
+	page, err := p.pageFor(cctx, tid)
 	if err != nil {
 		return "", err
 	}

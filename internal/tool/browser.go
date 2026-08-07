@@ -15,6 +15,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/library/browser"
 	"github.com/OptLTD/swiflow/library/support"
 )
@@ -85,6 +86,10 @@ func (t *browserTool) Parameters() map[string]any {
 	}
 }
 
+func (t *browserTool) withPage(ctx context.Context, timeout time.Duration, fn func(*rod.Page) (string, error)) (string, error) {
+	return t.pool.WithPageTenant(ctx, tenant.ID(ctx), timeout, fn)
+}
+
 func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	if !t.allowed {
 		return "", fmt.Errorf("browser is disabled (set tools.browser_enabled or SWIFLOW_BROWSER=true)")
@@ -105,7 +110,7 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		if err := support.CheckURLAllowLoopback(url); err != nil {
 			return "", err
 		}
-		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+		return t.withPage(ctx, timeout, func(page *rod.Page) (string, error) {
 			note, err := browser.Open(page, url)
 			if err != nil {
 				return "", err
@@ -127,7 +132,7 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 			return out, nil
 		})
 	case "content":
-		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+		return t.withPage(ctx, timeout, func(page *rod.Page) (string, error) {
 			if err := browser.WaitLoaded(page); err != nil {
 				return "", err
 			}
@@ -154,14 +159,14 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 			name += ".png"
 		}
 		rel := filepath.Join("browser", filepath.Base(name))
-		full, err := support.SandboxPath(t.ws.Base, rel)
+		full, err := support.SandboxPath(WorkspaceBase(ctx, t.ws.Base), rel)
 		if err != nil {
 			return "", err
 		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			return "", err
 		}
-		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+		return t.withPage(ctx, timeout, func(page *rod.Page) (string, error) {
 			if err := browser.WaitLoaded(page); err != nil {
 				return "", err
 			}
@@ -182,7 +187,7 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		if sel == "" && text == "" {
 			return "", fmt.Errorf("selector or text is required for click")
 		}
-		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+		return t.withPage(ctx, timeout, func(page *rod.Page) (string, error) {
 			el, label, err := findClickTarget(page, sel, text)
 			if err != nil {
 				return "", err
@@ -208,7 +213,7 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		if sel == "" {
 			return "", fmt.Errorf("selector is required for type")
 		}
-		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+		return t.withPage(ctx, timeout, func(page *rod.Page) (string, error) {
 			el, err := page.Element(sel)
 			if err != nil {
 				return "", wrapBrowserTimeout(err)
@@ -225,7 +230,7 @@ func (t *browserTool) Execute(ctx context.Context, args map[string]any) (string,
 		}
 		expr = wrapBrowserEvalJS(expr)
 		url, _ := args["url"].(string)
-		return t.pool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+		return t.withPage(ctx, timeout, func(page *rod.Page) (string, error) {
 			if url != "" {
 				if err := support.CheckURLAllowLoopback(url); err != nil {
 					return "", err

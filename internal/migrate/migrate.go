@@ -40,6 +40,7 @@ func ApplyPostgres(ctx context.Context, db *sql.DB, schemaSQL string) error {
 	}
 	reconcile := []string{
 		`ALTER TABLE agent_session ADD COLUMN IF NOT EXISTS parent VARCHAR(36) NOT NULL DEFAULT ''`,
+		`ALTER TABLE sys_tenant ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, stmt := range reconcile {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {

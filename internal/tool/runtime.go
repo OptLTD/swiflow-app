@@ -28,8 +28,9 @@ func runCommand(ctx context.Context, ws WorkspaceRoots, bin string, binArgs []st
 	cctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, bin, binArgs...)
-	if ws.Base != "" {
-		cmd.Dir = ws.Base
+	base := WorkspaceBase(ctx, ws.Base)
+	if base != "" {
+		cmd.Dir = base
 	}
 	var out bytes.Buffer
 	cmd.Stdout = &out

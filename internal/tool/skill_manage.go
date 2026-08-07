@@ -49,13 +49,14 @@ func (t *skillManageTool) Parameters() map[string]any {
 func (t *skillManageTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	action := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", args["action"])))
 	slug, _ := args["slug"].(string)
+	cat := t.base.catalog(ctx)
 	switch action {
 	case "create":
 		content, _ := args["content"].(string)
 		if content == "" {
 			return "", fmt.Errorf("content is required for create")
 		}
-		if err := t.base.cat.CreateSkill(slug, content); err != nil {
+		if err := cat.CreateSkill(slug, content); err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("skill %q created in user skills", slug), nil
@@ -63,7 +64,7 @@ func (t *skillManageTool) Execute(ctx context.Context, args map[string]any) (str
 		oldStr, _ := args["old_string"].(string)
 		newStr, _ := args["new_string"].(string)
 		replaceAll, _ := args["replace_all"].(bool)
-		if err := t.base.cat.PatchSkill(slug, oldStr, newStr, replaceAll); err != nil {
+		if err := cat.PatchSkill(slug, oldStr, newStr, replaceAll); err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("skill %q patched", slug), nil
@@ -90,11 +91,11 @@ func (t *skillDraftTool) Parameters() map[string]any {
 	}
 }
 
-func (t *skillDraftTool) Execute(_ context.Context, args map[string]any) (string, error) {
+func (t *skillDraftTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	slug, _ := args["slug"].(string)
 	content, _ := args["content"].(string)
 	note, _ := args["note"].(string)
-	d, err := t.base.cat.SaveDraft(slug, content, note)
+	d, err := t.base.catalog(ctx).SaveDraft(slug, content, note)
 	if err != nil {
 		return "", err
 	}

@@ -11,7 +11,7 @@ import (
 )
 
 type jobScheduler interface {
-	ScheduleRun(sessionID, agentKey, message string, after time.Duration)
+	ScheduleRun(sessionID, agentKey, message string, after time.Duration, tid string)
 	AddJob(ctx context.Context, job *store.CronJob) error
 }
 
@@ -58,7 +58,7 @@ func (t *scheduleRunTool) Execute(ctx context.Context, args map[string]any) (str
 	}
 	delay := clampDelay(args)
 	after := time.Duration(delay) * time.Second
-	t.base.sched.ScheduleRun(rc.SessionID, agentKey, message, after)
+	t.base.sched.ScheduleRun(rc.SessionID, agentKey, message, after, rc.Tid)
 	return fmt.Sprintf("scheduled agent run in %ds for session %s", delay, rc.SessionID), nil
 }
 

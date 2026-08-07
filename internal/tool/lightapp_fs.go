@@ -41,9 +41,9 @@ func (t *lightAppReadTool) Parameters() map[string]any {
 		"required": []string{"path"},
 	}
 }
-func (t *lightAppReadTool) Execute(_ context.Context, args map[string]any) (string, error) {
+func (t *lightAppReadTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
-	full, err := support.SandboxPath(t.la.Base, path)
+	full, err := support.SandboxPath(LightAppsBase(ctx, t.la.Base), path)
 	if err != nil {
 		return "", err
 	}
@@ -78,10 +78,10 @@ func (t *lightAppWriteTool) Parameters() map[string]any {
 		"required": []string{"path", "content"},
 	}
 }
-func (t *lightAppWriteTool) Execute(_ context.Context, args map[string]any) (string, error) {
+func (t *lightAppWriteTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
-	full, err := support.SandboxPath(t.la.Base, path)
+	full, err := support.SandboxPath(LightAppsBase(ctx, t.la.Base), path)
 	if err != nil {
 		return "", err
 	}
@@ -114,12 +114,12 @@ func (t *lightAppLsTool) Parameters() map[string]any {
 		"required": []string{"path"},
 	}
 }
-func (t *lightAppLsTool) Execute(_ context.Context, args map[string]any) (string, error) {
+func (t *lightAppLsTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
 	if strings.TrimSpace(path) == "" {
 		return "", fmt.Errorf("path required (use light_app_list to discover app ids)")
 	}
-	full, err := support.SandboxPath(t.la.Base, path)
+	full, err := support.SandboxPath(LightAppsBase(ctx, t.la.Base), path)
 	if err != nil {
 		return "", err
 	}
@@ -210,8 +210,9 @@ func (t *lightAppCreateTool) Execute(ctx context.Context, args map[string]any) (
 	}
 	description, _ := args["description"].(string)
 	id := support.NewID()
+	base := LightAppsBase(ctx, t.la.Base)
 	// Create app directory.
-	if err := os.MkdirAll(filepath.Join(t.la.Base, id), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(base, id), 0o755); err != nil {
 		return "", fmt.Errorf("mkdir: %w", err)
 	}
 	a := &store.LightApp{
@@ -272,6 +273,7 @@ func (t *lightAppLaunchTool) Execute(ctx context.Context, args map[string]any) (
 		EntryPoint: a.EntryPoint,
 		Runtime:    lightapp.Runtime(a.Runtime),
 		ExtraEnv:   extraEnv,
+		BaseDir:    LightAppsBase(ctx, ""),
 	})
 	if err != nil {
 		return "", fmt.Errorf("launch: %w", err)

@@ -31,6 +31,7 @@ type DriftSignal struct {
 // RunSnapshot is the live (or recently finished) view of one session run.
 type RunSnapshot struct {
 	SessionID   string        `json:"session_id"`
+	Tid         string        `json:"tid,omitempty"`
 	ParentID    string        `json:"parent_id,omitempty"`
 	Agent       string        `json:"agent,omitempty"`
 	Status      string        `json:"status"` // idle|running|queued|done|error|budget|stall

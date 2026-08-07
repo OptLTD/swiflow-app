@@ -20,11 +20,18 @@ import type {
   WorkspaceEntry,
 } from './types'
 
+function authHeaders(): Record<string, string> {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('swiflow_token') : null
+  if (!token) return {}
+  return { Authorization: `Bearer ${token}` }
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch('/api' + path, {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
     },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(30_000),
@@ -173,6 +180,7 @@ async function uploadWorkspaceFiles(
   }
   const res = await fetch('/api/workspace/act?act=upload', {
     method: 'POST',
+    headers: { ...authHeaders() },
     body: fd,
   })
   const text = await res.text()
@@ -196,7 +204,7 @@ export async function chat(
   agentKey: string,
   onEvent: (ev: ChatEvent) => void,
 ): Promise<{ queued?: boolean; position?: number }> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...authHeaders() }
   const res = await fetch('/api/sessions/act', {
     method: 'POST',
     headers,
@@ -260,7 +268,7 @@ async function streamSSE(
   init: RequestInit,
   onEvent: (ev: ChatEvent) => void,
 ): Promise<void> {
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = { ...authHeaders() }
   if (init.body) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, {
     ...init,

@@ -78,7 +78,7 @@ func (t *windowOpenTool) Execute(ctx context.Context, args map[string]any) (stri
 		return "", fmt.Errorf("path required")
 	}
 	rel := support.NormalizeWorkspaceRel(path)
-	full, err := support.SandboxPath(t.base.ws.Base, rel)
+	full, err := support.SandboxPath(WorkspaceBase(ctx, t.base.ws.Base), rel)
 	if err != nil {
 		return "", err
 	}

@@ -21,6 +21,11 @@ type TodoLoader interface {
 	LoadTodos(ctx context.Context, sessionID string) (string, error)
 }
 
+// SessionTidLoader resolves a session's tenant id without tenant filtering.
+type SessionTidLoader interface {
+	SessionTid(ctx context.Context, sessionID string) (string, error)
+}
+
 // Tracker observes agent events, maintains RunSnapshots, and emits harness_warn.
 // Phase 1: observe only — does not inject into the LLM loop.
 type Tracker struct {
@@ -133,6 +138,9 @@ func (t *Tracker) observe(sessionID string, ev agent.Event) {
 
 	st := t.ensureLocked(sessionID, now)
 	st.snap.UpdatedAt = now
+	if st.snap.Tid == "" {
+		st.snap.Tid = t.lookupTidLocked(sessionID)
+	}
 
 	switch ev.Type {
 	case "user":
@@ -377,6 +385,9 @@ func (t *Tracker) onSubagentSpawnResultLocked(parentID string, parent *runState,
 	t.linkChildLocked(parent, parsed.ChildSession)
 	child := t.ensureLocked(parsed.ChildSession, now)
 	child.snap.ParentID = parentID
+	if child.snap.Tid == "" {
+		child.snap.Tid = parent.snap.Tid
+	}
 	if child.snap.Goal == "" {
 		if parsed.Goal != "" {
 			child.snap.Goal = truncate(parsed.Goal, 500)
@@ -530,6 +541,12 @@ func (t *Tracker) Snapshot(sessionID string) (RunSnapshot, bool) {
 // List returns root runs (no parent) plus in-flight children summaries via Children.
 // includeFinished: when false, only running/queued.
 func (t *Tracker) List(includeFinished bool) []RunSnapshot {
+	return t.ListForTenant("", includeFinished)
+}
+
+// ListForTenant is like List but keeps only runs whose Tid matches.
+// Empty tid returns all tenants.
+func (t *Tracker) ListForTenant(tid string, includeFinished bool) []RunSnapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	out := make([]RunSnapshot, 0)
@@ -538,13 +555,30 @@ func (t *Tracker) List(includeFinished bool) []RunSnapshot {
 		if st == nil || st.snap.ParentID != "" {
 			continue
 		}
+		if tid != "" && st.snap.Tid != "" && st.snap.Tid != tid {
+			continue
+		}
 		if !includeFinished && st.snap.Status != StatusRunning && st.snap.Status != StatusQueued {
 			continue
 		}
 		out = append(out, cloneSnap(st.snap))
 	}
-	// Also include any running roots not in order (shouldn't happen).
 	return out
+}
+
+func (t *Tracker) lookupTidLocked(sessionID string) string {
+	if t.todos == nil {
+		return ""
+	}
+	tl, ok := t.todos.(SessionTidLoader)
+	if !ok {
+		return ""
+	}
+	tid, err := tl.SessionTid(context.Background(), sessionID)
+	if err != nil {
+		return ""
+	}
+	return tid
 }
 
 // ListChildren returns snapshots whose ParentID matches.

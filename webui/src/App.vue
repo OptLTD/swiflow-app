@@ -9,6 +9,7 @@ import SetupWizard from './components/SetupWizard.vue'
 import ResizeHandle from './components/ResizeHandle.vue'
 import FileDropZone from './components/FileDropZone.vue'
 import WelcomeView from './views/WelcomeView.vue'
+import LoginView from './views/LoginView.vue'
 
 // Heavy views load on demand — keeps the Windows WebView2 first paint small.
 const ChatPanel = defineAsyncComponent(() => import('./components/ChatPanel.vue'))
@@ -40,7 +41,8 @@ async function onSetupDone() {
 </script>
 
 <template>
-  <FileDropZone class="app-shell">
+  <LoginView v-if="auth.needsLogin" />
+  <FileDropZone v-else class="app-shell">
     <HeadTabBar />
 
     <!-- Main content area -->

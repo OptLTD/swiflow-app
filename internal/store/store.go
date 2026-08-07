@@ -135,9 +135,24 @@ type CronJob struct {
 	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
 
+// Tenant is a multi-tenant isolation boundary.
+type Tenant struct {
+	ID           string `json:"id" db:"id"`
+	Name         string `json:"name" db:"name"`
+	Enabled      bool   `json:"enabled" db:"enabled"`
+	PasswordHash string `json:"-" db:"password_hash"`
+	CreatedAt    string `json:"created_at" db:"created_at"`
+}
+
 // Store is the persistence interface.
 type Store interface {
 	Close() error
+
+	// Tenants
+	EnsureDefaultTenant(ctx context.Context) error
+	CreateTenant(ctx context.Context, id, name, passwordHash string) error
+	GetTenantByName(ctx context.Context, name string) (*Tenant, error)
+	GetTenantByID(ctx context.Context, id string) (*Tenant, error)
 
 	// Providers
 	CreateProvider(ctx context.Context, p *Provider) error
@@ -157,6 +172,8 @@ type Store interface {
 	// Sessions + messages
 	CreateSession(ctx context.Context, s *Session) error
 	GetSessionByID(ctx context.Context, id string) (*Session, error)
+	// SessionTid returns the tenant id for a session without tenant filtering.
+	SessionTid(ctx context.Context, id string) (string, error)
 	ListSessions(ctx context.Context) ([]Session, error)
 	UpdateSessionTitle(ctx context.Context, id, title string) error
 	// DeleteSession removes a session, its child (subagent) sessions, and related rows.
@@ -186,6 +203,8 @@ type Store interface {
 	// Cron jobs (Phase 2)
 	CreateCronJob(ctx context.Context, j *CronJob) error
 	ListCronJobs(ctx context.Context) ([]CronJob, error)
+	// ListAllCronJobs returns jobs across all tenants (scheduler Reload).
+	ListAllCronJobs(ctx context.Context) ([]CronJob, error)
 	GetCronJobByID(ctx context.Context, id string) (*CronJob, error)
 	UpdateCronJob(ctx context.Context, id string, fields map[string]any) error
 	DeleteCronJob(ctx context.Context, id string) error

@@ -5,6 +5,7 @@ import (
 
 	"github.com/OptLTD/swiflow/internal/harness"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tenant"
 )
 
 func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
@@ -13,7 +14,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Include finished roots so humans can review drift after a run ends.
-	runs := s.harness.List(true)
+	runs := s.harness.ListForTenant(tenant.ID(r.Context()), true)
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
 }
 
@@ -25,6 +26,10 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 	}
 	snap, ok := s.harness.Snapshot(id)
 	if !ok {
+		writeErr(w, http.StatusNotFound, ErrRunNotFound)
+		return
+	}
+	if snap.Tid != "" && snap.Tid != tenant.ID(r.Context()) {
 		writeErr(w, http.StatusNotFound, ErrRunNotFound)
 		return
 	}

@@ -12,6 +12,7 @@ func TestConcurrentGate(t *testing.T) {
 	// Simulate one busy slot without a full Run.
 	r.mu.Lock()
 	r.busy["a"] = struct{}{}
+	r.busyTid["default"] = 1
 	r.cancels["a"] = func() {}
 	r.mu.Unlock()
 

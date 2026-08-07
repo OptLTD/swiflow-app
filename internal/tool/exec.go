@@ -54,7 +54,11 @@ func (t *execTool) Execute(ctx context.Context, args map[string]any) (string, er
 	if command == "" {
 		return "", fmt.Errorf("command is required")
 	}
-	return runCommand(ctx, t.ws, "sh", []string{"-c", command}, parseTimeout(args))
+	ws := t.ws
+	if base := WorkspaceBase(ctx, t.ws.Base); base != t.ws.Base {
+		ws = WorkspaceRoots{Base: base}
+	}
+	return runCommand(ctx, ws, "sh", []string{"-c", command}, parseTimeout(args))
 }
 
 // RegisterExec registers the exec tool. It appears in the admin UI even when

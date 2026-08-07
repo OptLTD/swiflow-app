@@ -3,12 +3,16 @@ package server
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 
 	"github.com/OptLTD/swiflow/internal/lightapp"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/library/support"
 )
+
+func (s *Server) lightAppsRoot(r *http.Request) string {
+	return s.cfg.RootsForTenant(tenant.ID(r.Context())).LightApps
+}
 
 func (s *Server) listLightApps(w http.ResponseWriter, r *http.Request) {
 	apps, err := s.st.ListLightApps(r.Context())
@@ -58,7 +62,7 @@ func (s *Server) createLightApp(w http.ResponseWriter, r *http.Request) {
 	}
 	id := support.NewID()
 	if s.lightMgr != nil {
-		if err := s.lightMgr.EnsureDir(id); err != nil {
+		if err := s.lightMgr.EnsureDirAt(s.lightAppsRoot(r), id); err != nil {
 			writeErr(w, http.StatusInternalServerError, ErrCreateAppDirFailed)
 			return
 		}
@@ -145,15 +149,13 @@ func (s *Server) launchLightApp(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, ErrLightAppManagerUnavailable)
 		return
 	}
-	entryPoint := a.EntryPoint
-	if !filepath.IsAbs(entryPoint) {
-		entryPoint = filepath.Join(s.lightMgr.AppDir(id), entryPoint)
-	}
+	base := s.lightAppsRoot(r)
 	extraEnv, _ := s.st.ListLightAppEnv(r.Context())
 	url, port, err := s.lightMgr.Launch(r.Context(), id, lightapp.LaunchConfig{
 		EntryPoint: a.EntryPoint,
 		Runtime:    lightapp.Runtime(a.Runtime),
 		ExtraEnv:   extraEnv,
+		BaseDir:    base,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())

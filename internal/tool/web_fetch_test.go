@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ func TestWebFetchSaveBinaryDownload(t *testing.T) {
 	dir := t.TempDir()
 	tl := &webFetchTool{ws: WorkspaceRoots{Base: dir}}
 	out, err := tl.saveBinaryDownload(
+		context.Background(),
 		"https://example.com/reports/The-Four-Clusters.pdf",
 		"application/pdf",
 		[]byte("%PDF-1.4 fake pdf content"),
@@ -38,10 +40,11 @@ func TestWebFetchSaveBinaryUniqueName(t *testing.T) {
 	dir := t.TempDir()
 	tl := &webFetchTool{ws: WorkspaceRoots{Base: dir}}
 	body := []byte("%PDF-1.4 x")
-	if _, err := tl.saveBinaryDownload("https://ex.com/a.pdf", "application/pdf", body); err != nil {
+	ctx := context.Background()
+	if _, err := tl.saveBinaryDownload(ctx, "https://ex.com/a.pdf", "application/pdf", body); err != nil {
 		t.Fatal(err)
 	}
-	out, err := tl.saveBinaryDownload("https://ex.com/a.pdf", "application/pdf", body)
+	out, err := tl.saveBinaryDownload(ctx, "https://ex.com/a.pdf", "application/pdf", body)
 	if err != nil {
 		t.Fatal(err)
 	}

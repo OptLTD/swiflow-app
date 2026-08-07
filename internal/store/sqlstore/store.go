@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/library/support"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -25,6 +26,7 @@ type Store struct {
 	db     *sqlx.DB
 	now    string
 	driver string
+	encKey []byte
 }
 
 // OpenSQLite opens (creating if needed) the SQLite database at path.
@@ -62,6 +64,34 @@ func (s *Store) DB() *sql.DB { return s.db.DB }
 // Driver returns "sqlite" or "postgres".
 func (s *Store) Driver() string { return s.driver }
 
+// SetEncryptionKey sets an optional AES key for provider api_key at rest.
+// When nil/empty, api_key is stored and read as plaintext bytes.
+func (s *Store) SetEncryptionKey(key []byte) {
+	if len(key) == 0 {
+		s.encKey = nil
+		return
+	}
+	s.encKey = append([]byte(nil), key...)
+}
+
+func (s *Store) sealAPIKey(plain []byte) ([]byte, error) {
+	if len(s.encKey) == 0 {
+		return plain, nil
+	}
+	return support.Encrypt(s.encKey, plain)
+}
+
+func (s *Store) openAPIKey(blob []byte) []byte {
+	if len(s.encKey) == 0 || len(blob) == 0 {
+		return blob
+	}
+	plain, err := support.Decrypt(s.encKey, blob)
+	if err != nil {
+		return blob // legacy plaintext
+	}
+	return plain
+}
+
 // sql rewrites dialect tokens and rebinds ?.
 func (s *Store) sql(q string) string {
 	q = strings.ReplaceAll(q, nowToken, s.now)
@@ -98,16 +128,24 @@ func quotePGTypeColumn(q string) string {
 // --- Providers ---
 
 func (s *Store) CreateProvider(ctx context.Context, p *store.Provider) error {
-	_, err := s.db.ExecContext(ctx, s.sql(`
-		INSERT INTO llm_provider (id, name, display, api_base, api_key, model, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`), p.ID, p.Name, p.Display, p.ApiBase, []byte(p.ApiKey), p.Model, s.boolArg(p.Enabled))
+	keyBlob, err := s.sealAPIKey([]byte(p.ApiKey))
+	if err != nil {
+		return err
+	}
+	t := tid(ctx)
+	p.Tid = t
+	_, err = s.db.ExecContext(ctx, s.sql(`
+		INSERT INTO llm_provider (id, tid, name, display, api_base, api_key, model, enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`), p.ID, t, p.Name, p.Display, p.ApiBase, keyBlob, p.Model, s.boolArg(p.Enabled))
 	return err
 }
 
 func (s *Store) ListProviders(ctx context.Context) ([]store.Provider, error) {
 	var rows []providerRow
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT * FROM llm_provider ORDER BY created_at`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT * FROM llm_provider WHERE tid = ? ORDER BY created_at
+	`), tid(ctx)); err != nil {
 		return nil, err
 	}
 	out := make([]store.Provider, 0, len(rows))
@@ -119,7 +157,9 @@ func (s *Store) ListProviders(ctx context.Context) ([]store.Provider, error) {
 
 func (s *Store) GetProviderByName(ctx context.Context, name string) (*store.Provider, error) {
 	var r providerRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM llm_provider WHERE name = ?`), name); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM llm_provider WHERE name = ? AND tid = ?
+	`), name, tid(ctx)); err != nil {
 		return nil, err
 	}
 	p := r.toProvider()
@@ -129,15 +169,19 @@ func (s *Store) GetProviderByName(ctx context.Context, name string) (*store.Prov
 // ProviderAPIKey returns the API key for a provider by name.
 func (s *Store) ProviderAPIKey(ctx context.Context, name string) (string, error) {
 	var blob []byte
-	if err := s.db.GetContext(ctx, &blob, s.sql(`SELECT api_key FROM llm_provider WHERE name = ?`), name); err != nil {
+	if err := s.db.GetContext(ctx, &blob, s.sql(`
+		SELECT api_key FROM llm_provider WHERE name = ? AND tid = ?
+	`), name, tid(ctx)); err != nil {
 		return "", err
 	}
-	return string(blob), nil
+	return string(s.openAPIKey(blob)), nil
 }
 
 func (s *Store) GetProviderByID(ctx context.Context, id string) (*store.Provider, error) {
 	var r providerRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM llm_provider WHERE id = ?`), id); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM llm_provider WHERE id = ? AND tid = ?
+	`), id, tid(ctx)); err != nil {
 		return nil, err
 	}
 	p := r.toProvider()
@@ -146,17 +190,22 @@ func (s *Store) GetProviderByID(ctx context.Context, id string) (*store.Provider
 
 // ProviderCreds returns the api_base, api_key, and model for an enabled provider.
 func (s *Store) ProviderCreds(ctx context.Context, name string) (apiBase, apiKey, model string, err error) {
+	t := tid(ctx)
 	var r providerRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM llm_provider WHERE name = ? AND enabled = 1`), name); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM llm_provider WHERE name = ? AND tid = ? AND enabled = 1
+	`), name, t); err != nil {
 		if err == sql.ErrNoRows {
 			var disabled providerRow
-			if e := s.db.GetContext(ctx, &disabled, s.sql(`SELECT * FROM llm_provider WHERE name = ?`), name); e == nil {
+			if e := s.db.GetContext(ctx, &disabled, s.sql(`
+				SELECT * FROM llm_provider WHERE name = ? AND tid = ?
+			`), name, t); e == nil {
 				return "", "", "", fmt.Errorf("provider %q is disabled", name)
 			}
 		}
 		return "", "", "", err
 	}
-	return r.ApiBase, string(r.ApiKeyBlob), r.Model, nil
+	return r.ApiBase, string(s.openAPIKey(r.ApiKeyBlob)), r.Model, nil
 }
 
 func (s *Store) UpdateProvider(ctx context.Context, id string, fields map[string]any) error {
@@ -175,8 +224,12 @@ func (s *Store) UpdateProvider(ctx context.Context, id string, fields map[string
 			if !ok {
 				return fmt.Errorf("api_key must be a string")
 			}
+			keyBlob, err := s.sealAPIKey([]byte(keyStr))
+			if err != nil {
+				return err
+			}
 			sets = append(sets, "api_key = ?")
-			args = append(args, []byte(keyStr))
+			args = append(args, keyBlob)
 		case "enabled":
 			b, ok := v.(bool)
 			if !ok {
@@ -197,30 +250,36 @@ func (s *Store) UpdateProvider(ctx context.Context, id string, fields map[string
 		return nil
 	}
 	sets = append(sets, "updated_at = datetime('now')")
-	args = append(args, id)
-	q := fmt.Sprintf("UPDATE llm_provider SET %s WHERE id = ?", strings.Join(sets, ", "))
-	_, err := s.db.ExecContext(ctx, s.sql(q), args...)
-	return err
+	args = append(args, id, tid(ctx))
+	q := fmt.Sprintf("UPDATE llm_provider SET %s WHERE id = ? AND tid = ?", strings.Join(sets, ", "))
+	res, err := s.db.ExecContext(ctx, s.sql(q), args...)
+	return s.affectedOrNoRows(res, err)
 }
 
 func (s *Store) DeleteProvider(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, s.sql(`DELETE FROM llm_provider WHERE id = ?`), id)
-	return err
+	res, err := s.db.ExecContext(ctx, s.sql(`
+		DELETE FROM llm_provider WHERE id = ? AND tid = ?
+	`), id, tid(ctx))
+	return s.affectedOrNoRows(res, err)
 }
 
 // --- Agents ---
 
 func (s *Store) CreateAgent(ctx context.Context, a *store.Agent) error {
+	t := tid(ctx)
+	a.Tid = t
 	_, err := s.db.ExecContext(ctx, s.sql(`
-		INSERT INTO agent_config (id, key, display, txt_model, img_model, sys_prompt)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`), a.ID, a.Key, a.Display, a.TxtModel, a.ImgModel, a.SysPrompt)
+		INSERT INTO agent_config (id, tid, key, display, txt_model, img_model, sys_prompt)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`), a.ID, t, a.Key, a.Display, a.TxtModel, a.ImgModel, a.SysPrompt)
 	return err
 }
 
 func (s *Store) ListAgents(ctx context.Context) ([]store.Agent, error) {
 	var rows []agentRow
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT * FROM agent_config ORDER BY created_at`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT * FROM agent_config WHERE tid = ? ORDER BY created_at
+	`), tid(ctx)); err != nil {
 		return nil, err
 	}
 	out := make([]store.Agent, 0, len(rows))
@@ -232,7 +291,9 @@ func (s *Store) ListAgents(ctx context.Context) ([]store.Agent, error) {
 
 func (s *Store) GetAgentByKey(ctx context.Context, key string) (*store.Agent, error) {
 	var r agentRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM agent_config WHERE key = ?`), key); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM agent_config WHERE key = ? AND tid = ?
+	`), key, tid(ctx)); err != nil {
 		return nil, err
 	}
 	a := r.toAgent()
@@ -256,33 +317,51 @@ func (s *Store) UpdateAgent(ctx context.Context, id string, fields map[string]an
 		return nil
 	}
 	sets = append(sets, "updated_at = datetime('now')")
-	args = append(args, id)
-	q := fmt.Sprintf("UPDATE agent_config SET %s WHERE id = ?", strings.Join(sets, ", "))
-	_, err := s.db.ExecContext(ctx, s.sql(q), args...)
-	return err
+	args = append(args, id, tid(ctx))
+	q := fmt.Sprintf("UPDATE agent_config SET %s WHERE id = ? AND tid = ?", strings.Join(sets, ", "))
+	res, err := s.db.ExecContext(ctx, s.sql(q), args...)
+	return s.affectedOrNoRows(res, err)
 }
 
 // --- Sessions + messages ---
 
 func (s *Store) CreateSession(ctx context.Context, sess *store.Session) error {
+	t := tid(ctx)
+	sess.Tid = t
 	_, err := s.db.ExecContext(ctx, s.sql(`
-		INSERT INTO agent_session (id, agent, title, parent) VALUES (?, ?, ?, ?)
-	`), sess.ID, sess.Agent, sess.Title, sess.Parent)
+		INSERT INTO agent_session (id, tid, agent, title, parent) VALUES (?, ?, ?, ?, ?)
+	`), sess.ID, t, sess.Agent, sess.Title, sess.Parent)
 	return err
 }
 
 func (s *Store) GetSessionByID(ctx context.Context, id string) (*store.Session, error) {
 	var r sessionRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM agent_session WHERE id = ?`), id); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM agent_session WHERE id = ? AND tid = ?
+	`), id, tid(ctx)); err != nil {
 		return nil, err
 	}
 	sess := r.toSession()
 	return &sess, nil
 }
 
+// SessionTid returns tid for a session id without applying the tenant filter
+// (harness / cross-tenant observers).
+func (s *Store) SessionTid(ctx context.Context, id string) (string, error) {
+	var out string
+	if err := s.db.GetContext(ctx, &out, s.sql(`
+		SELECT tid FROM agent_session WHERE id = ?
+	`), id); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
 func (s *Store) ListSessions(ctx context.Context) ([]store.Session, error) {
 	var rows []sessionRow
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT * FROM agent_session ORDER BY updated_at DESC`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT * FROM agent_session WHERE tid = ? ORDER BY updated_at DESC
+	`), tid(ctx)); err != nil {
 		return nil, err
 	}
 	out := make([]store.Session, 0, len(rows))
@@ -293,41 +372,61 @@ func (s *Store) ListSessions(ctx context.Context) ([]store.Session, error) {
 }
 
 func (s *Store) UpdateSessionTitle(ctx context.Context, id, title string) error {
-	_, err := s.db.ExecContext(ctx, s.sql(`UPDATE agent_session SET title = ?, updated_at = datetime('now') WHERE id = ?`), title, id)
-	return err
+	res, err := s.db.ExecContext(ctx, s.sql(`
+		UPDATE agent_session SET title = ?, updated_at = datetime('now') WHERE id = ? AND tid = ?
+	`), title, id, tid(ctx))
+	return s.affectedOrNoRows(res, err)
 }
 
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	if strings.TrimSpace(id) == "" {
 		return fmt.Errorf("session id required")
 	}
+	t := tid(ctx)
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	var root sessionRow
+	if err := tx.GetContext(ctx, &root, s.sqlTx(tx, `
+		SELECT * FROM agent_session WHERE id = ? AND tid = ?
+	`), id, t); err != nil {
+		return err
+	}
+
 	ids := []string{id}
 	var children []string
-	if err := tx.SelectContext(ctx, &children, s.sqlTx(tx, `SELECT id FROM agent_session WHERE parent = ?`), id); err != nil {
+	if err := tx.SelectContext(ctx, &children, s.sqlTx(tx, `
+		SELECT id FROM agent_session WHERE parent = ? AND tid = ?
+	`), id, t); err != nil {
 		return err
 	}
 	ids = append(ids, children...)
 
 	for _, sid := range ids {
-		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `DELETE FROM agent_message WHERE sid = ?`), sid); err != nil {
+		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `
+			DELETE FROM agent_message WHERE sid = ? AND tid = ?
+		`), sid, t); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `DELETE FROM agent_experience WHERE sid = ?`), sid); err != nil {
+		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `
+			DELETE FROM agent_experience WHERE sid = ? AND tid = ?
+		`), sid, t); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `DELETE FROM agent_todo WHERE sid = ?`), sid); err != nil {
+		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `
+			DELETE FROM agent_todo WHERE sid = ? AND tid = ?
+		`), sid, t); err != nil {
 			return err
 		}
 	}
 	// Children first, then the root.
 	for i := len(ids) - 1; i >= 0; i-- {
-		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `DELETE FROM agent_session WHERE id = ?`), ids[i]); err != nil {
+		if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `
+			DELETE FROM agent_session WHERE id = ? AND tid = ?
+		`), ids[i], t); err != nil {
 			return err
 		}
 	}
@@ -377,6 +476,7 @@ func encodeToolCalls(calls []store.ToolCall) (string, error) {
 
 // AppendMessage inserts a message with the next seq for its session, atomically.
 func (s *Store) AppendMessage(ctx context.Context, sessionID string, msg store.Message) (store.Message, error) {
+	t := tid(ctx)
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return msg, err
@@ -384,10 +484,13 @@ func (s *Store) AppendMessage(ctx context.Context, sessionID string, msg store.M
 	defer tx.Rollback() //nolint:errcheck
 
 	var maxSeq sql.NullInt64
-	if err := tx.GetContext(ctx, &maxSeq, s.sqlTx(tx, `SELECT MAX(seq) FROM agent_message WHERE sid = ?`), sessionID); err != nil {
+	if err := tx.GetContext(ctx, &maxSeq, s.sqlTx(tx, `
+		SELECT MAX(seq) FROM agent_message WHERE sid = ? AND tid = ?
+	`), sessionID, t); err != nil {
 		return msg, err
 	}
 	msg.Sid = sessionID
+	msg.Tid = t
 	msg.Seq = int(maxSeq.Int64) + 1
 
 	toolCallsJSON, err := encodeToolCalls(msg.ToolCalls)
@@ -395,13 +498,15 @@ func (s *Store) AppendMessage(ctx context.Context, sessionID string, msg store.M
 		return msg, err
 	}
 	_, err = tx.ExecContext(ctx, s.sqlTx(tx, `
-		INSERT INTO agent_message (id, sid, seq, role, content, thinking, tool_calls, tool_call_id, tool_name)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`), msg.ID, msg.Sid, msg.Seq, msg.Role, msg.Content, msg.Thinking, toolCallsJSON, msg.ToolCallId, msg.ToolName)
+		INSERT INTO agent_message (id, tid, sid, seq, role, content, thinking, tool_calls, tool_call_id, tool_name)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`), msg.ID, t, msg.Sid, msg.Seq, msg.Role, msg.Content, msg.Thinking, toolCallsJSON, msg.ToolCallId, msg.ToolName)
 	if err != nil {
 		return msg, err
 	}
-	if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `UPDATE agent_session SET updated_at = datetime('now') WHERE id = ?`), sessionID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.sqlTx(tx, `
+		UPDATE agent_session SET updated_at = datetime('now') WHERE id = ? AND tid = ?
+	`), sessionID, t); err != nil {
 		return msg, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -415,9 +520,10 @@ func (s *Store) UpdateToolMessageByCallID(ctx context.Context, sessionID, toolCa
 	if sessionID == "" || toolCallID == "" {
 		return fmt.Errorf("sessionID and toolCallID required")
 	}
+	t := tid(ctx)
 	res, err := s.db.ExecContext(ctx, s.sql(`
-		UPDATE agent_message SET content = ? WHERE sid = ? AND tool_call_id = ? AND role = 'tool'
-	`), content, sessionID, toolCallID)
+		UPDATE agent_message SET content = ? WHERE sid = ? AND tool_call_id = ? AND role = 'tool' AND tid = ?
+	`), content, sessionID, toolCallID, t)
 	if err != nil {
 		return err
 	}
@@ -425,15 +531,17 @@ func (s *Store) UpdateToolMessageByCallID(ctx context.Context, sessionID, toolCa
 	if n == 0 {
 		return fmt.Errorf("tool message not found: %s", toolCallID)
 	}
-	_, _ = s.db.ExecContext(ctx, s.sql(`UPDATE agent_session SET updated_at = datetime('now') WHERE id = ?`), sessionID)
+	_, _ = s.db.ExecContext(ctx, s.sql(`
+		UPDATE agent_session SET updated_at = datetime('now') WHERE id = ? AND tid = ?
+	`), sessionID, t)
 	return nil
 }
 
 func (s *Store) ListMessages(ctx context.Context, sessionID string) ([]store.Message, error) {
 	var rows []messageRow
 	if err := s.db.SelectContext(ctx, &rows, s.sql(`
-		SELECT * FROM agent_message WHERE sid = ? ORDER BY seq
-	`), sessionID); err != nil {
+		SELECT * FROM agent_message WHERE sid = ? AND tid = ? ORDER BY seq
+	`), sessionID, tid(ctx)); err != nil {
 		return nil, err
 	}
 	out := make([]store.Message, 0, len(rows))
@@ -447,7 +555,9 @@ func (s *Store) ListMessages(ctx context.Context, sessionID string) ([]store.Mes
 
 func (s *Store) ToolEnabled(ctx context.Context, name string) bool {
 	var val string
-	err := s.db.GetContext(ctx, &val, s.sql(`SELECT value FROM sys_settings WHERE key = ?`), "tool."+name)
+	err := s.db.GetContext(ctx, &val, s.sql(`
+		SELECT value FROM sys_settings WHERE key = ?
+	`), settingsKey(ctx, "tool."+name))
 	if err == sql.ErrNoRows {
 		return true
 	}
@@ -465,22 +575,26 @@ func (s *Store) SetToolEnabled(ctx context.Context, name string, enabled bool) e
 	_, err := s.db.ExecContext(ctx, s.sql(`
 		INSERT INTO sys_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-	`), "tool."+name, v)
+	`), settingsKey(ctx, "tool."+name), v)
 	return err
 }
 
 func (s *Store) ListToolPolicy(ctx context.Context) ([]store.ToolPolicy, error) {
+	prefix := settingsPrefix(ctx)
 	var rows []struct {
 		Key   string `db:"key"`
 		Value string `db:"value"`
 	}
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT key, value FROM sys_settings WHERE key LIKE 'tool.%'`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT key, value FROM sys_settings WHERE key LIKE ?
+	`), prefix+"tool.%"); err != nil {
 		return nil, err
 	}
 	out := make([]store.ToolPolicy, 0, len(rows))
 	for _, r := range rows {
+		logical := strings.TrimPrefix(r.Key, prefix)
 		out = append(out, store.ToolPolicy{
-			ToolName: strings.TrimPrefix(r.Key, "tool."),
+			ToolName: strings.TrimPrefix(logical, "tool."),
 			Enabled:  r.Value == "1",
 		})
 	}
@@ -488,11 +602,14 @@ func (s *Store) ListToolPolicy(ctx context.Context) ([]store.ToolPolicy, error) 
 }
 
 func (s *Store) DisabledSkills(ctx context.Context) ([]string, error) {
+	prefix := settingsPrefix(ctx)
 	var rows []struct {
 		Key   string `db:"key"`
 		Value string `db:"value"`
 	}
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT key, value FROM sys_settings WHERE key LIKE 'skill.%' AND value = '0'`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT key, value FROM sys_settings WHERE key LIKE ? AND value = '0'
+	`), prefix+"skill.%"); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -500,7 +617,8 @@ func (s *Store) DisabledSkills(ctx context.Context) ([]string, error) {
 	}
 	out := make([]string, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, strings.TrimPrefix(r.Key, "skill."))
+		logical := strings.TrimPrefix(r.Key, prefix)
+		out = append(out, strings.TrimPrefix(logical, "skill."))
 	}
 	return out, nil
 }
@@ -513,13 +631,15 @@ func (s *Store) SetSkillEnabled(ctx context.Context, slug string, enabled bool) 
 	_, err := s.db.ExecContext(ctx, s.sql(`
 		INSERT INTO sys_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-	`), "skill."+slug, v)
+	`), settingsKey(ctx, "skill."+slug), v)
 	return err
 }
 
 func (s *Store) GetSysSetting(ctx context.Context, key string) (string, bool, error) {
 	var val string
-	err := s.db.GetContext(ctx, &val, s.sql(`SELECT value FROM sys_settings WHERE key = ?`), key)
+	err := s.db.GetContext(ctx, &val, s.sql(`
+		SELECT value FROM sys_settings WHERE key = ?
+	`), settingsKey(ctx, key))
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
@@ -533,7 +653,7 @@ func (s *Store) SetSysSetting(ctx context.Context, key, value string) error {
 	_, err := s.db.ExecContext(ctx, s.sql(`
 		INSERT INTO sys_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-	`), key, value)
+	`), settingsKey(ctx, key), value)
 	return err
 }
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/OptLTD/swiflow/internal/observe"
+	"github.com/OptLTD/swiflow/internal/tenant"
 )
 
 // getPaths returns absolute storage paths used by the runtime.
@@ -15,9 +16,10 @@ func (s *Server) getPaths(w http.ResponseWriter, r *http.Request) {
 	if logFile == "" {
 		logFile = filepath.Join(dataDir, observe.RelLogFile)
 	}
+	ws := s.cfg.RootsForTenant(tenant.ID(r.Context())).Workspace
 	writeJSON(w, http.StatusOK, map[string]string{
 		"data_dir":      dataDir,
-		"workspace_dir": s.cfg.WorkspaceDir,
+		"workspace_dir": ws,
 		"log_file":      logFile,
 	})
 }

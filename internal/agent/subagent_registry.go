@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OptLTD/swiflow/internal/observe"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/library/support"
 )
@@ -84,6 +85,7 @@ type SpawnOpts struct {
 	UserMessage     string
 	Goal            string
 	MaxRounds       int
+	Tid             string
 	OnProgress      func(tool.ToolProgress)
 }
 
@@ -108,6 +110,9 @@ func (reg *SubagentRegistry) Spawn(opts SpawnOpts) (string, error) {
 	}
 
 	childCtx, cancel := context.WithCancel(context.Background())
+	if opts.Tid != "" {
+		childCtx = tenant.WithID(childCtx, opts.Tid)
+	}
 	job := &subagentJob{
 		parentSession:   parent,
 		childSession:    childKey,

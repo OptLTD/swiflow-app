@@ -28,10 +28,12 @@ import (
 	"github.com/OptLTD/swiflow/internal/schedule"
 	"github.com/OptLTD/swiflow/internal/server"
 	"github.com/OptLTD/swiflow/internal/skill"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/internal/version"
 	"github.com/OptLTD/swiflow/library/browser"
 	"github.com/OptLTD/swiflow/library/httputil"
+	"github.com/OptLTD/swiflow/library/support"
 	"github.com/OptLTD/swiflow/library/window"
 )
 
@@ -51,6 +53,11 @@ func main() {
 		os.Exit(1)
 	}
 	cfg = resolveDesktopPaths(cfg, filepath.Dir(cfgPath))
+	cfg.LocalMode = true
+	if err := server.WarnLocalModeListen(cfg.Addr(), cfg.LocalMode); err != nil {
+		slog.Error("local mode listen address", "addr", cfg.Addr(), "error", err)
+		os.Exit(1)
+	}
 	// Document extract uses the vision/default provider from Settings; keep enabled on desktop.
 	cfg.Tools.DocumentEnabled = true
 
@@ -235,6 +242,9 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		slog.Error("open/migrate db", "error", err)
 		os.Exit(1)
 	}
+	if cfg.EncryptionKey != "" {
+		st.SetEncryptionKey(support.DeriveKey(cfg.EncryptionKey))
+	}
 	if err := appdb.EnsureDefaults(ctx, st); err != nil {
 		slog.Error("seed", "error", err)
 		os.Exit(1)
@@ -242,6 +252,10 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	slog.Info("desktop db ready", "elapsed", time.Since(start).Round(time.Millisecond))
 
 	skillsCat := skill.NewCatalog(cfg.InitSkillsDir, cfg.UserSkillsDir)
+	rootsFor := func(tid string) agent.TenantRoots {
+		r := cfg.RootsForTenant(tid)
+		return agent.TenantRoots{Workspace: r.Workspace, Skills: r.Skills, LightApps: r.LightApps}
+	}
 
 	toolsReg := tool.NewRegistry()
 	tool.RegisterFS(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
@@ -254,6 +268,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		webOpts.SearchProvider = "duckduckgo"
 	}
 	server.LoadSearchSettings(ctx, st, webOpts)
+	server.BindSearchResolver(webOpts, st)
 	tool.RegisterWeb(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, webOpts)
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
@@ -281,7 +296,7 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 		Headless: cfg.Tools.BrowserHeadless,
 	})
 
-	// Apply persisted tool policy
+	// Apply persisted tool policy (LocalMode single-tenant)
 	if pol, err := st.ListToolPolicy(ctx); err == nil {
 		for _, p := range pol {
 			toolsReg.SetEnabled(p.ToolName, p.Enabled)
@@ -306,6 +321,8 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	runner := agent.NewRunner(agent.RunnerDeps{
 		Store: st, Tools: toolsReg, Skills: skillsCat,
 		Publish: tracker, Workspace: cfg.WorkspaceDir,
+		RootsResolver: rootsFor,
+		MCPOwns:       mcpMgr.OwnsTool,
 
 		MaxHistoryMessages: cfg.Context.MaxHistoryMsgs,
 		MaxContextChars:    cfg.Context.MaxContextChars,
@@ -367,7 +384,8 @@ func startSwiflowBackend(ctx context.Context, cfg config.Config) func() {
 	// Connect MCP servers after the UI can show; each connect may take up to 60s.
 	go func() {
 		mcpStart := time.Now()
-		if err := mcpMgr.Sync(context.Background()); err != nil {
+		mcpCtx := tenant.WithID(context.Background(), tenant.DefaultID)
+		if err := mcpMgr.Sync(mcpCtx); err != nil {
 			slog.Warn("mcp initial sync", "error", err, "elapsed", time.Since(mcpStart).Round(time.Millisecond))
 			return
 		}

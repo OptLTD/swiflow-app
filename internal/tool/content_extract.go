@@ -104,7 +104,7 @@ func (t *contentExtractTool) Execute(ctx context.Context, args map[string]any) (
 	if path == "" {
 		return "", fmt.Errorf("path required")
 	}
-	full, err := support.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(WorkspaceBase(ctx, t.ws.Base), path)
 	if err != nil {
 		return "", err
 	}

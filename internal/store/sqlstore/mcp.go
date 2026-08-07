@@ -67,16 +67,20 @@ func (s *Store) CreateMCPServer(ctx context.Context, srv *store.MCPServer) error
 	if err != nil {
 		return err
 	}
+	t := tid(ctx)
+	srv.Tid = t
 	_, err = s.db.ExecContext(ctx, s.sql(`
-		INSERT INTO mcp_server (id, name, type, cmd, args, url, env, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`), srv.ID, srv.Name, srv.Type, srv.Cmd, argsJSON, srv.URL, envJSON, s.boolArg(srv.Enabled))
+		INSERT INTO mcp_server (id, tid, name, type, cmd, args, url, env, enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`), srv.ID, t, srv.Name, srv.Type, srv.Cmd, argsJSON, srv.URL, envJSON, s.boolArg(srv.Enabled))
 	return err
 }
 
 func (s *Store) ListMCPServers(ctx context.Context) ([]store.MCPServer, error) {
 	var rows []mcpServerRow
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT * FROM mcp_server ORDER BY created_at`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT * FROM mcp_server WHERE tid = ? ORDER BY created_at
+	`), tid(ctx)); err != nil {
 		return nil, err
 	}
 	out := make([]store.MCPServer, 0, len(rows))
@@ -88,7 +92,9 @@ func (s *Store) ListMCPServers(ctx context.Context) ([]store.MCPServer, error) {
 
 func (s *Store) GetMCPServerByID(ctx context.Context, id string) (*store.MCPServer, error) {
 	var r mcpServerRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM mcp_server WHERE id = ?`), id); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM mcp_server WHERE id = ? AND tid = ?
+	`), id, tid(ctx)); err != nil {
 		return nil, err
 	}
 	srv := r.toMCPServer()
@@ -97,7 +103,9 @@ func (s *Store) GetMCPServerByID(ctx context.Context, id string) (*store.MCPServ
 
 func (s *Store) GetMCPServerByName(ctx context.Context, name string) (*store.MCPServer, error) {
 	var r mcpServerRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM mcp_server WHERE name = ?`), name); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM mcp_server WHERE name = ? AND tid = ?
+	`), name, tid(ctx)); err != nil {
 		return nil, err
 	}
 	srv := r.toMCPServer()
@@ -143,13 +151,15 @@ func (s *Store) UpdateMCPServer(ctx context.Context, id string, fields map[strin
 		return nil
 	}
 	sets = append(sets, "updated_at = "+nowToken)
-	args = append(args, id)
-	q := fmt.Sprintf("UPDATE mcp_server SET %s WHERE id = ?", strings.Join(sets, ", "))
-	_, err := s.db.ExecContext(ctx, s.sql(q), args...)
-	return err
+	args = append(args, id, tid(ctx))
+	q := fmt.Sprintf("UPDATE mcp_server SET %s WHERE id = ? AND tid = ?", strings.Join(sets, ", "))
+	res, err := s.db.ExecContext(ctx, s.sql(q), args...)
+	return s.affectedOrNoRows(res, err)
 }
 
 func (s *Store) DeleteMCPServer(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, s.sql(`DELETE FROM mcp_server WHERE id = ?`), id)
-	return err
+	res, err := s.db.ExecContext(ctx, s.sql(`
+		DELETE FROM mcp_server WHERE id = ? AND tid = ?
+	`), id, tid(ctx))
+	return s.affectedOrNoRows(res, err)
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-rod/rod"
 
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/library/browser"
 	"github.com/OptLTD/swiflow/library/httputil"
 	"github.com/OptLTD/swiflow/library/support"
@@ -80,7 +81,7 @@ func (t *webFetchTool) Execute(ctx context.Context, args map[string]any) (string
 	}
 	ct := resp.Header.Get("Content-Type")
 	if looksBinary(body) {
-		return t.saveBinaryDownload(rawURL, ct, body)
+		return t.saveBinaryDownload(ctx, rawURL, ct, body)
 	}
 	text := stripHTML(string(body))
 	if len(text) > maxChars {
@@ -107,7 +108,7 @@ func (t *webFetchTool) fetchViaBrowser(ctx context.Context, rawURL string, maxCh
 	if !t.canBrowser() {
 		return "", fmt.Errorf("browser fallback unavailable (enable tools.browser_enabled)")
 	}
-	return t.opts.BrowserPool.WithPage(ctx, 45*time.Second, func(page *rod.Page) (string, error) {
+	return t.opts.BrowserPool.WithPageTenant(ctx, tenant.ID(ctx), 45*time.Second, func(page *rod.Page) (string, error) {
 		if _, err := browser.Open(page, rawURL); err != nil {
 			return "", err
 		}
@@ -126,13 +127,14 @@ func (t *webFetchTool) fetchViaBrowser(ctx context.Context, rawURL string, maxCh
 	})
 }
 
-func (t *webFetchTool) saveBinaryDownload(rawURL, contentType string, body []byte) (string, error) {
-	if strings.TrimSpace(t.ws.Base) == "" {
+func (t *webFetchTool) saveBinaryDownload(ctx context.Context, rawURL, contentType string, body []byte) (string, error) {
+	base := WorkspaceBase(ctx, t.ws.Base)
+	if strings.TrimSpace(base) == "" {
 		return "", fmt.Errorf("url returned binary content (content-type=%q, %d bytes) but workspace is not configured", contentType, len(body))
 	}
 	name := downloadFileName(rawURL, contentType, body)
 	rel := filepath.ToSlash(filepath.Join("downloads", name))
-	full, err := support.SandboxPath(t.ws.Base, rel)
+	full, err := support.SandboxPath(base, rel)
 	if err != nil {
 		return "", err
 	}
@@ -142,10 +144,10 @@ func (t *webFetchTool) saveBinaryDownload(rawURL, contentType string, body []byt
 	// Avoid clobbering an existing download with the same name.
 	if _, err := os.Stat(full); err == nil {
 		ext := filepath.Ext(name)
-		base := strings.TrimSuffix(name, ext)
-		name = base + "-" + support.NewID()[:8] + ext
+		stem := strings.TrimSuffix(name, ext)
+		name = stem + "-" + support.NewID()[:8] + ext
 		rel = filepath.ToSlash(filepath.Join("downloads", name))
-		full, err = support.SandboxPath(t.ws.Base, rel)
+		full, err = support.SandboxPath(base, rel)
 		if err != nil {
 			return "", err
 		}

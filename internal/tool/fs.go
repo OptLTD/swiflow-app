@@ -29,9 +29,9 @@ func (t *readFileTool) Parameters() map[string]any {
 		"required": []string{"path"},
 	}
 }
-func (t *readFileTool) Execute(_ context.Context, args map[string]any) (string, error) {
+func (t *readFileTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
-	full, err := support.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(WorkspaceBase(ctx, t.ws.Base), path)
 	if err != nil {
 		return "", err
 	}
@@ -62,10 +62,10 @@ func (t *writeFileTool) Parameters() map[string]any {
 		"required": []string{"path", "content"},
 	}
 }
-func (t *writeFileTool) Execute(_ context.Context, args map[string]any) (string, error) {
+func (t *writeFileTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
-	full, err := support.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(WorkspaceBase(ctx, t.ws.Base), path)
 	if err != nil {
 		return "", err
 	}
@@ -92,12 +92,12 @@ func (t *listFilesTool) Parameters() map[string]any {
 		},
 	}
 }
-func (t *listFilesTool) Execute(_ context.Context, args map[string]any) (string, error) {
+func (t *listFilesTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
 	if path == "" {
 		path = "."
 	}
-	full, err := support.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(WorkspaceBase(ctx, t.ws.Base), path)
 	if err != nil {
 		return "", err
 	}
@@ -134,11 +134,11 @@ func (t *editFileTool) Parameters() map[string]any {
 		"required": []string{"path", "old", "new"},
 	}
 }
-func (t *editFileTool) Execute(_ context.Context, args map[string]any) (string, error) {
+func (t *editFileTool) Execute(ctx context.Context, args map[string]any) (string, error) {
 	path, _ := args["path"].(string)
 	oldS, _ := args["old"].(string)
 	newS, _ := args["new"].(string)
-	full, err := support.SandboxPath(t.ws.Base, path)
+	full, err := support.SandboxPath(WorkspaceBase(ctx, t.ws.Base), path)
 	if err != nil {
 		return "", err
 	}

@@ -40,6 +40,7 @@ func TestConfig(t *testing.T) config.Config {
 		DatabaseDSN:   "sqlite://" + filepath.Join(t.TempDir(), "test.db"),
 		WorkspaceDir:  t.TempDir(),
 		UserSkillsDir: "",
+		LocalMode:     true,
 	}
 	if err := cfg.Normalize(); err != nil {
 		t.Fatal(err)

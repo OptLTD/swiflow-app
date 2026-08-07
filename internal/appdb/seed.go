@@ -5,11 +5,16 @@ import (
 	"log/slog"
 
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/library/support"
 )
 
 // EnsureDefaults creates a default agent if the database has none.
 func EnsureDefaults(ctx context.Context, st store.Store) error {
+	ctx = tenant.WithID(ctx, tenant.DefaultID)
+	if err := st.EnsureDefaultTenant(ctx); err != nil {
+		return err
+	}
 	agents, err := st.ListAgents(ctx)
 	if err != nil {
 		return err

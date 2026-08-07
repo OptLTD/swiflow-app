@@ -16,12 +16,45 @@ type ToolProgress struct {
 type RunContext struct {
 	SessionID string
 	Agent     string
+	// Tid is the tenant id for this run (empty = default / LocalMode).
+	Tid string
+	// Workspace is the tenant workspace root for sandboxed file tools.
+	// When non-empty, tools prefer it over their registration-time Base.
+	Workspace string
+	// SkillsDir is the tenant user-skills root (drafts live under it).
+	SkillsDir string
+	// LightAppsDir is the tenant light-apps root.
+	LightAppsDir string
 	// ToolCallID is the id of the current tool call (set by the executor).
 	ToolCallID string
 	// Emit, when non-nil, forwards live progress to the foreground stream. Only
 	// invoked by tools during a run (e.g. subagent_spawn progress forwarded to parent UI).
 	// so it is safe to call without extra synchronization.
 	Emit func(ToolProgress)
+}
+
+// WorkspaceBase returns RunContext.Workspace when set, otherwise fallback.
+func WorkspaceBase(ctx context.Context, fallback string) string {
+	if rc, ok := RunContextFrom(ctx); ok && rc.Workspace != "" {
+		return rc.Workspace
+	}
+	return fallback
+}
+
+// SkillsBase returns RunContext.SkillsDir when set, otherwise fallback.
+func SkillsBase(ctx context.Context, fallback string) string {
+	if rc, ok := RunContextFrom(ctx); ok && rc.SkillsDir != "" {
+		return rc.SkillsDir
+	}
+	return fallback
+}
+
+// LightAppsBase returns RunContext.LightAppsDir when set, otherwise fallback.
+func LightAppsBase(ctx context.Context, fallback string) string {
+	if rc, ok := RunContextFrom(ctx); ok && rc.LightAppsDir != "" {
+		return rc.LightAppsDir
+	}
+	return fallback
 }
 
 // WithRunContext attaches run metadata to ctx for tool execution.

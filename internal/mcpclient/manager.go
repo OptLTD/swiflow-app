@@ -18,6 +18,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/internal/tool"
 )
 
@@ -26,32 +27,50 @@ const toolPrefix = "mcp_"
 var sanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 
 // Manager maintains MCP server sessions and registers bridged tools.
+//
+// Sessions are keyed by tid+"/"+serverID. Sync(ctx) only refreshes the tenant
+// from context (does not tear down other tenants).
+//
+// Tool names stay mcp_{server}_{tool}. Ownership is tracked per name; if another
+// tenant already owns the same name, registration is skipped (first-wins).
 type Manager struct {
 	st  store.Store
 	reg *tool.Registry
 
-	mu       sync.Mutex
-	sessions map[string]*conn // keyed by server ID
+	mu        sync.Mutex
+	sessions  map[string]*conn // keyed by tid+"/"+serverID
+	toolOwner map[string]string // tool name -> tid
 }
 
 type conn struct {
+	tid        string
 	serverID   string
 	serverName string
 	session    *sdkmcp.ClientSession
 	toolNames  []string
 }
 
+func sessionKey(tid, serverID string) string {
+	if tid == "" {
+		tid = tenant.DefaultID
+	}
+	return tid + "/" + serverID
+}
+
 // NewManager creates an MCP manager.
 func NewManager(st store.Store, reg *tool.Registry) *Manager {
 	return &Manager{
-		st:       st,
-		reg:      reg,
-		sessions: map[string]*conn{},
+		st:        st,
+		reg:       reg,
+		sessions:  map[string]*conn{},
+		toolOwner: map[string]string{},
 	}
 }
 
-// Sync connects enabled MCP servers and registers their tools.
+// Sync connects enabled MCP servers for tenant.ID(ctx) and registers their tools.
+// Other tenants' sessions remain untouched.
 func (m *Manager) Sync(ctx context.Context) error {
+	tid := tenant.ID(ctx)
 	servers, err := m.st.ListMCPServers(ctx)
 	if err != nil {
 		return err
@@ -59,24 +78,68 @@ func (m *Manager) Sync(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for id, c := range m.sessions {
-		m.unregisterConnLocked(c)
-		_ = c.session.Close()
-		delete(m.sessions, id)
-	}
+	m.unregisterTenantLocked(tid)
 
 	for _, srv := range servers {
 		if !srv.Enabled {
 			continue
 		}
-		c, err := m.connectServer(ctx, srv)
+		c, err := m.connectServer(ctx, tid, srv)
 		if err != nil {
-			slog.Error("mcp connect failed", "server", srv.Name, "error", err)
+			slog.Error("mcp connect failed", "tenant", tid, "server", srv.Name, "error", err)
 			continue
 		}
-		m.sessions[srv.ID] = c
+		m.sessions[sessionKey(tid, srv.ID)] = c
 	}
 	return nil
+}
+
+// UnregisterTenant tears down MCP sessions and tools owned by tid.
+func (m *Manager) UnregisterTenant(tid string) {
+	if tid == "" {
+		tid = tenant.DefaultID
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.unregisterTenantLocked(tid)
+}
+
+// OwnsTool reports whether name is an MCP tool owned by tid.
+// Non-MCP tool names return false (caller should treat them as globally shared builtins).
+func (m *Manager) OwnsTool(name, tid string) bool {
+	if m == nil || !strings.HasPrefix(name, toolPrefix) {
+		return false
+	}
+	if tid == "" {
+		tid = tenant.DefaultID
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	owner, ok := m.toolOwner[name]
+	return ok && owner == tid
+}
+
+// IsMCPTool reports whether name is an MCP-bridged tool currently registered.
+func (m *Manager) IsMCPTool(name string) bool {
+	if m == nil || !strings.HasPrefix(name, toolPrefix) {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.toolOwner[name]
+	return ok
+}
+
+func (m *Manager) unregisterTenantLocked(tid string) {
+	prefix := tid + "/"
+	for key, c := range m.sessions {
+		if c.tid != tid && !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		m.unregisterConnLocked(c)
+		_ = c.session.Close()
+		delete(m.sessions, key)
+	}
 }
 
 // Close shuts down all MCP sessions.
@@ -88,9 +151,10 @@ func (m *Manager) Close() {
 		_ = c.session.Close()
 		delete(m.sessions, id)
 	}
+	m.toolOwner = map[string]string{}
 }
 
-func (m *Manager) connectServer(ctx context.Context, srv store.MCPServer) (*conn, error) {
+func (m *Manager) connectServer(ctx context.Context, tid string, srv store.MCPServer) (*conn, error) {
 	transport, err := newTransport(srv)
 	if err != nil {
 		return nil, err
@@ -102,7 +166,7 @@ func (m *Manager) connectServer(ctx context.Context, srv store.MCPServer) (*conn
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
 	}
-	c := &conn{serverID: srv.ID, serverName: srv.Name, session: session}
+	c := &conn{tid: tid, serverID: srv.ID, serverName: srv.Name, session: session}
 	tools, err := session.ListTools(ctx, nil)
 	if err != nil {
 		_ = session.Close()
@@ -110,6 +174,11 @@ func (m *Manager) connectServer(ctx context.Context, srv store.MCPServer) (*conn
 	}
 	for _, t := range tools.Tools {
 		fullName := ToolName(srv.Name, t.Name)
+		if owner, ok := m.toolOwner[fullName]; ok && owner != tid {
+			slog.Warn("mcp tool name conflict; skipping",
+				"tool", fullName, "owner_tid", owner, "skipped_tid", tid, "server", srv.Name)
+			continue
+		}
 		schema := inputSchemaMap(t.InputSchema)
 		bt := &bridgeTool{
 			fullName: fullName,
@@ -119,15 +188,19 @@ func (m *Manager) connectServer(ctx context.Context, srv store.MCPServer) (*conn
 			session:  session,
 		}
 		m.reg.Register(bt)
+		m.toolOwner[fullName] = tid
 		c.toolNames = append(c.toolNames, fullName)
 	}
-	slog.Info("mcp server connected", "server", srv.Name, "tools", len(c.toolNames))
+	slog.Info("mcp server connected", "tenant", tid, "server", srv.Name, "tools", len(c.toolNames))
 	return c, nil
 }
 
 func (m *Manager) unregisterConnLocked(c *conn) {
 	for _, name := range c.toolNames {
-		m.reg.Unregister(name)
+		if owner, ok := m.toolOwner[name]; ok && owner == c.tid {
+			delete(m.toolOwner, name)
+			m.reg.Unregister(name)
+		}
 	}
 }
 

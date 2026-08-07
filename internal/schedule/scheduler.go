@@ -11,6 +11,7 @@ import (
 
 	"github.com/OptLTD/swiflow/internal/agent"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/library/support"
 )
 
@@ -56,9 +57,9 @@ func (s *Scheduler) Stop() {
 	<-ctx.Done()
 }
 
-// Reload refreshes scheduled jobs from the database.
+// Reload refreshes scheduled jobs from the database (all tenants).
 func (s *Scheduler) Reload(ctx context.Context) error {
-	jobs, err := s.st.ListCronJobs(ctx)
+	jobs, err := s.st.ListAllCronJobs(ctx)
 	if err != nil {
 		return err
 	}
@@ -73,47 +74,48 @@ func (s *Scheduler) Reload(ctx context.Context) error {
 			continue
 		}
 		j := job
-		entryID, err := s.cron.AddFunc(j.Schedule, func() { s.runJob(j.ID) })
+		entryID, err := s.cron.AddFunc(j.Schedule, func() { s.runJob(j) })
 		if err != nil {
 			slog.Error("cron invalid schedule", "job", j.Name, "schedule", j.Schedule, "error", err)
 			continue
 		}
 		s.ids[j.ID] = entryID
-		slog.Info("cron job scheduled", "job", j.Name, "schedule", j.Schedule)
+		slog.Info("cron job scheduled", "job", j.Name, "tid", j.Tid, "schedule", j.Schedule)
 	}
 	return nil
 }
 
-func (s *Scheduler) runJob(jobID string) {
-	ctx := context.Background()
-	job, err := s.st.GetCronJobByID(ctx, jobID)
-	if err != nil || !job.Enabled {
+func (s *Scheduler) runJob(job store.CronJob) {
+	ctx := tenant.WithID(context.Background(), job.Tid)
+	fresh, err := s.st.GetCronJobByID(ctx, job.ID)
+	if err != nil || !fresh.Enabled {
 		return
 	}
 	sessionID := support.NewID()
-	slog.Info("cron job running", "job", job.Name, "session", sessionID)
+	slog.Info("cron job running", "job", fresh.Name, "tid", fresh.Tid, "session", sessionID)
 	// Record the trigger time up front so last_run_at reflects when the job
 	// fired, independent of how long the run (incl. retries/backoff) takes.
-	_ = s.st.SetCronJobLastRun(ctx, job.ID, time.Now().UTC().Format(time.RFC3339))
-	err = s.runner.Run(ctx, sessionID, job.Agent, job.Message, func(ev agent.Event) {
+	_ = s.st.SetCronJobLastRun(ctx, fresh.ID, time.Now().UTC().Format(time.RFC3339))
+	err = s.runner.Run(ctx, sessionID, fresh.Agent, fresh.Message, func(ev agent.Event) {
 		if ev.Type == "error" {
-			slog.Error("cron job error", "job", job.Name, "error", ev.Error)
+			slog.Error("cron job error", "job", fresh.Name, "error", ev.Error)
 		}
 	})
 	if err != nil {
-		slog.Error("cron job failed", "job", job.Name, "error", err)
+		slog.Error("cron job failed", "job", fresh.Name, "error", err)
 	}
 }
 
 // ScheduleRun starts a one-shot delayed agent run in sessionID after the given delay.
 // The message is injected as a new user turn and the agent is invoked (not a static reply).
-func (s *Scheduler) ScheduleRun(sessionID, agentKey, message string, after time.Duration) {
+// tid scopes the run's tenant context (empty = default).
+func (s *Scheduler) ScheduleRun(sessionID, agentKey, message string, after time.Duration, tid string) {
 	if sessionID == "" || agentKey == "" || message == "" || after < 0 || s.runner == nil {
 		return
 	}
 	time.AfterFunc(after, func() {
-		ctx := context.Background()
-		slog.Info("scheduled task running", "session", sessionID, "agent", agentKey, "after", after)
+		ctx := tenant.WithID(context.Background(), tid)
+		slog.Info("scheduled task running", "session", sessionID, "agent", agentKey, "tid", tid, "after", after)
 		if s.hub != nil {
 			s.hub.Publish(sessionID, agent.Event{Type: "user", Content: message})
 		}

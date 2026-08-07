@@ -18,6 +18,14 @@ type skillTools struct {
 	st  skillStore
 }
 
+func (t *skillTools) catalog(ctx context.Context) *skill.Catalog {
+	dir := SkillsBase(ctx, "")
+	if dir != "" {
+		return t.cat.ForUserDir(dir)
+	}
+	return t.cat
+}
+
 func (t *skillTools) enabledSkills(ctx context.Context) []skill.Skill {
 	disabled := map[string]bool{}
 	if list, err := t.st.DisabledSkills(ctx); err == nil {
@@ -26,7 +34,7 @@ func (t *skillTools) enabledSkills(ctx context.Context) []skill.Skill {
 		}
 	}
 	var out []skill.Skill
-	for _, s := range t.cat.Discover(ctx) {
+	for _, s := range t.catalog(ctx).Discover(ctx) {
 		if !disabled[s.Slug] {
 			out = append(out, s)
 		}

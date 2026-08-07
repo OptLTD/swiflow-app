@@ -15,16 +15,18 @@ type fakeSched struct {
 		agentKey string
 		message  string
 		after    time.Duration
+		tid      string
 	}
 }
 
-func (f *fakeSched) ScheduleRun(sessionKey, agentKey, message string, after time.Duration) {
+func (f *fakeSched) ScheduleRun(sessionKey, agentKey, message string, after time.Duration, tid string) {
 	f.runs = append(f.runs, struct {
 		session  string
 		agentKey string
 		message  string
 		after    time.Duration
-	}{sessionKey, agentKey, message, after})
+		tid      string
+	}{sessionKey, agentKey, message, after, tid})
 }
 
 func (f *fakeSched) AddJob(ctx context.Context, job *store.CronJob) error {

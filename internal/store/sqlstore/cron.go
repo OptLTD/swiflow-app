@@ -24,7 +24,7 @@ type cronJobRow struct {
 
 func (r cronJobRow) toCronJob() store.CronJob {
 	j := store.CronJob{
-		ID: r.ID, Name: r.Name, Agent: r.Agent, Message: r.Message,
+		ID: r.ID, Tid: r.Tid, Name: r.Name, Agent: r.Agent, Message: r.Message,
 		Schedule: r.Schedule, Enabled: r.Enabled.b,
 		CreatedAt: r.CreatedAt.String(), UpdatedAt: r.UpdatedAt.String(),
 	}
@@ -35,16 +35,35 @@ func (r cronJobRow) toCronJob() store.CronJob {
 }
 
 func (s *Store) CreateCronJob(ctx context.Context, j *store.CronJob) error {
+	t := tid(ctx)
+	j.Tid = t
 	_, err := s.db.ExecContext(ctx, s.sql(`
-		INSERT INTO agent_sched (id, name, agent, message, schedule, enabled)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`), j.ID, j.Name, j.Agent, j.Message, j.Schedule, s.boolArg(j.Enabled))
+		INSERT INTO agent_sched (id, tid, name, agent, message, schedule, enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`), j.ID, t, j.Name, j.Agent, j.Message, j.Schedule, s.boolArg(j.Enabled))
 	return err
 }
 
 func (s *Store) ListCronJobs(ctx context.Context) ([]store.CronJob, error) {
 	var rows []cronJobRow
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT * FROM agent_sched ORDER BY created_at`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT * FROM agent_sched WHERE tid = ? ORDER BY created_at
+	`), tid(ctx)); err != nil {
+		return nil, err
+	}
+	out := make([]store.CronJob, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.toCronJob())
+	}
+	return out, nil
+}
+
+// ListAllCronJobs returns cron jobs for every tenant (used by the scheduler).
+func (s *Store) ListAllCronJobs(ctx context.Context) ([]store.CronJob, error) {
+	var rows []cronJobRow
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT * FROM agent_sched ORDER BY created_at
+	`)); err != nil {
 		return nil, err
 	}
 	out := make([]store.CronJob, 0, len(rows))
@@ -56,7 +75,9 @@ func (s *Store) ListCronJobs(ctx context.Context) ([]store.CronJob, error) {
 
 func (s *Store) GetCronJobByID(ctx context.Context, id string) (*store.CronJob, error) {
 	var r cronJobRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM agent_sched WHERE id = ?`), id); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM agent_sched WHERE id = ? AND tid = ?
+	`), id, tid(ctx)); err != nil {
 		return nil, err
 	}
 	j := r.toCronJob()
@@ -94,15 +115,17 @@ func (s *Store) UpdateCronJob(ctx context.Context, id string, fields map[string]
 		return nil
 	}
 	sets = append(sets, "updated_at = "+nowToken)
-	args = append(args, id)
-	q := fmt.Sprintf("UPDATE agent_sched SET %s WHERE id = ?", strings.Join(sets, ", "))
-	_, err := s.db.ExecContext(ctx, s.sql(q), args...)
-	return err
+	args = append(args, id, tid(ctx))
+	q := fmt.Sprintf("UPDATE agent_sched SET %s WHERE id = ? AND tid = ?", strings.Join(sets, ", "))
+	res, err := s.db.ExecContext(ctx, s.sql(q), args...)
+	return s.affectedOrNoRows(res, err)
 }
 
 func (s *Store) DeleteCronJob(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, s.sql(`DELETE FROM agent_sched WHERE id = ?`), id)
-	return err
+	res, err := s.db.ExecContext(ctx, s.sql(`
+		DELETE FROM agent_sched WHERE id = ? AND tid = ?
+	`), id, tid(ctx))
+	return s.affectedOrNoRows(res, err)
 }
 
 func (s *Store) SetCronJobLastRun(ctx context.Context, id string, at string) error {
@@ -117,8 +140,8 @@ func (s *Store) SetCronJobLastRun(ctx context.Context, id string, at string) err
 		}
 		arg = ts.UTC()
 	}
-	_, err := s.db.ExecContext(ctx, s.sql(`
-		UPDATE agent_sched SET last_run_at = ?, updated_at = datetime('now') WHERE id = ?
-	`), arg, id)
-	return err
+	res, err := s.db.ExecContext(ctx, s.sql(`
+		UPDATE agent_sched SET last_run_at = ?, updated_at = datetime('now') WHERE id = ? AND tid = ?
+	`), arg, id, tid(ctx))
+	return s.affectedOrNoRows(res, err)
 }

@@ -11,9 +11,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/library/support"
 	"github.com/OptLTD/swiflow/library/workspace"
 )
+
+func (s *Server) tenantWorkspace(r *http.Request) string {
+	return s.cfg.RootsForTenant(tenant.ID(r.Context())).Workspace
+}
 
 const maxWorkspaceUpload = workspace.MaxFileSize
 
@@ -40,7 +45,7 @@ func (s *Server) listWorkspace(w http.ResponseWriter, r *http.Request) {
 	if dir == "" {
 		dir = "."
 	}
-	full, err := support.SandboxPath(s.cfg.WorkspaceDir, dir)
+	full, err := support.SandboxPath(s.tenantWorkspace(r), dir)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
@@ -112,7 +117,7 @@ func (s *Server) readWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, ErrPathRequired)
 		return
 	}
-	full, err := support.SandboxPath(s.cfg.WorkspaceDir, path)
+	full, err := support.SandboxPath(s.tenantWorkspace(r), path)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
@@ -156,7 +161,7 @@ func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, ErrPathRequired)
 		return
 	}
-	payload, err := workspace.ReadBinaryFile(s.cfg.WorkspaceDir, path)
+	payload, err := workspace.ReadBinaryFile(s.tenantWorkspace(r), path)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
@@ -184,8 +189,9 @@ func (s *Server) uploadWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uploaded := make([]uploadedFile, 0, len(headers))
+	ws := s.tenantWorkspace(r)
 	for _, fh := range headers {
-		item, err := saveUploadedFile(s.cfg.WorkspaceDir, fh)
+		item, err := saveUploadedFile(ws, fh)
 		if err != nil {
 			writeWorkspaceOpErr(w, http.StatusBadRequest, err)
 			return

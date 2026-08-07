@@ -11,6 +11,7 @@ import (
 
 	"github.com/OptLTD/swiflow/embed"
 	"github.com/OptLTD/swiflow/internal/agent"
+	"github.com/OptLTD/swiflow/internal/auth"
 	"github.com/OptLTD/swiflow/internal/config"
 	"github.com/OptLTD/swiflow/internal/harness"
 	"github.com/OptLTD/swiflow/internal/lightapp"
@@ -18,6 +19,7 @@ import (
 	"github.com/OptLTD/swiflow/internal/schedule"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/internal/tool"
 	appversion "github.com/OptLTD/swiflow/internal/version"
 	"github.com/OptLTD/swiflow/library/support"
@@ -38,6 +40,7 @@ type Server struct {
 	window   *window.Bridge
 	webOpts  *tool.WebOptions
 	lightMgr *lightapp.Manager
+	sessions *auth.Store
 }
 
 // New constructs a server. webOpts may be nil; search settings API needs a shared pointer to update live.
@@ -46,7 +49,7 @@ func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Re
 	if webOpts == nil {
 		webOpts = &tool.WebOptions{}
 	}
-	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, harness: tracker, window: win, webOpts: webOpts, lightMgr: lightMgr}
+	s := &Server{cfg: cfg, st: st, runner: runner, tools: tools, skills: skills, mcp: mcp, cron: cron, events: events, harness: tracker, window: win, webOpts: webOpts, lightMgr: lightMgr, sessions: auth.NewStore()}
 	if win != nil && events != nil {
 		win.SetFallback(func(sessionID string, ev window.Event) {
 			events.Publish(sessionID, agent.Event{
@@ -61,6 +64,11 @@ func New(cfg config.Config, st store.Store, runner *agent.Runner, tools *tool.Re
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("GET /api/auth/mode", s.authMode)
+	mux.HandleFunc("POST /api/auth/login", s.authLogin)
+	mux.HandleFunc("POST /api/auth/register", s.authRegister)
+	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
+	mux.HandleFunc("GET /api/auth/me", s.authMe)
 	mux.HandleFunc("GET /api/runtime", s.getRuntime)
 	mux.HandleFunc("POST /api/runtime/install", s.installRuntime)
 
@@ -109,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/light-apps/act", s.lightAppsAct)
 
 	var h http.Handler = mux
+	h = s.authMiddleware(h)
 	h = s.requestLogMiddleware(h)
 	h = s.corsMiddleware(s.cfg.AllowedOrigins)(h)
 	h = s.staticMiddleware(h)
@@ -162,7 +171,9 @@ func (w *statusWriter) Unwrap() http.ResponseWriter {
 // --- middleware ---
 
 func (s *Server) corsMiddleware(allowed []string) func(http.Handler) http.Handler {
-	allowAll := len(allowed) == 0
+	// LocalMode may reflect any origin (desktop/dev). Serve requires explicit allow-list;
+	// empty list means no cross-origin browser access (same-origin UI still works).
+	allowAll := s.cfg.LocalMode && len(allowed) == 0
 	set := make(map[string]bool, len(allowed))
 	for _, o := range allowed {
 		set[o] = true
@@ -170,8 +181,12 @@ func (s *Server) corsMiddleware(allowed []string) func(http.Handler) http.Handle
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if origin != "" && (allowAll || set[origin]) {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
+			if origin != "" && (allowAll || set[origin] || set["*"]) {
+				if set["*"] && !allowAll {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				} else {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				}
 				w.Header().Set("Vary", "Origin")
 				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -476,6 +491,10 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
 		return
 	}
+	if !sessionOwnedByTenant(sess, r) {
+		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
+		return
+	}
 	msgs, err := s.st.ListMessages(r.Context(), sess.ID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, ErrLoadMessagesFailed)
@@ -490,7 +509,8 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return
 	}
-	if _, err := s.st.GetSessionByID(r.Context(), id); err != nil {
+	sess, err := s.st.GetSessionByID(r.Context(), id)
+	if err != nil || !sessionOwnedByTenant(sess, r) {
 		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
 		return
 	}
@@ -500,6 +520,18 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func sessionOwnedByTenant(sess *store.Session, r *http.Request) bool {
+	if sess == nil {
+		return false
+	}
+	tid := tenant.ID(r.Context())
+	sessTid := sess.Tid
+	if sessTid == "" {
+		sessTid = tenant.DefaultID
+	}
+	return sessTid == tid
 }
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
@@ -515,6 +547,11 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, ErrMessageRequired)
 		return
 	}
+	// Ownership: existing sessions must belong to this tenant; new ids are created on Run.
+	if sess, err := s.st.GetSessionByID(r.Context(), id); err == nil && !sessionOwnedByTenant(sess, r) {
+		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
+		return
+	}
 
 	// Mid-run: enqueue instead of 409 when session is busy.
 	if s.runner.IsBusy(id) {
@@ -525,7 +562,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if s.runner.AtCapacity() {
+	if s.runner.AtCapacity(tenant.ID(r.Context())) {
 		writeErr(w, http.StatusConflict, ErrTooManyConcurrentRuns)
 		return
 	}
@@ -589,6 +626,16 @@ func (s *Server) windowReply(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return
 	}
+	sessionID, ok := s.window.PendingSession(in.ID)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, ErrInternalError, "unknown request id")
+		return
+	}
+	sess, err := s.st.GetSessionByID(r.Context(), sessionID)
+	if err != nil || !sessionOwnedByTenant(sess, r) {
+		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
+		return
+	}
 	if err := s.window.Reply(in.ID, in.Result, in.Error); err != nil {
 		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
@@ -598,6 +645,10 @@ func (s *Server) windowReply(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
+	if sess, err := s.st.GetSessionByID(r.Context(), id); err == nil && !sessionOwnedByTenant(sess, r) {
+		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
+		return
+	}
 	if s.events == nil {
 		writeErr(w, http.StatusServiceUnavailable, ErrSessionWatchUnavailable)
 		return
@@ -640,18 +691,30 @@ func (s *Server) watchSession(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) abort(w http.ResponseWriter, r *http.Request) {
 	id := requestID(r)
+	if sess, err := s.st.GetSessionByID(r.Context(), id); err == nil && !sessionOwnedByTenant(sess, r) {
+		writeErr(w, http.StatusNotFound, ErrSessionNotFound)
+		return
+	}
 	ok := s.runner.Abort(id)
 	writeJSON(w, http.StatusOK, map[string]bool{"aborted": ok})
 }
 
 // --- tools ---
 
-func (s *Server) listTools(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 	infos := s.tools.All()
+	pol, _ := s.st.ListToolPolicy(r.Context())
+	enabled := map[string]bool{}
+	for _, p := range pol {
+		enabled[p.ToolName] = p.Enabled
+	}
 	out := make([]tool.Info, 0, len(infos))
 	for _, t := range infos {
 		if strings.HasPrefix(t.Name, "mcp_") {
 			continue
+		}
+		if e, ok := enabled[t.Name]; ok {
+			t.Enabled = e
 		}
 		out = append(out, t)
 	}
@@ -687,14 +750,20 @@ func (s *Server) setToolEnabled(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, ErrUpdateFailed)
 		return
 	}
-	s.tools.SetEnabled(name, in.Enabled)
+	// LocalMode is single-tenant: keep in-memory registry in sync for Definitions().
+	// Serve multi-tenant reads enable state from store per request/run.
+	if s.cfg.LocalMode {
+		s.tools.SetEnabled(name, in.Enabled)
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
 // --- skills ---
 
 func (s *Server) listSkills(w http.ResponseWriter, r *http.Request) {
-	all := s.skills.Discover(r.Context())
+	roots := s.cfg.RootsForTenant(tenant.ID(r.Context()))
+	cat := s.skills.ForUserDir(roots.Skills)
+	all := cat.Discover(r.Context())
 	disabled, _ := s.st.DisabledSkills(r.Context())
 	dset := map[string]bool{}
 	for _, d := range disabled {
@@ -734,8 +803,10 @@ func (s *Server) reloadSkills(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded"})
 }
 
-func (s *Server) listSkillDrafts(w http.ResponseWriter, _ *http.Request) {
-	drafts, err := s.skills.ListDrafts()
+func (s *Server) listSkillDrafts(w http.ResponseWriter, r *http.Request) {
+	roots := s.cfg.RootsForTenant(tenant.ID(r.Context()))
+	cat := s.skills.ForUserDir(roots.Skills)
+	drafts, err := cat.ListDrafts()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, ErrInternalError, err.Error())
 		return
@@ -752,7 +823,9 @@ func (s *Server) acceptSkillDraft(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return
 	}
-	if err := s.skills.AcceptDraft(id); err != nil {
+	roots := s.cfg.RootsForTenant(tenant.ID(r.Context()))
+	cat := s.skills.ForUserDir(roots.Skills)
+	if err := cat.AcceptDraft(id); err != nil {
 		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}
@@ -765,7 +838,9 @@ func (s *Server) deleteSkillDraft(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, ErrIDRequired)
 		return
 	}
-	if err := s.skills.DeleteDraft(id); err != nil {
+	roots := s.cfg.RootsForTenant(tenant.ID(r.Context()))
+	cat := s.skills.ForUserDir(roots.Skills)
+	if err := cat.DeleteDraft(id); err != nil {
 		writeErr(w, http.StatusBadRequest, ErrInternalError, err.Error())
 		return
 	}

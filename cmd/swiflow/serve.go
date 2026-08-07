@@ -23,8 +23,10 @@ import (
 	"github.com/OptLTD/swiflow/internal/server"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store/sqlstore"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/library/browser"
+	"github.com/OptLTD/swiflow/library/support"
 	"github.com/OptLTD/swiflow/library/window"
 )
 
@@ -47,6 +49,10 @@ func runServe() error {
 	if err != nil {
 		return err
 	}
+	cfg.LocalMode = false
+	if err := server.WarnLocalModeListen(cfg.Addr(), cfg.LocalMode); err != nil {
+		return err
+	}
 
 	level := slog.LevelInfo
 	if verbose {
@@ -57,6 +63,7 @@ func runServe() error {
 		slog.Warn("file log setup", "error", err)
 	}
 
+	// Shared dirs only; per-tenant roots are created on register.
 	dirs := []string{cfg.WorkspaceDir, cfg.UserSkillsDir, cfg.LightAppsDir}
 	if cfg.DBDriver == "" || cfg.DBDriver == sqlstore.DialectSQLite || cfg.DBDriver == "sqlite3" {
 		dirs = append(dirs, filepath.Dir(cfg.DBPath))
@@ -72,6 +79,9 @@ func runServe() error {
 		return err
 	}
 	defer st.Close()
+	if cfg.EncryptionKey != "" {
+		st.SetEncryptionKey(support.DeriveKey(cfg.EncryptionKey))
+	}
 
 	if autoMigrate {
 		if err := appdb.EnsureDefaults(context.Background(), st); err != nil {
@@ -80,6 +90,10 @@ func runServe() error {
 	}
 
 	skillsCat := skill.NewCatalog(cfg.InitSkillsDir, cfg.UserSkillsDir)
+	rootsFor := func(tid string) agent.TenantRoots {
+		r := cfg.RootsForTenant(tid)
+		return agent.TenantRoots{Workspace: r.Workspace, Skills: r.Skills, LightApps: r.LightApps}
+	}
 
 	toolsReg := tool.NewRegistry()
 	tool.RegisterFS(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir})
@@ -92,6 +106,7 @@ func runServe() error {
 		webOpts.SearchProvider = "duckduckgo"
 	}
 	server.LoadSearchSettings(context.Background(), st, webOpts)
+	server.BindSearchResolver(webOpts, st)
 	tool.RegisterWeb(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, webOpts)
 	tool.RegisterExec(toolsReg, tool.WorkspaceRoots{Base: cfg.WorkspaceDir}, cfg.Tools.ExecEnabled)
 	tool.RegisterSkill(toolsReg, skillsCat, st)
@@ -120,12 +135,8 @@ func runServe() error {
 		Headless: cfg.Tools.BrowserHeadless,
 	})
 
-	// Apply persisted tool policy.
-	if pol, err := st.ListToolPolicy(context.Background()); err == nil {
-		for _, p := range pol {
-			toolsReg.SetEnabled(p.ToolName, p.Enabled)
-		}
-	}
+	// Process-wide gates only (exec/browser from config). Per-tenant enable
+	// state lives in sys_settings and is applied at Definitions/Execute time.
 	if !cfg.Tools.ExecEnabled {
 		for _, name := range tool.RuntimeToolNames() {
 			toolsReg.SetEnabled(name, false)
@@ -138,7 +149,8 @@ func runServe() error {
 	}
 
 	mcpMgr := mcpclient.NewManager(st, toolsReg)
-	if err := mcpMgr.Sync(context.Background()); err != nil {
+	mcpCtx := tenant.WithID(context.Background(), tenant.DefaultID)
+	if err := mcpMgr.Sync(mcpCtx); err != nil {
 		slog.Warn("mcp initial sync", "error", err)
 	}
 	defer mcpMgr.Close()
@@ -148,15 +160,17 @@ func runServe() error {
 	defer tracker.Close()
 
 	runner := agent.NewRunner(agent.RunnerDeps{
-		Store:              st,
-		Tools:              toolsReg,
-		Skills:             skillsCat,
-		Workspace:          cfg.WorkspaceDir,
+		Store:             st,
+		Tools:             toolsReg,
+		Skills:            skillsCat,
+		Workspace:         cfg.WorkspaceDir,
+		RootsResolver:     rootsFor,
+		MCPOwns:           mcpMgr.OwnsTool,
 		MaxHistoryMessages: cfg.Context.MaxHistoryMsgs,
-		MaxContextChars:    cfg.Context.MaxContextChars,
-		Publish:            tracker,
-		MaxConcurrentRuns:  cfg.Context.MaxConcurrentRuns,
-		ToolTimeoutSec:     cfg.Context.ToolTimeoutSec,
+		MaxContextChars:   cfg.Context.MaxContextChars,
+		Publish:           tracker,
+		MaxConcurrentRuns: cfg.Context.MaxConcurrentRuns,
+		ToolTimeoutSec:    cfg.Context.ToolTimeoutSec,
 		ToolTimeouts: map[string]time.Duration{
 			tool.ToolContentExtract: docTimeout + 30*time.Second,
 		},

@@ -15,9 +15,17 @@ import (
 	"github.com/OptLTD/swiflow/internal/observe"
 	"github.com/OptLTD/swiflow/internal/skill"
 	"github.com/OptLTD/swiflow/internal/store"
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/internal/tool"
 	"github.com/OptLTD/swiflow/library/support"
 )
+
+// TenantRoots holds per-tenant disk roots used by a run.
+type TenantRoots struct {
+	Workspace string
+	Skills    string
+	LightApps string
+}
 
 // maxRoundsDefault is only a safety fuse against runaway tool use.
 const maxRoundsDefault = 32
@@ -88,7 +96,15 @@ type RunnerDeps struct {
 	Tools  *tool.Registry
 	Skills *skill.Catalog
 
-	Workspace          string
+	Workspace string
+	// WorkspaceResolver returns the workspace root for a tenant id.
+	// When nil, Workspace is used for all tenants.
+	WorkspaceResolver func(tid string) string
+	// RootsResolver returns workspace/skills/light-apps for a tenant.
+	// When set, it takes precedence over WorkspaceResolver for workspace.
+	RootsResolver func(tid string) TenantRoots
+	// MCPOwns reports whether an mcp_* tool is owned by tid (cross-tenant hide).
+	MCPOwns func(toolName, tid string) bool
 	MaxHistoryMessages int
 	// MaxContextChars is the soft character budget for in-memory LLM messages.
 	// 0 disables proactive fitting; overflow still triggers emergency compact.
@@ -98,7 +114,7 @@ type RunnerDeps struct {
 	// Publish is optional; when set, every emit is also published for watchers.
 	Publish EventPublisher
 
-	// MaxConcurrentRuns caps global in-flight runs; 0 = unlimited.
+	// MaxConcurrentRuns caps in-flight runs per tenant; 0 = unlimited.
 	MaxConcurrentRuns int
 	// ToolTimeoutSec wraps each tool call; 0 = 120s.
 	ToolTimeoutSec int
@@ -135,6 +151,7 @@ type Runner struct {
 
 	mu        sync.Mutex
 	busy      map[string]struct{}
+	busyTid   map[string]int // tid -> in-flight run count
 	cancels   map[string]context.CancelFunc
 	queue     map[string][]queuedMsg
 	provMu    sync.Mutex
@@ -148,6 +165,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 	r := &Runner{
 		deps:      deps,
 		busy:      map[string]struct{}{},
+		busyTid:   map[string]int{},
 		cancels:   map[string]context.CancelFunc{},
 		queue:     map[string][]queuedMsg{},
 		provCache: map[string]llmclient.Provider{},
@@ -163,7 +181,7 @@ func NewRunner(deps RunnerDeps) *Runner {
 // ErrBusy is returned when a session already has a run in flight.
 var ErrBusy = fmt.Errorf("session busy")
 
-// ErrConcurrent is returned when the global concurrent-run gate is full.
+// ErrConcurrent is returned when the per-tenant concurrent-run gate is full.
 var ErrConcurrent = fmt.Errorf("too many concurrent runs")
 
 // IsBusy reports whether a session has a run in flight.
@@ -174,12 +192,18 @@ func (r *Runner) IsBusy(sessionID string) bool {
 	return ok
 }
 
-// AtCapacity reports whether the global concurrent-run gate is full.
-func (r *Runner) AtCapacity() bool {
+// AtCapacity reports whether the per-tenant concurrent-run gate is full for tid.
+func (r *Runner) AtCapacity(tid string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	max := r.deps.MaxConcurrentRuns
-	return max > 0 && len(r.busy) >= max
+	if max <= 0 {
+		return false
+	}
+	if tid == "" {
+		tid = tenant.DefaultID
+	}
+	return r.busyTid[tid] >= max
 }
 
 // QueueLen returns pending mid-run messages for a session.
@@ -223,11 +247,23 @@ func (r *Runner) InvalidateAll() {
 	r.provMu.Unlock()
 }
 
-// InvalidateProvider drops a single cached provider.
+// InvalidateProvider drops cached providers for name across all tenants.
 func (r *Runner) InvalidateProvider(name string) {
 	r.provMu.Lock()
-	delete(r.provCache, name)
-	r.provMu.Unlock()
+	defer r.provMu.Unlock()
+	suffix := "\x00" + name
+	for k := range r.provCache {
+		if k == name || strings.HasSuffix(k, suffix) {
+			delete(r.provCache, k)
+		}
+	}
+}
+
+func provCacheKey(tid, name string) string {
+	if tid == "" {
+		tid = tenant.DefaultID
+	}
+	return tid + "\x00" + name
 }
 
 // Run executes one agent run with default options.
@@ -260,7 +296,8 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 		}
 	}
 
-	// Claim the session + optional global gate.
+	// Claim the session + optional per-tenant concurrent gate.
+	runTid := tenant.ID(ctx)
 	r.mu.Lock()
 	if _, busy := r.busy[sessionID]; busy {
 		r.mu.Unlock()
@@ -268,8 +305,8 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 		publisher(Event{Type: "error", Error: "session busy"})
 		return runResult{status: "error"}, ErrBusy
 	}
-	if max := r.deps.MaxConcurrentRuns; max > 0 && len(r.busy) >= max {
-		n := len(r.busy)
+	if max := r.deps.MaxConcurrentRuns; max > 0 && r.busyTid[runTid] >= max {
+		n := r.busyTid[runTid]
 		r.mu.Unlock()
 		observe.ConcurrentReject(sessionID, n, max)
 		publisher(Event{Type: "error", Error: "too many concurrent runs"})
@@ -280,12 +317,19 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 		runCtx, cancel = context.WithTimeout(runCtx, opts.MaxWallClock)
 	}
 	r.busy[sessionID] = struct{}{}
+	r.busyTid[runTid]++
 	r.cancels[sessionID] = cancel
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
 		delete(r.busy, sessionID)
 		delete(r.cancels, sessionID)
+		if r.busyTid[runTid] > 0 {
+			r.busyTid[runTid]--
+		}
+		if r.busyTid[runTid] == 0 {
+			delete(r.busyTid, runTid)
+		}
 		r.mu.Unlock()
 		cancel()
 		r.drainQueue(sessionID)
@@ -309,6 +353,14 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 	} else {
 		agentKey = sess.Agent
 	}
+
+	tid := sess.Tid
+	if tid == "" {
+		tid = tenant.ID(runCtx)
+	}
+	runCtx = tenant.WithID(runCtx, tid)
+	roots := r.resolveRoots(tid)
+	ws := roots.Workspace
 
 	ag, err := st.GetAgentByKey(runCtx, agentKey)
 	if err != nil {
@@ -343,13 +395,13 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 	// Persist tool pairing even if the run context is cancelled mid-loop.
 	persistCtx := context.WithoutCancel(runCtx)
 
-	llmMsgs := []llmclient.Message{{Role: "system", Content: r.buildSystem(ag)}}
+	llmMsgs := []llmclient.Message{{Role: "system", Content: r.buildSystem(runCtx, ag, ws, roots.Skills)}}
 	for _, m := range history {
 		llmMsgs = append(llmMsgs, toLLM(m))
 	}
 	llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: userMessage})
 
-	toolDefs := filterTools(r.deps.Tools.Definitions(), opts)
+	toolDefs := r.toolDefinitions(runCtx, tid, opts)
 	firstUser := firstUserMessage(history, userMessage)
 
 	// Deterministic batch routing (once): if the user attached >= threshold files,
@@ -357,7 +409,7 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 	// here and a single delegate_task is required. No runtime cost probing.
 	if paths, forced := shouldForceBatchDelegate(userMessage, childRun); forced {
 		denyContentExtract(&opts)
-		toolDefs = filterTools(r.deps.Tools.Definitions(), opts)
+		toolDefs = r.toolDefinitions(runCtx, tid, opts)
 		llmMsgs = append(llmMsgs, llmclient.Message{Role: "user", Content: batchDelegateNudge(paths)})
 		slog.Info("agent.batch_delegate_forced", "session", sessionID, "paths", len(paths))
 	}
@@ -494,7 +546,7 @@ func (r *Runner) run(ctx context.Context, sessionID, agentKey, userMessage strin
 			}
 			llmMsgs = append(llmMsgs, toLLM(assistantMsg))
 
-			outcomes := r.executeToolCalls(runCtx, persistCtx, sessionID, agentKey, resp.ToolCalls, publisher)
+			outcomes := r.executeToolCalls(runCtx, persistCtx, sessionID, agentKey, tid, roots, resp.ToolCalls, publisher)
 			res.toolCalls += len(outcomes)
 			for _, o := range outcomes {
 				if o.isErr {
@@ -619,6 +671,41 @@ func filterTools(defs []llmclient.ToolDef, opts RunOpts) []llmclient.ToolDef {
 	return out
 }
 
+func (r *Runner) resolveRoots(tid string) TenantRoots {
+	if r.deps.RootsResolver != nil {
+		roots := r.deps.RootsResolver(tid)
+		if roots.Workspace == "" {
+			roots.Workspace = r.deps.Workspace
+		}
+		return roots
+	}
+	ws := r.deps.Workspace
+	if r.deps.WorkspaceResolver != nil {
+		ws = r.deps.WorkspaceResolver(tid)
+	}
+	return TenantRoots{Workspace: ws}
+}
+
+func (r *Runner) toolDefinitions(ctx context.Context, tid string, opts RunOpts) []llmclient.ToolDef {
+	if r.deps.Tools == nil {
+		return nil
+	}
+	defs := r.deps.Tools.Definitions()
+	out := make([]llmclient.ToolDef, 0, len(defs))
+	for _, d := range defs {
+		if strings.HasPrefix(d.Name, "mcp_") {
+			if r.deps.MCPOwns == nil || !r.deps.MCPOwns(d.Name, tid) {
+				continue
+			}
+		}
+		if r.deps.Store != nil && !r.deps.Store.ToolEnabled(ctx, d.Name) {
+			continue
+		}
+		out = append(out, d)
+	}
+	return filterTools(out, opts)
+}
+
 // resolveTxtModel looks up llm_provider by name (agent.txt_model) and returns
 // the chat client plus the model id defined on that provider row.
 func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llmclient.Provider, string, error) {
@@ -626,8 +713,9 @@ func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llmclient.Pr
 	if err != nil {
 		return nil, "", err
 	}
+	key := provCacheKey(tenant.ID(ctx), name)
 	r.provMu.Lock()
-	if p, ok := r.provCache[name]; ok {
+	if p, ok := r.provCache[key]; ok {
 		r.provMu.Unlock()
 		return p, model, nil
 	}
@@ -635,11 +723,11 @@ func (r *Runner) resolveTxtModel(ctx context.Context, name string) (llmclient.Pr
 	p := llmclient.NewAdaptiveProvider(name, apiBase, apiKey, "")
 	p.SetDisableThinking(r.deps.DisableThinking)
 	r.provMu.Lock()
-	if existing, ok := r.provCache[name]; ok {
+	if existing, ok := r.provCache[key]; ok {
 		r.provMu.Unlock()
 		return existing, model, nil
 	}
-	r.provCache[name] = p
+	r.provCache[key] = p
 	r.provMu.Unlock()
 	return p, model, nil
 }
@@ -677,16 +765,16 @@ func (r *Runner) streamRound(ctx context.Context, p llmclient.Provider, req llmc
 	})
 }
 
-func (r *Runner) buildSystem(ag *store.Agent) string {
+func (r *Runner) buildSystem(ctx context.Context, ag *store.Agent, workspace, skillsDir string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are Swiflow agent %s.", ag.Key)
 	if ag.SysPrompt != "" {
 		b.WriteString("\n\n")
 		b.WriteString(ag.SysPrompt)
 	}
-	if r.deps.Workspace != "" {
+	if workspace != "" {
 		b.WriteString("\n\n## Workspace\nWorkspace root: ")
-		b.WriteString(r.deps.Workspace)
+		b.WriteString(workspace)
 		b.WriteString(". File tools are restricted to it.\n")
 		b.WriteString("User messages may cite workspace files as @/relative/path (e.g. @/notes.txt, @/docs/a.md). ")
 		b.WriteString("@/ means the workspace root. Attached uploads appear in a block between [UPLOAD FILES START] and [UPLOAD FILES END] (one @/ path per line). ")
@@ -698,12 +786,18 @@ func (r *Runner) buildSystem(ag *store.Agent) string {
 	}
 	disabled := map[string]bool{}
 	if r.deps.Skills != nil {
-		if list, err := r.deps.Store.DisabledSkills(context.Background()); err == nil {
-			for _, s := range list {
-				disabled[s] = true
+		if r.deps.Store != nil {
+			if list, err := r.deps.Store.DisabledSkills(ctx); err == nil {
+				for _, s := range list {
+					disabled[s] = true
+				}
 			}
 		}
-		summary := r.deps.Skills.Summary(context.Background(), disabled)
+		cat := r.deps.Skills
+		if skillsDir != "" {
+			cat = cat.ForUserDir(skillsDir)
+		}
+		summary := cat.Summary(ctx, disabled)
 		if summary != "" {
 			b.WriteString("\n\n## Skills\n\n")
 			b.WriteString(summary)
@@ -1015,7 +1109,7 @@ func (r *Runner) LastAssistantContent(ctx context.Context, sessionID string) str
 func (r *Runner) SetProvider(name string, p llmclient.Provider) {
 	r.provMu.Lock()
 	defer r.provMu.Unlock()
-	r.provCache[name] = p
+	r.provCache[provCacheKey(tenant.DefaultID, name)] = p
 }
 
 // SpawnSubagent implements tool.SubagentBackend.
@@ -1035,6 +1129,10 @@ func (r *Runner) SpawnSubagent(ctx context.Context, rc tool.RunContext, goal, co
 	if contextHint != "" {
 		userMsg = "Context:\n" + contextHint + "\n\nGoal:\n" + goal
 	}
+	tid := rc.Tid
+	if tid == "" {
+		tid = tenant.ID(ctx)
+	}
 	return r.subagents.Spawn(SpawnOpts{
 		ParentSession:   parent,
 		SpawnToolCallID: rc.ToolCallID,
@@ -1042,6 +1140,7 @@ func (r *Runner) SpawnSubagent(ctx context.Context, rc tool.RunContext, goal, co
 		UserMessage:     userMsg,
 		Goal:            goal,
 		MaxRounds:       maxRounds,
+		Tid:             tid,
 		OnProgress:      rc.Emit,
 	})
 }

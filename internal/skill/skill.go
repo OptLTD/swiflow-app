@@ -42,6 +42,16 @@ func NewCatalog(devInitDir, userDir string) *Catalog {
 	}
 }
 
+// ForUserDir returns a shallow copy that discovers user skills from userDir.
+func (c *Catalog) ForUserDir(userDir string) *Catalog {
+	if c == nil {
+		return NewCatalog("", userDir)
+	}
+	cp := *c
+	cp.userDir = userDir
+	return &cp
+}
+
 // Discover returns skills (embedded init first; dev init dir and user override by slug).
 // Malformed entries are skipped.
 func (c *Catalog) Discover(_ context.Context) []Skill {

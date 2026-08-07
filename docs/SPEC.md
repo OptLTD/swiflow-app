@@ -683,10 +683,23 @@ panic becomes a tool-error result (`"error: panic: <msg>"`), not a run crash.
 
 ## 10. HTTP + SSE protocol
 
-All API routes are prefixed `/api`. Auth: `Authorization: Bearer <token>` where
-token = `config.AuthToken`. Missing/invalid → `401`. CORS: `Access-Control-
-Allow-Origin` reflects `AllowedOrigins` (or `*` if empty list). Static: non-`/api`
-routes serve embedded `webui/dist` (SPA fallback to `index.html`).
+All API routes are prefixed `/api`.
+
+**Auth:**
+
+- **Desktop / LocalMode** (`cfg.LocalMode=true`): no login; middleware injects
+  `tid=default`. Listen address must be loopback.
+- **Serve** (`LocalMode=false`): tenant register/login issues opaque bearer
+  tokens (`/api/auth/register|login|logout|me|mode`). Middleware requires
+  `Authorization: Bearer …` (or `swiflow_token` cookie) and sets
+  `tenant.WithID`. Missing/invalid → `401`.
+
+**CORS:** `Access-Control-Allow-Origin` reflects `AllowedOrigins`. In LocalMode
+an empty list allows any origin; in Serve an empty list means no cross-origin
+browser access (same-origin UI still works).
+
+Static: non-`/api` routes serve embedded `webui/dist` (SPA fallback to
+`index.html`).
 
 ### 10.1 Health
 - `GET /api/health` → `200 {"status":"ok"}`
@@ -710,9 +723,10 @@ routes serve embedded `webui/dist` (SPA fallback to `index.html`).
 - `GET /api/sessions` → `{"sessions":[{id,key,agent_key,title,created_at,updated_at}]}`.
 - `GET /api/sessions/{key}` → `{"session":{...}, "messages":[message]}`.
 - `POST /api/sessions/{key}/chat` body `{"message":"...", "agent_key":"..."?}`:
-  - If session **idle** and under global concurrent cap → **SSE stream** (HTTP 200).
+  - Session must belong to the caller's `tid` (else `404`).
+  - If session **idle** and under **per-tenant** concurrent cap → **SSE stream** (HTTP 200).
   - If session **busy** → HTTP **202** `{"queued":true,"position":N}` (1-based FIFO).
-  - If global concurrent gate full (and not busy-enqueue) → HTTP **409**
+  - If per-tenant concurrent gate full (and not busy-enqueue) → HTTP **409**
     `{"error":"too many concurrent runs"}`.
   - `agent_key` optional (defaults to session's agent, or `"default"`). SSE headers:
   `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`. Each event is `data: <json>\n\n`. Event JSON shapes:
@@ -759,11 +773,12 @@ JSON file with env overlay (env wins). Defaults shown.
 | `workspace_dir` | `SWIFLOW_WORKSPACE` | `./data/workspace` | file-tool sandbox root |
 | `init_skills_dir` | `SWIFLOW_INIT_SKILLS` | (empty) | dev override for built-in skills |
 | `user_skills_dir` | `SWIFLOW_USER_SKILLS` | `./data/user-skills` | user skills |
-| `allowed_origins` | — | `[]` | CORS; empty = allow all |
+| `allowed_origins` | — | `[]` | CORS allow-list; LocalMode empty = allow all; Serve empty = deny cross-origin |
+| `encryption_key` | `SWIFLOW_ENCRYPTION_KEY` | `""` | AES-256-GCM key material for provider API keys (SHA-256 derived) |
 | `web_dist_dir` | — | (embedded) | override for dev |
 | `max_history_msgs` | — | `100` | under `context`; truncate chat history per run |
 | `max_context_chars` | `SWIFLOW_MAX_CONTEXT_CHARS` | `120000` | under `context`; in-memory LLM prompt budget (0 = proactive fit off) |
-| `max_concurrent_runs` | `SWIFLOW_MAX_CONCURRENT_RUNS` | `0` | under `context`; global in-flight Run cap; `0` = unlimited |
+| `max_concurrent_runs` | `SWIFLOW_MAX_CONCURRENT_RUNS` | `0` | under `context`; **per-tenant** in-flight Run cap; `0` = unlimited |
 | `tool_timeout_sec` | `SWIFLOW_TOOL_TIMEOUT_SEC` | `120` | under `context`; default per-tool deadline |
 | `disable_thinking` | `SWIFLOW_DISABLE_THINKING` | `true` | under `context`; GLM thinking off |
 | `tools.exec_enabled` | `SWIFLOW_EXEC` | `false` | register `exec` if true |
@@ -803,8 +818,28 @@ all `fs.*` tools.
 is `SHA-256(config.EncryptionKey)`. Ciphertext stored as `nonce(12) || ct`.
 Encrypt on write to `providers.api_key_enc`; decrypt on read into memory only.
 
-**Auth (Phase 1):** single shared bearer token (`config.AuthToken`). Every
-`/api/*` route requires it. No users, no RBAC. (Phase 3 adds users/roles/tenants.)
+**Auth:** two modes.
+
+- **Desktop / LocalMode** (`cfg.LocalMode=true`): no login; middleware injects
+  `tid=default`. Listen address must be loopback (`WarnLocalModeListen`).
+- **Serve** (`LocalMode=false`): tenant register/login issues opaque bearer
+  tokens (`/api/auth/register|login|logout|me|mode`). Middleware requires
+  `Authorization: Bearer …` (or cookie) and sets `tenant.WithID`.
+
+**Tenant isolation (tenant-only; no per-user RBAC):**
+
+- **DB:** sessions/messages/todos/experiences/agents/providers/mcp/cron/light_apps
+  and `sys_settings` are scoped by `tid` (`UNIQUE(tid, …)`; settings key
+  composite `tid + sep + logicalKey`). Get-by-id with wrong tid → `404`.
+- **Disk:** Serve uses `data/tenants/<tid>/{workspace,skills,light-apps}`;
+  Desktop keeps single roots (semantic `tid=default`).
+- **Runtime:** MCP Manager sessions/tools are per-tid (advertise/execute only
+  owned `mcp_*`); tool enable + search settings from that tid's settings;
+  provider client cache keyed by `tid+name`; browser pool uses a page per tid;
+  cron jobs fire with the job's tid (workspace/tools view); Runner concurrent
+  cap is per tid; `/api/runs`, SSE watch/abort, and `window.reply` require
+  session ownership; subagents inherit parent tid.
+- Cross-tenant shared MCP tool names are first-wins (conflict skipped).
 
 **Logging:** never log API keys or full secrets. Log only the last 4 chars if
 needed for identification.
@@ -827,8 +862,8 @@ to `webui/dist`, embedded into the Go binary via `//go:embed`.
   api_key, enabled). API key field masked on edit.
 - **Skills** (`/skills`): list with enable/disable toggles + reload; pending
   skill drafts (preview / accept / reject).
-- **Settings** (`/settings`): read-only view of tools + their enable state with
-  toggles.
+- **Login** (Serve): register/login form when `/api/auth/mode` reports
+  `auth: true`; Desktop LocalMode skips login.
 
 **State (Pinia):**
 - `sessionStore`: sessions list, current session, messages, streaming state.

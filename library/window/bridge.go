@@ -30,7 +30,8 @@ type EmitFunc func(Event)
 type FallbackEmit func(sessionID string, ev Event)
 
 type pending struct {
-	ch chan reply
+	ch        chan reply
+	sessionID string
 }
 
 type reply struct {
@@ -110,7 +111,7 @@ func (b *Bridge) RequestTimeout(ctx context.Context, sessionID, op string, args 
 		b.mu.Unlock()
 		return "", fmt.Errorf("ui client unavailable")
 	}
-	b.pending[id] = &pending{ch: ch}
+	b.pending[id] = &pending{ch: ch, sessionID: sessionID}
 	b.mu.Unlock()
 
 	defer func() {
@@ -140,6 +141,20 @@ func (b *Bridge) RequestTimeout(ctx context.Context, sessionID, op string, args 
 		}
 		return r.result, nil
 	}
+}
+
+// PendingSession returns the session that owns a pending request id.
+func (b *Bridge) PendingSession(id string) (string, bool) {
+	if b == nil || id == "" {
+		return "", false
+	}
+	b.mu.Lock()
+	p := b.pending[id]
+	b.mu.Unlock()
+	if p == nil || p.sessionID == "" {
+		return "", false
+	}
+	return p.sessionID, true
 }
 
 // Reply completes a pending Request identified by id.

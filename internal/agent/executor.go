@@ -59,7 +59,8 @@ func (r *Runner) toolTimeout(name string) time.Duration {
 // each tool result, and returns outcomes in call order.
 func (r *Runner) executeToolCalls(
 	runCtx, persistCtx context.Context,
-	sessionID, agentKey string,
+	sessionID, agentKey, tid string,
+	roots TenantRoots,
 	calls []llmclient.ToolCall,
 	publisher func(Event),
 ) []toolOutcome {
@@ -77,7 +78,7 @@ func (r *Runner) executeToolCalls(
 
 	outcomes := make([]toolOutcome, len(calls))
 	runOne := func(i int, tc llmclient.ToolCall) {
-		outcomes[i] = r.runToolOne(runCtx, sessionID, agentKey, tc, publisher)
+		outcomes[i] = r.runToolOne(runCtx, sessionID, agentKey, tid, roots, tc, publisher)
 	}
 
 	if serial || len(calls) == 1 {
@@ -117,7 +118,7 @@ func (r *Runner) executeToolCalls(
 
 // runToolOne executes a single tool call with its own timeout and returns a
 // normalized outcome (truncated result, error captured as result text).
-func (r *Runner) runToolOne(runCtx context.Context, sessionID, agentKey string, tc llmclient.ToolCall, publisher func(Event)) toolOutcome {
+func (r *Runner) runToolOne(runCtx context.Context, sessionID, agentKey, tid string, roots TenantRoots, tc llmclient.ToolCall, publisher func(Event)) toolOutcome {
 	t0 := time.Now()
 	observe.ToolStart(sessionID, tc.Name)
 	finish := func(result string, execErr error) toolOutcome {
@@ -135,6 +136,11 @@ func (r *Runner) runToolOne(runCtx context.Context, sessionID, agentKey string, 
 	}
 	if r.deps.Tools == nil {
 		return finish("", fmt.Errorf("tools unavailable"))
+	}
+	if strings.HasPrefix(tc.Name, "mcp_") {
+		if r.deps.MCPOwns == nil || !r.deps.MCPOwns(tc.Name, tid) {
+			return finish("", fmt.Errorf("unknown tool: %s", tc.Name))
+		}
 	}
 	if r.deps.Store != nil && !r.deps.Store.ToolEnabled(runCtx, tc.Name) {
 		return finish("", fmt.Errorf("tool disabled: %s", tc.Name))
@@ -157,6 +163,8 @@ func (r *Runner) runToolOne(runCtx context.Context, sessionID, agentKey string, 
 	result, err := r.deps.Tools.Execute(
 		tool.WithRunContext(tctx, tool.RunContext{
 			SessionID: sessionID, Agent: agentKey,
+			Tid: tid, Workspace: roots.Workspace,
+			SkillsDir: roots.Skills, LightAppsDir: roots.LightApps,
 			ToolCallID: tc.ID, Emit: emitProgress,
 		}),
 		tc.Name, tc.Arguments,

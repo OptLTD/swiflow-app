@@ -31,16 +31,20 @@ func (r lightAppRow) toLightApp() store.LightApp {
 }
 
 func (s *Store) CreateLightApp(ctx context.Context, a *store.LightApp) error {
+	t := tid(ctx)
+	a.Tid = t
 	_, err := s.db.ExecContext(ctx, s.sql(`
-		INSERT INTO light_app (id, name, description, runtime, entry_point, status, port)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`), a.ID, a.Name, a.Description, a.Runtime, a.EntryPoint, a.Status, a.Port)
+		INSERT INTO light_app (id, tid, name, description, runtime, entry_point, status, port)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`), a.ID, t, a.Name, a.Description, a.Runtime, a.EntryPoint, a.Status, a.Port)
 	return err
 }
 
 func (s *Store) ListLightApps(ctx context.Context) ([]store.LightApp, error) {
 	var rows []lightAppRow
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT * FROM light_app ORDER BY created_at`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT * FROM light_app WHERE tid = ? ORDER BY created_at
+	`), tid(ctx)); err != nil {
 		return nil, err
 	}
 	out := make([]store.LightApp, 0, len(rows))
@@ -52,7 +56,9 @@ func (s *Store) ListLightApps(ctx context.Context) ([]store.LightApp, error) {
 
 func (s *Store) GetLightAppByID(ctx context.Context, id string) (*store.LightApp, error) {
 	var r lightAppRow
-	if err := s.db.GetContext(ctx, &r, s.sql(`SELECT * FROM light_app WHERE id = ?`), id); err != nil {
+	if err := s.db.GetContext(ctx, &r, s.sql(`
+		SELECT * FROM light_app WHERE id = ? AND tid = ?
+	`), id, tid(ctx)); err != nil {
 		return nil, err
 	}
 	a := r.toLightApp()
@@ -65,7 +71,7 @@ func (s *Store) UpdateLightApp(ctx context.Context, id string, fields map[string
 	}
 	allowed := map[string]bool{"name": true, "description": true, "runtime": true, "entry_point": true, "status": true, "port": true}
 	setClauses := make([]string, 0, len(fields)+1)
-	args := make([]any, 0, len(fields)+2)
+	args := make([]any, 0, len(fields)+3)
 	for k, v := range fields {
 		if !allowed[k] {
 			continue
@@ -78,30 +84,36 @@ func (s *Store) UpdateLightApp(ctx context.Context, id string, fields map[string
 	}
 	setClauses = append(setClauses, "updated_at = ?")
 	args = append(args, time.Now().UTC().Format("2006-01-02T15:04:05.000Z"))
-	args = append(args, id)
-	q := fmt.Sprintf("UPDATE light_app SET %s WHERE id = ?", strings.Join(setClauses, ", "))
-	_, err := s.db.ExecContext(ctx, s.sql(q), args...)
-	return err
+	args = append(args, id, tid(ctx))
+	q := fmt.Sprintf("UPDATE light_app SET %s WHERE id = ? AND tid = ?", strings.Join(setClauses, ", "))
+	res, err := s.db.ExecContext(ctx, s.sql(q), args...)
+	return s.affectedOrNoRows(res, err)
 }
 
 func (s *Store) DeleteLightApp(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, s.sql(`DELETE FROM light_app WHERE id = ?`), id)
-	return err
+	res, err := s.db.ExecContext(ctx, s.sql(`
+		DELETE FROM light_app WHERE id = ? AND tid = ?
+	`), id, tid(ctx))
+	return s.affectedOrNoRows(res, err)
 }
 
 const lightAppEnvPrefix = "lightapp.env."
 
 func (s *Store) ListLightAppEnv(ctx context.Context) (map[string]string, error) {
+	prefix := settingsPrefix(ctx)
 	var rows []struct {
 		Key   string `db:"key"`
 		Value string `db:"value"`
 	}
-	if err := s.db.SelectContext(ctx, &rows, s.sql(`SELECT key, value FROM sys_settings WHERE key LIKE 'lightapp.env.%'`)); err != nil {
+	if err := s.db.SelectContext(ctx, &rows, s.sql(`
+		SELECT key, value FROM sys_settings WHERE key LIKE ?
+	`), prefix+lightAppEnvPrefix+"%"); err != nil {
 		return nil, err
 	}
 	out := make(map[string]string, len(rows))
 	for _, r := range rows {
-		out[strings.TrimPrefix(r.Key, lightAppEnvPrefix)] = r.Value
+		logical := strings.TrimPrefix(r.Key, prefix)
+		out[strings.TrimPrefix(logical, lightAppEnvPrefix)] = r.Value
 	}
 	return out, nil
 }
@@ -110,11 +122,13 @@ func (s *Store) SetLightAppEnv(ctx context.Context, key, value string) error {
 	_, err := s.db.ExecContext(ctx, s.sql(`
 		INSERT INTO sys_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-	`), lightAppEnvPrefix+key, value)
+	`), settingsKey(ctx, lightAppEnvPrefix+key), value)
 	return err
 }
 
 func (s *Store) DeleteLightAppEnv(ctx context.Context, key string) error {
-	_, err := s.db.ExecContext(ctx, s.sql(`DELETE FROM sys_settings WHERE key = ?`), lightAppEnvPrefix+key)
+	_, err := s.db.ExecContext(ctx, s.sql(`
+		DELETE FROM sys_settings WHERE key = ?
+	`), settingsKey(ctx, lightAppEnvPrefix+key))
 	return err
 }

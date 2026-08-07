@@ -26,6 +26,8 @@ type LaunchConfig struct {
 	EntryPoint string
 	Runtime    Runtime
 	ExtraEnv   map[string]string
+	// BaseDir overrides Manager.baseDir for this launch (per-tenant light-apps root).
+	BaseDir string
 }
 
 const (
@@ -57,14 +59,27 @@ func NewManager(baseDir string) *Manager {
 	}
 }
 
-// AppDir returns the directory for a given app ID.
+// AppDir returns the directory for a given app ID under the manager default base.
 func (m *Manager) AppDir(id string) string {
-	return filepath.Join(m.baseDir, id)
+	return m.AppDirAt(m.baseDir, id)
+}
+
+// AppDirAt returns the directory for app ID under base (falls back to manager base).
+func (m *Manager) AppDirAt(base, id string) string {
+	if base == "" {
+		base = m.baseDir
+	}
+	return filepath.Join(base, id)
 }
 
 // EnsureDir creates the app directory if it doesn't exist.
 func (m *Manager) EnsureDir(id string) error {
-	return os.MkdirAll(m.AppDir(id), 0o755)
+	return m.EnsureDirAt(m.baseDir, id)
+}
+
+// EnsureDirAt creates the app directory under base.
+func (m *Manager) EnsureDirAt(base, id string) error {
+	return os.MkdirAll(m.AppDirAt(base, id), 0o755)
 }
 
 // Status returns "running" if the app is currently tracked, else "stopped".
@@ -97,7 +112,7 @@ func (m *Manager) Launch(ctx context.Context, id string, cfg LaunchConfig) (url 
 		return "", 0, fmt.Errorf("find free port: %w", err)
 	}
 
-	appDir := m.AppDir(id)
+	appDir := m.AppDirAt(cfg.BaseDir, id)
 	entryPoint := cfg.EntryPoint
 	if !filepath.IsAbs(entryPoint) {
 		entryPoint = filepath.Join(appDir, entryPoint)

@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -50,7 +51,20 @@ func TestWorkspaceUpload(t *testing.T) {
 		t.Fatalf("unexpected body: %s", data)
 	}
 
-	readResp, readData := e.do("GET", "/api/workspace/read?path=hello.txt", nil)
+	var payload struct {
+		Uploaded []struct {
+			Path string `json:"path"`
+		} `json:"uploaded"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Uploaded) != 1 || payload.Uploaded[0].Path == "" {
+		t.Fatalf("uploaded path missing: %s", data)
+	}
+	rel := payload.Uploaded[0].Path
+
+	readResp, readData := e.do("GET", "/api/workspace/read?path="+rel, nil)
 	if readResp.StatusCode != http.StatusOK {
 		t.Fatalf("read status %d: %s", readResp.StatusCode, readData)
 	}
@@ -58,7 +72,7 @@ func TestWorkspaceUpload(t *testing.T) {
 		t.Fatalf("read body: %s", readData)
 	}
 
-	dlResp, dlData := e.do("POST", "/api/workspace/act", map[string]string{"act": "download", "path": "hello.txt"})
+	dlResp, dlData := e.do("POST", "/api/workspace/act", map[string]string{"act": "download", "path": rel})
 	if dlResp.StatusCode != http.StatusOK {
 		t.Fatalf("download status %d: %s", dlResp.StatusCode, dlData)
 	}
@@ -70,7 +84,8 @@ func TestWorkspaceUpload(t *testing.T) {
 	}
 }
 
-func TestWorkspaceUploadRejectsEscape(t *testing.T) {
+func TestWorkspaceUploadIgnoresClientPath(t *testing.T) {
+	// Client "path" is ignored: uploads always land in the immutable uploads/ inbox.
 	e := newAPIEnv(t)
 
 	var body bytes.Buffer
@@ -99,8 +114,15 @@ func TestWorkspaceUploadRejectsEscape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	data, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, data)
+	}
+	if !strings.Contains(string(data), "uploads/") {
+		t.Fatalf("expected uploads/ path, got: %s", data)
 	}
 }

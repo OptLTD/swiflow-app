@@ -26,13 +26,18 @@ type Config struct {
 	DBPath   string `json:"-"` // sqlite file path
 	DBDSN    string `json:"-"` // postgres connection string
 
-	WorkspaceDir   string        `json:"workspace_dir"`
-	InitSkillsDir  string        `json:"init_skills_dir"`
-	UserSkillsDir  string        `json:"user_skills_dir"`
-	LightAppsDir   string        `json:"light_apps_dir"`
-	AllowedOrigins []string      `json:"allowed_origins"`
-	Context        ContextConfig `json:"context"`
-	Tools          ToolsConfig   `json:"tools"`
+	WorkspaceDir   string   `json:"workspace_dir"`
+	InitSkillsDir  string   `json:"init_skills_dir"`
+	UserSkillsDir  string   `json:"user_skills_dir"`
+	LightAppsDir   string   `json:"light_apps_dir"`
+	AllowedOrigins []string `json:"allowed_origins"`
+	// EncryptionKey encrypts provider API keys at rest (AES-256-GCM via SHA-256 derive).
+	EncryptionKey string `json:"encryption_key,omitempty"`
+	// LocalMode skips HTTP auth and injects tid=default (Desktop). Not from JSON.
+	LocalMode bool `json:"-"`
+
+	Context ContextConfig `json:"context"`
+	Tools   ToolsConfig   `json:"tools"`
 }
 
 // ContextConfig holds agent-loop / prompt budget settings.
@@ -41,7 +46,7 @@ type ContextConfig struct {
 	// MaxContextChars budgets in-memory LLM prompt size (rune/byte estimate).
 	// Default 120000. 0 disables proactive fitting (overflow emergency compact remains).
 	MaxContextChars int `json:"max_context_chars"`
-	// MaxConcurrentRuns caps in-flight Runner.Run calls globally; 0 = unlimited.
+	// MaxConcurrentRuns caps in-flight Runner.Run calls per tenant; 0 = unlimited.
 	MaxConcurrentRuns int `json:"max_concurrent_runs"`
 	// ToolTimeoutSec wraps each tool Execute; 0 = 120s default.
 	ToolTimeoutSec int `json:"tool_timeout_sec"`
@@ -122,6 +127,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		UserSkillsDir  string          `json:"user_skills_dir"`
 		LightAppsDir   string          `json:"light_apps_dir"`
 		AllowedOrigins []string        `json:"allowed_origins"`
+		EncryptionKey  string          `json:"encryption_key"`
 		Context        json.RawMessage `json:"context"`
 		Tools          *ToolsConfig    `json:"tools"`
 	}
@@ -132,6 +138,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	w.UserSkillsDir = c.UserSkillsDir
 	w.LightAppsDir = c.LightAppsDir
 	w.AllowedOrigins = c.AllowedOrigins
+	w.EncryptionKey = c.EncryptionKey
 	if err := json.Unmarshal(data, &w); err != nil {
 		return err
 	}
@@ -143,6 +150,9 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	c.LightAppsDir = w.LightAppsDir
 	if w.AllowedOrigins != nil {
 		c.AllowedOrigins = w.AllowedOrigins
+	}
+	if w.EncryptionKey != "" {
+		c.EncryptionKey = w.EncryptionKey
 	}
 	c.Context = keptCtx
 	if len(w.Context) > 0 && string(w.Context) != "null" {
@@ -275,6 +285,9 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("SWIFLOW_SEARCH_BASE_URL"); v != "" {
 		cfg.Tools.SearchBaseURL = v
 	}
+	if v := os.Getenv("SWIFLOW_ENCRYPTION_KEY"); v != "" {
+		cfg.EncryptionKey = v
+	}
 	if v := os.Getenv("SWIFLOW_MAX_CONTEXT_CHARS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Context.MaxContextChars = n
@@ -388,4 +401,32 @@ func (c Config) DataDir() string {
 		return c.WorkspaceDir
 	}
 	return "."
+}
+
+// TenantRoots holds per-tenant disk roots.
+type TenantRoots struct {
+	Workspace string
+	Skills    string
+	LightApps string
+}
+
+// RootsForTenant returns disk roots for tid.
+// LocalMode (Desktop) keeps the configured single-root paths.
+func (c Config) RootsForTenant(tid string) TenantRoots {
+	if tid == "" {
+		tid = "default"
+	}
+	if c.LocalMode {
+		return TenantRoots{
+			Skills:    c.UserSkillsDir,
+			LightApps: c.LightAppsDir,
+			Workspace: c.WorkspaceDir,
+		}
+	}
+	base := filepath.Join(c.DataDir(), "tenants", tid)
+	return TenantRoots{
+		Skills:    filepath.Join(base, "skills"),
+		LightApps: filepath.Join(base, "light-apps"),
+		Workspace: filepath.Join(base, "workspace"),
+	}
 }

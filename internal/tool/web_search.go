@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-rod/rod"
 
+	"github.com/OptLTD/swiflow/internal/tenant"
 	"github.com/OptLTD/swiflow/library/browser"
 	"github.com/OptLTD/swiflow/library/httputil"
 )
@@ -26,6 +27,8 @@ type WebOptions struct {
 	// BrowserPool powers bing/google search via a real browser SERP visit.
 	BrowserPool    *browser.Pool
 	BrowserEnabled bool
+	// ResolveSearch, when set, overlays per-request (tenant) search settings.
+	ResolveSearch func(ctx context.Context) (provider, baseURL, apiKey string)
 }
 
 type searchResult struct {
@@ -72,7 +75,16 @@ func (t *webSearchTool) Execute(ctx context.Context, args map[string]any) (strin
 	if opts == nil {
 		opts = &WebOptions{}
 	}
-	provider := strings.ToLower(strings.TrimSpace(opts.SearchProvider))
+	resolved := *opts
+	if opts.ResolveSearch != nil {
+		p, u, k := opts.ResolveSearch(ctx)
+		if p != "" {
+			resolved.SearchProvider = p
+		}
+		resolved.SearchBaseURL = u
+		resolved.SearchAPIKey = k
+	}
+	provider := strings.ToLower(strings.TrimSpace(resolved.SearchProvider))
 	if provider == "" {
 		return "", fmt.Errorf("web search is not configured (set search provider in Settings → System)")
 	}
@@ -85,13 +97,13 @@ func (t *webSearchTool) Execute(ctx context.Context, args map[string]any) (strin
 	case "duckduckgo", "ddg":
 		results, err = searchDuckDuckGo(ctx, query, limit)
 	case "brave":
-		results, err = searchBrave(ctx, opts.SearchAPIKey, query, limit)
+		results, err = searchBrave(ctx, resolved.SearchAPIKey, query, limit)
 	case "searxng", "searx":
-		results, err = searchSearXNG(ctx, opts.SearchBaseURL, query, limit)
+		results, err = searchSearXNG(ctx, resolved.SearchBaseURL, query, limit)
 	case "bing":
-		results, err = searchBingBrowser(ctx, opts, query, limit)
+		results, err = searchBingBrowser(ctx, &resolved, query, limit)
 	case "google":
-		results, err = searchGoogleBrowser(ctx, opts, query, limit)
+		results, err = searchGoogleBrowser(ctx, &resolved, query, limit)
 	default:
 		return "", fmt.Errorf("unknown search_provider %q (supported: duckduckgo, brave, searxng, bing, google)", provider)
 	}
@@ -554,7 +566,7 @@ func searchViaBrowser(ctx context.Context, opts *WebOptions, rawURL, engine stri
 }
 
 func searchViaBrowserTimeout(ctx context.Context, opts *WebOptions, rawURL, engine string, limit int, timeout time.Duration) ([]searchResult, error) {
-	out, err := opts.BrowserPool.WithPage(ctx, timeout, func(page *rod.Page) (string, error) {
+	out, err := opts.BrowserPool.WithPageTenant(ctx, tenant.ID(ctx), timeout, func(page *rod.Page) (string, error) {
 		if _, err := browser.Open(page, rawURL); err != nil {
 			return "", err
 		}

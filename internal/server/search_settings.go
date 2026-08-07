@@ -20,22 +20,50 @@ func LoadSearchSettings(ctx context.Context, st store.Store, opts *tool.WebOptio
 	if opts == nil || st == nil {
 		return
 	}
-	if v, ok, err := st.GetSysSetting(ctx, settingSearchProvider); err == nil && ok {
-		opts.SearchProvider = v
+	provider, baseURL, apiKey := resolveSearchSettings(ctx, st, opts)
+	opts.SearchProvider = provider
+	opts.SearchBaseURL = baseURL
+	opts.SearchAPIKey = apiKey
+}
+
+// BindSearchResolver attaches a per-request resolver so web_search reads tenant settings.
+func BindSearchResolver(opts *tool.WebOptions, st store.Store) {
+	if opts == nil || st == nil {
+		return
 	}
-	if v, ok, err := st.GetSysSetting(ctx, settingSearchAPIKey); err == nil && ok {
-		opts.SearchAPIKey = v
-	}
-	if v, ok, err := st.GetSysSetting(ctx, settingSearchBaseURL); err == nil && ok {
-		opts.SearchBaseURL = v
+	fallback := *opts
+	opts.ResolveSearch = func(ctx context.Context) (provider, baseURL, apiKey string) {
+		return resolveSearchSettings(ctx, st, &fallback)
 	}
 }
 
-func (s *Server) getSearchSettings(w http.ResponseWriter, _ *http.Request) {
+func resolveSearchSettings(ctx context.Context, st store.Store, fallback *tool.WebOptions) (provider, baseURL, apiKey string) {
+	if fallback != nil {
+		provider = fallback.SearchProvider
+		baseURL = fallback.SearchBaseURL
+		apiKey = fallback.SearchAPIKey
+	}
+	if st == nil {
+		return provider, baseURL, apiKey
+	}
+	if v, ok, err := st.GetSysSetting(ctx, settingSearchProvider); err == nil && ok {
+		provider = v
+	}
+	if v, ok, err := st.GetSysSetting(ctx, settingSearchAPIKey); err == nil && ok {
+		apiKey = v
+	}
+	if v, ok, err := st.GetSysSetting(ctx, settingSearchBaseURL); err == nil && ok {
+		baseURL = v
+	}
+	return provider, baseURL, apiKey
+}
+
+func (s *Server) getSearchSettings(w http.ResponseWriter, r *http.Request) {
+	provider, baseURL, apiKey := resolveSearchSettings(r.Context(), s.st, s.webOpts)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"provider":    s.webOpts.SearchProvider,
-		"base_url":    s.webOpts.SearchBaseURL,
-		"api_key_set": strings.TrimSpace(s.webOpts.SearchAPIKey) != "",
+		"provider":    provider,
+		"base_url":    baseURL,
+		"api_key_set": strings.TrimSpace(apiKey) != "",
 	})
 }
 
@@ -66,14 +94,19 @@ func (s *Server) putSearchSettings(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, ErrSaveFailed)
 			return
 		}
-		s.webOpts.SearchProvider = p
+		// LocalMode: keep in-memory defaults in sync for tools without ResolveSearch.
+		if s.cfg.LocalMode {
+			s.webOpts.SearchProvider = p
+		}
 	}
 	if in.APIKey != nil {
 		if err := s.st.SetSysSetting(r.Context(), settingSearchAPIKey, *in.APIKey); err != nil {
 			writeErr(w, http.StatusInternalServerError, ErrSaveFailed)
 			return
 		}
-		s.webOpts.SearchAPIKey = *in.APIKey
+		if s.cfg.LocalMode {
+			s.webOpts.SearchAPIKey = *in.APIKey
+		}
 	}
 	if in.BaseURL != nil {
 		u := strings.TrimSpace(*in.BaseURL)
@@ -81,12 +114,15 @@ func (s *Server) putSearchSettings(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, ErrSaveFailed)
 			return
 		}
-		s.webOpts.SearchBaseURL = u
+		if s.cfg.LocalMode {
+			s.webOpts.SearchBaseURL = u
+		}
 	}
+	provider, baseURL, apiKey := resolveSearchSettings(r.Context(), s.st, s.webOpts)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":      "updated",
-		"provider":    s.webOpts.SearchProvider,
-		"base_url":    s.webOpts.SearchBaseURL,
-		"api_key_set": strings.TrimSpace(s.webOpts.SearchAPIKey) != "",
+		"provider":    provider,
+		"base_url":    baseURL,
+		"api_key_set": strings.TrimSpace(apiKey) != "",
 	})
 }
